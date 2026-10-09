@@ -25,6 +25,14 @@ class StockPicking(models.Model):
         store=True,
         readonly=True,
     )
+    magento_instance_id = fields.Many2one(
+        "magento.instance",
+        string="Magento Instance",
+        related="sale_id.magento_instance_id",
+        store=True,
+        readonly=True,
+        index=True,
+    )
     magento_increment_id = fields.Char(
         string="Order #",
         related="sale_id.magento_increment_id",
@@ -53,7 +61,7 @@ class StockPicking(models.Model):
         compute="_compute_magento_total_qty",
         store=True,
         readonly=True,
-        digits="Product Unit of Measure",
+        digits="Product Unit",
     )
     magento_ship_date = fields.Datetime(
         string="Ship Date",
@@ -77,11 +85,17 @@ class StockPicking(models.Model):
         string="Magento Shipment ID",
         readonly=True,
         copy=False,
+        index=True,
     )
     magento_shipment_increment_id = fields.Char(
         string="Magento Shipment #",
         readonly=True,
         copy=False,
+    )
+
+    _magento_shipment_uniq = models.Constraint(
+        "unique(magento_instance_id, magento_shipment_id)",
+        "This Magento shipment is already linked to another transfer of the same instance.",
     )
 
     @api.depends("sale_id.magento_created_at", "sale_id.date_order")
@@ -133,7 +147,7 @@ class StockPicking(models.Model):
         for move in self.move_ids:
             if move.state == "cancel":
                 continue
-            sale_line = move.sale_line_id if "sale_line_id" in move._fields else False
+            sale_line = move.sale_line_id
             if not sale_line or not sale_line.magento_item_id:
                 continue
             qty = float(move.quantity or 0.0)
@@ -141,7 +155,12 @@ class StockPicking(models.Model):
                 qty = float(move.product_uom_qty or 0.0)
             if qty <= 0:
                 continue
-            key = str(sale_line.magento_item_id)
+            if move.product_uom and sale_line.product_uom_id and move.product_uom != sale_line.product_uom_id:
+                qty = move.product_uom._compute_quantity(
+                    qty, sale_line.product_uom_id, rounding_method="HALF-UP"
+                )
+            # Configurable children are shipped through their parent item in Magento.
+            key = str(sale_line._magento_push_item_id())
             items[key] = items.get(key, 0.0) + qty
 
         payload_items = []
@@ -157,6 +176,20 @@ class StockPicking(models.Model):
                 "qty": qty,
             })
         return payload_items
+
+    def _magento_prepare_shipment_tracks(self):
+        """Tracking info for the Magento shipment (fields come from stock_delivery when installed)."""
+        self.ensure_one()
+        tracking_ref = self["carrier_tracking_ref"] if "carrier_tracking_ref" in self._fields else False
+        if not tracking_ref:
+            return []
+        carrier = self["carrier_id"] if "carrier_id" in self._fields else False
+        delivery_type = (carrier.delivery_type or "") if carrier else ""
+        return [{
+            "track_number": tracking_ref,
+            "title": carrier.name if carrier else _("Tracking"),
+            "carrier_code": delivery_type if delivery_type in ("ups", "usps", "fedex", "dhl") else "custom",
+        }]
 
     def _magento_create_shipment(self):
         self.ensure_one()
@@ -183,11 +216,14 @@ class StockPicking(models.Model):
             )
             return False
 
-        api = MagentoAPI(order.magento_instance_id)
-        payload = {"items": items}
+        api = MagentoAPI(order.magento_instance_id.sudo())
+        payload = {"items": items, "notify": False}
+        tracks = self._magento_prepare_shipment_tracks()
+        if tracks:
+            payload["tracks"] = tracks
         try:
             result = api.create_shipment(order.magento_order_id, payload)
-        except requests.exceptions.HTTPError as exc:
+        except requests.exceptions.RequestException as exc:
             order._magento_raise_http_error(exc)
 
         shipment_id = None
@@ -204,8 +240,8 @@ class StockPicking(models.Model):
             shipment_data = api.get_shipment(shipment_id)
             if isinstance(shipment_data, dict):
                 increment_id = shipment_data.get("increment_id") or ""
-        except requests.exceptions.HTTPError:
-            increment_id = ""
+        except requests.exceptions.RequestException as exc:
+            _logger.warning("Magento shipment %s could not be read back: %s", shipment_id, exc)
 
         self.write({
             "magento_shipment_id": str(shipment_id),
@@ -224,17 +260,13 @@ class StockPicking(models.Model):
             order = picking.sale_id
             if not order or not order.magento_order_id:
                 continue
+            # User-triggered (delivery validation): never block the validation, report
+            # the failure on the transfer instead.
             try:
                 picking._magento_create_shipment()
-            except UserError as exc:
+            except (UserError, requests.exceptions.RequestException) as exc:
                 picking.message_post(
                     body=_("Magento shipment sync failed: %s") % exc
-                )
-            except Exception as exc:
-                _logger.exception(
-                    "Magento shipment sync failed for picking %s: %s",
-                    picking.name,
-                    exc,
                 )
 
     def _action_done(self):
@@ -252,7 +284,11 @@ class StockPicking(models.Model):
             raise UserError(_("This delivery is not linked to a Magento order."))
         if self.magento_shipment_id:
             raise UserError(_("This delivery is already linked to a Magento shipment."))
-        self._magento_create_shipment()
+        if not self._magento_create_shipment():
+            raise UserError(_(
+                "Nothing was pushed: the Magento order is already complete/closed or this "
+                "delivery has no Magento order items."
+            ))
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
