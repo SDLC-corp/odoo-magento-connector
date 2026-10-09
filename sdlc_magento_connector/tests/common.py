@@ -235,6 +235,10 @@ class MagentoTestCommon(TransactionCase):
             )
 
         self.startPatcher(patch.object(requests.sessions.Session, "send", _blocked_send))
+        # MagentoAPI retries transient errors with exponential backoff: never sleep in tests.
+        if hasattr(MagentoAPI, "_sleep"):
+            self.startPatcher(patch.object(MagentoAPI, "_sleep", lambda api, seconds: None))
+        self.startPatcher(patch("time.sleep", lambda seconds: None))
 
     # ------------------------------------------------------------------
     # helpers

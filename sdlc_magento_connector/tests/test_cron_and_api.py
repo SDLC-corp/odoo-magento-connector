@@ -31,6 +31,13 @@ class TestCron(MagentoTestCommon):
         cls.archived_instance = cls.create_instance("Archived Magento", state="connected")
         cls.archived_instance.write({"active": False})
 
+    def setUp(self):
+        super().setUp()
+        # Cron runs commit progress per instance (ir.cron._commit_progress); a test
+        # transaction must never commit.
+        self.commit_progress = self.startPatcher(patch.object(
+            type(self.env["ir.cron"]), "_commit_progress", return_value=float("inf")))
+
     def _patch_fetches(self):
         mocks = {}
         for name, value in FETCH_METHODS.items():
@@ -60,16 +67,28 @@ class TestCron(MagentoTestCommon):
         self.assertIn(self.instance.id, synced, "The active instance must be synced by the cron")
         self.assertNotIn(self.archived_instance.id, synced, "Archived instances must be skipped")
 
+    def test_a3_cron_sync_all_skips_instances_with_own_schedule(self):
+        own = self.create_instance("Own Schedule", state="connected")
+        own.write({"auto_sync_enabled": True})
+        mocks = self._patch_fetches()
+        self.env["magento.instance"]._cron_sync_all()
+        synced = self._synced_instances(mocks)
+        self.assertIn(self.instance.id, synced)
+        self.assertNotIn(own.id, synced, "Instances with their own auto-sync cron are not synced twice")
+
     def test_a3_static_crons_are_not_noops(self):
-        crons = self.env["ir.cron"]
-        for xmlid in ("sdlc_magento_connector.cron_magento_product_sync",
+        legacy = self.env["ir.cron"].with_context(active_test=False).search([
+            ("model_id.model", "=", "magento.instance"),
+            ("code", "in", ["model.sync_products()", "model.sync_orders()"]),
+        ])
+        self.assertFalse(legacy, "Legacy no-op crons (sync_* on an empty recordset) must be gone")
+        crons = self.env["ir.cron"].with_context(active_test=False)
+        for xmlid in ("sdlc_magento_connector.cron_magento_sync_all",
+                      "sdlc_magento_connector.cron_magento_product_sync",
                       "sdlc_magento_connector.cron_magento_order_sync"):
             cron = self.env.ref(xmlid, raise_if_not_found=False)
-            if cron and cron.active:
+            if cron:
                 crons |= cron
-        if not crons:
-            # Static crons were removed or archived: nothing can be a no-op.
-            return
         for cron in crons:
             mocks = self._patch_fetches()
             cron.ir_actions_server_id.sudo().run()

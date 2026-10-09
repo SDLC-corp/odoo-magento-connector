@@ -74,7 +74,9 @@ class TestProductSync(MagentoTestCommon):
         ]
         self._patch_catalog(catalog)
 
-        self.instance.sync_products()  # must not crash
+        result = self.instance.sync_products()  # must not crash
+        if isinstance(result, dict) and "skipped" in result:
+            self.assertGreaterEqual(result["skipped"], 3, "Unsupported types are counted as skipped")
 
         for sku in ("MH01", "24-WG080", "24-WG085_Group"):
             self.assertFalse(self._maps(sku), "%s (unsupported type) must be skipped" % sku)

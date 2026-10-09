@@ -2,10 +2,13 @@
 
 Runs before the ORM creates the new constraints:
 
-* ``magento_product_map``, ``magento_category``, ``magento_customer`` are made
-  unique on (instance_id, magento_id). The lowest id of each duplicate group
-  is kept, foreign keys pointing at the duplicates are repointed to it, and
-  the duplicates are deleted.
+* Empty-string keys become NULL (imports now store False, and the unique
+  indexes are partial on non-empty keys).
+* ``magento_product_map``, ``magento_category``, ``magento_customer`` and
+  ``magento_attribute_set`` are made unique on (instance_id, magento_id), and
+  ``magento_product_map`` also on (instance_id, sku). The lowest id of each
+  duplicate group is kept, foreign keys pointing at the duplicates are
+  repointed to it, and the duplicates are deleted.
 * ``sale_order`` is made unique on (magento_instance_id, magento_order_id).
   Orders are business documents, so duplicates are never merged or deleted:
   the lowest id keeps the Magento key and the others are detached (key
@@ -24,10 +27,14 @@ from psycopg2 import sql
 _logger = logging.getLogger("odoo.addons.sdlc_magento_connector.migrations.19.0.1.1.0.pre")
 
 BINDING_TABLES = (
-    # (table, instance column, magento id column)
-    ("magento_product_map", "instance_id", "magento_id"),
-    ("magento_category", "instance_id", "magento_id"),
-    ("magento_customer", "instance_id", "magento_id"),
+    # (table, instance column, key column, trim the key) -- one entry per unique index.
+    # The model indexes are partial (key IS NOT NULL AND key != ''), so empty keys are
+    # first set to NULL and never deduplicated.
+    ("magento_product_map", "instance_id", "magento_id", True),
+    ("magento_product_map", "instance_id", "sku", False),
+    ("magento_category", "instance_id", "magento_id", True),
+    ("magento_customer", "instance_id", "magento_id", True),
+    ("magento_attribute_set", "instance_id", "magento_id", True),
 )
 COMPANY_RELATED_TABLES = (
     "magento_product_map",
@@ -82,17 +89,20 @@ def _table_columns(cr, table):
     return [r[0] for r in cr.fetchall()]
 
 
-def _normalize_empty_keys(cr, table, column):
+def _normalize_empty_keys(cr, table, column, trim=True):
     cr.execute(
         sql.SQL("UPDATE {t} SET {c} = NULL WHERE {c} IS NOT NULL AND btrim({c}) = ''").format(
             t=sql.Identifier(table), c=sql.Identifier(column)),
     )
     if cr.rowcount:
         _logger.info("%s: %s empty %s value(s) set to NULL", table, cr.rowcount, column)
-    cr.execute(
-        sql.SQL("UPDATE {t} SET {c} = btrim({c}) WHERE {c} <> btrim({c})").format(
-            t=sql.Identifier(table), c=sql.Identifier(column)),
-    )
+    if trim:
+        cr.execute(
+            sql.SQL("UPDATE {t} SET {c} = btrim({c}) WHERE {c} <> btrim({c})").format(
+                t=sql.Identifier(table), c=sql.Identifier(column)),
+        )
+        if cr.rowcount:
+            _logger.info("%s: %s %s value(s) trimmed", table, cr.rowcount, column)
 
 
 def _build_dedup_map(cr, table, instance_col, key_col):
@@ -103,7 +113,7 @@ def _build_dedup_map(cr, table, instance_col, key_col):
             SELECT id AS dup_id, keep_id FROM (
                 SELECT id, min(id) OVER (PARTITION BY {i}, {k}) AS keep_id
                   FROM {t}
-                 WHERE {i} IS NOT NULL AND {k} IS NOT NULL
+                 WHERE {i} IS NOT NULL AND {k} IS NOT NULL AND {k} != ''
             ) s
             WHERE id <> keep_id
         """).format(t=sql.Identifier(table), i=sql.Identifier(instance_col), k=sql.Identifier(key_col)),
@@ -150,11 +160,11 @@ def _merge_relation_links(cr, table, ref_table, ref_col, params):
                  table, moved, ref_table, ref_col, cr.rowcount)
 
 
-def _dedup_binding(cr, table, instance_col, key_col):
+def _dedup_binding(cr, table, instance_col, key_col, trim=True):
     if not _columns_exist(cr, table, "id", instance_col, key_col):
-        _logger.info("%s: table or columns missing, skipped", table)
+        _logger.info("%s: table or columns (%s, %s) missing, skipped", table, instance_col, key_col)
         return
-    _normalize_empty_keys(cr, table, key_col)
+    _normalize_empty_keys(cr, table, key_col, trim=trim)
     count = _build_dedup_map(cr, table, instance_col, key_col)
     if not count:
         _logger.info("%s: no duplicate (%s, %s) found", table, instance_col, key_col)
@@ -251,6 +261,6 @@ def migrate(cr, version):
         return
     _logger.info("sdlc_magento_connector pre-migration to 19.0.1.1.0 from %s", version)
     _backfill_company(cr)
-    for table, instance_col, key_col in BINDING_TABLES:
-        _dedup_binding(cr, table, instance_col, key_col)
+    for table, instance_col, key_col, trim in BINDING_TABLES:
+        _dedup_binding(cr, table, instance_col, key_col, trim=trim)
     _dedup_sale_orders(cr)
