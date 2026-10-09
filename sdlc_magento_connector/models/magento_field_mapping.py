@@ -133,23 +133,6 @@ class MagentoFieldMapping(models.Model):
                     }
                 )
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        for rec in records:
-            if rec.instance_id and rec.mapping_type:
-                rec._sync_magento_fields_for(rec.instance_id, rec.mapping_type)
-        # Apply freshly saved mappings on existing records so values are persisted immediately.
-        records._apply_mapping_to_existing_records()
-        return records
-
-    def write(self, vals):
-        res = super().write(vals)
-        watched = {"mapping_type", "instance_id", "odoo_field", "magento_field_id", "active"}
-        if watched.intersection(set(vals.keys())) and not self.env.context.get("skip_apply_mapping"):
-            self._apply_mapping_to_existing_records()
-        return res
-
     def _pick_best_sample(self, records):
         if not records:
             return {}
@@ -184,7 +167,7 @@ class MagentoFieldMapping(models.Model):
         return fields_list
 
     def _fetch_magento_fields_for(self, instance, mapping_type):
-        api = MagentoAPI(instance)
+        api = MagentoAPI(instance.sudo())
         fields_list = []
 
         try:
@@ -241,36 +224,60 @@ class MagentoFieldMapping(models.Model):
                 dedup[code] = label
         return [(code, dedup[code]) for code in sorted(dedup.keys())]
 
-    def _apply_mapping_to_existing_records(self):
-        """Push mapped values to Magento immediately for existing mapped records."""
+    def action_apply_to_existing(self):
+        """Explicit button: apply these mappings to every existing record of the
+        instance and push the mapped values to Magento.
+
+        Saving a mapping never does this on its own. Each record is pushed
+        independently; failures are logged and counted, not raised.
+        """
+        pushed = 0
+        failed = 0
         for rec in self.filtered(
             lambda r: r.active and r.instance_id and r.mapping_type and r.odoo_field and r.magento_field_id
         ):
             model_name = rec._mapping_model_name(rec.mapping_type)
             if not model_name:
                 continue
-            Model = self.env[model_name].sudo()
+            Model = self.env[model_name]
             domain = [("instance_id", "=", rec.instance_id.id)] if "instance_id" in Model._fields else []
-            records = Model.search(domain)
-            for row in records:
+            for row in Model.search(domain):
                 try:
-                    self._apply_local_mapped_value(rec, row)
-                    if rec.mapping_type == "product":
-                        if getattr(row, "sku", False):
+                    with self.env.cr.savepoint():
+                        self._apply_local_mapped_value(rec, row)
+                        if rec.mapping_type == "product":
+                            if not row.sku or row.type_id in ("configurable", "bundle", "grouped"):
+                                continue
                             row.with_context(skip_odoo_sync=True).action_update_magento_mapped_fields()
-                    elif rec.mapping_type == "customer":
-                        if getattr(row, "magento_id", False):
+                        elif rec.mapping_type == "customer":
+                            if not row.magento_id:
+                                continue
                             row.action_update_magento_customer()
-                    elif rec.mapping_type == "category":
-                        if getattr(row, "magento_id", False):
+                        elif rec.mapping_type == "category":
+                            if not row.magento_id:
+                                continue
                             row.action_update_magento_category()
-                except Exception:
-                    _logger.exception(
-                        "Failed applying mapping id=%s on %s record id=%s",
+                    pushed += 1
+                except Exception as exc:  # noqa: BLE001 - one bad record must not stop the batch
+                    failed += 1
+                    _logger.warning(
+                        "Failed applying mapping id=%s on %s record id=%s: %s",
                         rec.id,
                         rec.mapping_type,
                         row.id,
+                        exc,
                     )
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Mapping applied"),
+                "message": _("Pushed: %(pushed)s, Failed: %(failed)s (see server log for failures)")
+                % {"pushed": pushed, "failed": failed},
+                "type": "warning" if failed else "success",
+                "sticky": bool(failed),
+            },
+        }
 
     def _apply_local_mapped_value(self, mapping, record):
         """Save mapped source value into local target field when target field exists in Odoo model."""
@@ -295,7 +302,7 @@ class MagentoFieldMapping(models.Model):
         if coerced is None:
             return
 
-        ctx = {"skip_magento_sync": True, "skip_apply_mapping": True}
+        ctx = {"magento_skip_push": True, "skip_magento_sync": True}
         if record._name == "magento.product.map":
             ctx["skip_odoo_sync"] = True
         try:
@@ -775,63 +782,6 @@ class MagentoMappingReport(models.Model):
     _description = "Magento Mapping Report"
     _order = "create_date desc, id desc"
 
-    @api.model
-    def _replace_shopify_text(self, value):
-        if not isinstance(value, str):
-            return value
-        replaced = value.replace("Shopify", "Magento")
-        replaced = replaced.replace("shopify", "magento")
-        replaced = replaced.replace("SHOPIFY", "MAGENTO")
-        return replaced
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        text_keys = {
-            "name",
-            "source_action",
-            "record_name",
-            "payload_text",
-            "notes",
-        }
-        for vals in vals_list:
-            for key in text_keys:
-                if key in vals:
-                    vals[key] = self._replace_shopify_text(vals.get(key))
-        return super().create(vals_list)
-
-    def write(self, vals):
-        text_keys = {
-            "name",
-            "source_action",
-            "record_name",
-            "payload_text",
-            "notes",
-        }
-        for key in text_keys:
-            if key in vals:
-                vals[key] = self._replace_shopify_text(vals.get(key))
-        return super().write(vals)
-
-    def init(self):
-        # Keep upgrade work bounded: cleanup only recent rows and only
-        # short label fields (skip large text payloads).
-        self.env.cr.execute(
-            """
-            WITH target AS (
-                SELECT id
-                  FROM magento_mapping_report
-              ORDER BY id DESC
-                 LIMIT 5000
-            )
-            UPDATE magento_mapping_report AS report
-               SET name = REPLACE(REPLACE(REPLACE(report.name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   source_action = REPLACE(REPLACE(REPLACE(report.source_action, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   record_name = REPLACE(REPLACE(REPLACE(report.record_name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
-              FROM target
-             WHERE report.id = target.id;
-            """
-        )
-
     name = fields.Char(required=True, copy=False)
     mapping_id = fields.Many2one(
         "magento.field.mapping",
@@ -890,51 +840,6 @@ class MagentoMappingReportLine(models.Model):
     _name = "magento.mapping.report.line"
     _description = "Magento Mapping Report Line"
     _order = "id"
-
-    @api.model
-    def _replace_shopify_text(self, value):
-        if not isinstance(value, str):
-            return value
-        replaced = value.replace("Shopify", "Magento")
-        replaced = replaced.replace("shopify", "magento")
-        replaced = replaced.replace("SHOPIFY", "MAGENTO")
-        return replaced
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        text_keys = {"scope", "odoo_field", "magento_field", "old_value", "new_value"}
-        for vals in vals_list:
-            for key in text_keys:
-                if key in vals:
-                    vals[key] = self._replace_shopify_text(vals.get(key))
-        return super().create(vals_list)
-
-    def write(self, vals):
-        text_keys = {"scope", "odoo_field", "magento_field", "old_value", "new_value"}
-        for key in text_keys:
-            if key in vals:
-                vals[key] = self._replace_shopify_text(vals.get(key))
-        return super().write(vals)
-
-    def init(self):
-        # Keep upgrade work bounded: cleanup only recent rows and only
-        # short label fields (skip large text values).
-        self.env.cr.execute(
-            """
-            WITH target AS (
-                SELECT id
-                  FROM magento_mapping_report_line
-              ORDER BY id DESC
-                 LIMIT 5000
-            )
-            UPDATE magento_mapping_report_line AS line
-               SET scope = REPLACE(REPLACE(REPLACE(line.scope, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   odoo_field = REPLACE(REPLACE(REPLACE(line.odoo_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   magento_field = REPLACE(REPLACE(REPLACE(line.magento_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
-              FROM target
-             WHERE line.id = target.id;
-            """
-        )
 
     report_id = fields.Many2one(
         "magento.mapping.report",
