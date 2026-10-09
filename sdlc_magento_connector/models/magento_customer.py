@@ -1,14 +1,82 @@
 import logging
+
 import requests
 
-from odoo import models, fields, api
+from odoo import api, fields, models
 from odoo.exceptions import UserError
-from ..services.magento_api import MagentoAPI
+
+from .magento_product import magento_push_skipped, schedule_magento_push
+
+_logger = logging.getLogger(__name__)
+
+# Fields whose change triggers the automatic (post-commit) push to Magento.
+_CUSTOMER_SYNC_FIELDS = {
+    "email",
+    "prefix",
+    "firstname",
+    "middlename",
+    "lastname",
+    "suffix",
+    "phone",
+    "group_id",
+    "website_id",
+    "store_id",
+    "disable_auto_group_change",
+    "allow_remote_shopping_assistance",
+    "dob",
+    "taxvat",
+    "gender",
+    "send_welcome_email_from",
+    "street",
+    "street2",
+    "city",
+    "region",
+    "postcode",
+    "country_id",
+    "company",
+    "vat_id",
+    "default_billing",
+    "default_shipping",
+    "instance_id",
+}
+_CUSTOMER_ADDRESS_FIELDS = {
+    "street",
+    "street2",
+    "city",
+    "postcode",
+    "country_id",
+    "phone",
+    "company",
+    "region",
+    "default_billing",
+    "default_shipping",
+}
+
+
+def _normalize_yes_no_vals(vals):
+    vals = dict(vals or {})
+    for key in ("send_welcome_email_from", "default_billing"):
+        if key not in vals:
+            continue
+        val = vals[key]
+        if isinstance(val, bool):
+            vals[key] = "yes" if val else "no"
+        elif val in ("True", "False"):
+            vals[key] = "yes" if val == "True" else "no"
+    if vals.get("magento_id") == "":
+        vals["magento_id"] = False
+    return vals
 
 
 class MagentoCustomer(models.Model):
     _name = "magento.customer"
+    _inherit = ["magento.push.error.mixin"]
     _description = "Magento Customer"
+
+    _uniq_instance_magento_id = models.UniqueIndex(
+        "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
+        "This Magento customer already exists for this instance.",
+    )
 
     instance_id = fields.Many2one("magento.instance", required=True, ondelete="cascade")
     company_id = fields.Many2one(
@@ -55,8 +123,6 @@ class MagentoCustomer(models.Model):
         string="Default Billing Address",
     )
     default_shipping = fields.Boolean()
-
-    _logger = logging.getLogger(__name__)
 
     @api.depends("firstname", "lastname", "email")
     def _compute_name(self):
@@ -161,18 +227,6 @@ class MagentoCustomer(models.Model):
         )
         return payload
 
-    def _validate_default_password(self):
-        self.ensure_one()
-        password = self.instance_id.customer_default_password or ""
-        min_len = int(self.instance_id.customer_password_min_length or 0)
-        if not password:
-            raise UserError("Set a default customer password on the Magento Instance first.")
-        if min_len and len(password) < min_len:
-            raise UserError(
-                f"Default customer password must be at least {min_len} characters."
-            )
-        return password
-
     def _build_magento_address_payload(self):
         self.ensure_one()
         if not any([self.street, self.city, self.postcode, self.country_id, self.phone]):
@@ -238,7 +292,7 @@ class MagentoCustomer(models.Model):
             country = self.env["res.country"].search([("code", "=", country_code)], limit=1)
         values = {
             "instance_id": instance_id,
-            "magento_id": str(data.get("id") or ""),
+            "magento_id": str(data["id"]) if data.get("id") else False,
             "email": data.get("email") or "",
             "prefix": data.get("prefix") or "",
             "firstname": data.get("firstname") or "",
@@ -292,97 +346,78 @@ class MagentoCustomer(models.Model):
             values.update(mapped_vals)
         return values
 
-    def _raise_magento_http_error(self, exc):
-        response = exc.response
-        if response is None:
-            raise UserError(f"Magento API error: {exc}") from exc
+    def _update_magento_customer(self, api, include_address=True):
+        """PUT the customer to Magento, retrying with a minimal payload when
+        Magento rejects an attribute as unsupported. Returns the response."""
+        self.ensure_one()
+        payload = self._build_magento_payload(include_address=include_address)
         try:
-            payload = response.json()
-            message = payload.get("message") or response.text
-        except Exception:
-            message = response.text
-        status = response.status_code
-        raise UserError(f"Magento API error ({status}): {message}") from exc
+            return api.update_customer(self.magento_id, payload)
+        except requests.exceptions.HTTPError as exc:
+            response = exc.response
+            if response is None or response.status_code != 400:
+                raise
+            try:
+                message = response.json().get("message") or response.text
+            except Exception:
+                message = response.text
+            _logger.warning(
+                "Magento rejected customer update (magento id=%s): %s", self.magento_id, message
+            )
+            if "is not supported" not in (message or ""):
+                raise
+            _logger.debug("Retrying customer %s update with minimal payload", self.magento_id)
+            return api.update_customer(self.magento_id, self._build_magento_payload_minimal())
+
+    def _create_magento_customer(self, api):
+        """POST the customer to Magento and store the returned id.
+
+        No password is sent: Magento creates the account without one and its
+        own welcome / account-confirmation email lets the customer set it.
+        """
+        self.ensure_one()
+        payload = self._build_magento_payload(include_address=True)
+        response = api.create_customer(payload)
+        if isinstance(response, dict) and response.get("id") is not None:
+            self.with_context(magento_skip_push=True, skip_magento_sync=True).write({
+                "magento_id": str(response["id"]),
+            })
+        return response
 
     def action_create_magento_customer(self):
         for record in self:
-            api = MagentoAPI(record.instance_id)
-            payload = record._build_magento_payload(include_address=True)
-            payload["password"] = record._validate_default_password()
+            api = record._magento_api()
             try:
-                response = api.create_customer(payload)
-            except requests.exceptions.HTTPError as exc:
+                record._create_magento_customer(api)
+            except requests.exceptions.RequestException as exc:
                 record._raise_magento_http_error(exc)
-            if isinstance(response, dict):
-                if not record.magento_id and response.get("id") is not None:
-                    record.with_context(skip_magento_sync=True).write({
-                        "magento_id": str(response.get("id")),
-                    })
         return self._rainbow_man_action(f"Created {len(self)} customer(s) in Magento.")
 
     def action_update_magento_customer(self):
         for record in self:
             if not record.magento_id:
                 raise UserError("Magento ID is required to update a customer in Magento.")
-            api = MagentoAPI(record.instance_id)
-            payload = record._build_magento_payload(include_address=True)
-            self._logger.info(
-                "Magento customer update payload (id=%s, email=%s): %s",
-                record.magento_id,
-                record.email,
-                payload,
-            )
+            api = record._magento_api()
             try:
-                response = api.update_customer(record.magento_id, payload)
-            except requests.exceptions.HTTPError as exc:
-                response = exc.response
-                if response is not None and response.status_code == 400:
-                    message = ""
-                    try:
-                        message = response.json().get("message") or response.text
-                    except Exception:
-                        message = response.text
-                    self._logger.warning(
-                        "Magento customer update 400 (id=%s): %s",
-                        record.magento_id,
-                        message,
-                    )
-                    if "is not supported" in (message or ""):
-                        payload = record._build_magento_payload_minimal()
-                        self._logger.info(
-                            "Magento customer update fallback payload (id=%s): %s",
-                            record.magento_id,
-                            payload,
-                        )
-                        try:
-                            response = api.update_customer(record.magento_id, payload)
-                        except requests.exceptions.HTTPError as exc2:
-                            record._raise_magento_http_error(exc2)
-                    else:
-                        record._raise_magento_http_error(exc)
-                else:
-                    record._raise_magento_http_error(exc)
+                response = record._update_magento_customer(api, include_address=True)
+            except requests.exceptions.RequestException as exc:
+                record._raise_magento_http_error(exc)
             if isinstance(response, dict):
-                self._logger.info(
-                    "Magento customer update response (id=%s): %s",
-                    record.magento_id,
-                    response,
-                )
                 values = record._extract_magento_values(response, record.instance_id.id)
-                record.with_context(skip_magento_sync=True).write(values)
+                record.with_context(magento_skip_push=True, skip_magento_sync=True).write(values)
         return self._rainbow_man_action(f"Updated {len(self)} customer(s) in Magento.")
 
     def action_pull_magento_customer(self):
         for record in self:
             if not record.magento_id:
                 raise UserError("Magento ID is required to pull customer from Magento.")
-            api = MagentoAPI(record.instance_id)
+            api = record._magento_api()
             try:
                 data = api.get_customer(record.magento_id)
-            except requests.exceptions.HTTPError as exc:
+            except requests.exceptions.RequestException as exc:
                 record._raise_magento_http_error(exc)
             values = record._extract_magento_values(data, record.instance_id.id)
-            record.with_context(skip_magento_sync=True).write(values)
+            record.with_context(magento_skip_push=True, skip_magento_sync=True).write(values)
         return self._rainbow_man_action(f"Pulled {len(self)} customer(s) from Magento.")
 
     def _rainbow_man_action(self, message):
@@ -395,161 +430,45 @@ class MagentoCustomer(models.Model):
             }
         }
 
-    def write(self, vals):
-        vals = dict(vals or {})
-        if "send_welcome_email_from" in vals:
-            val = vals.get("send_welcome_email_from")
-            if isinstance(val, bool):
-                vals["send_welcome_email_from"] = "yes" if val else "no"
-            elif val in ("True", "False"):
-                vals["send_welcome_email_from"] = "yes" if val == "True" else "no"
-        if "default_billing" in vals:
-            val = vals.get("default_billing")
-            if isinstance(val, bool):
-                vals["default_billing"] = "yes" if val else "no"
-            elif val in ("True", "False"):
-                vals["default_billing"] = "yes" if val == "True" else "no"
-        res = super().write(vals)
+    def _magento_auto_push(self, flags):
+        """Automatic (post-commit) push to Magento. Raises on failure."""
+        self.ensure_one()
+        if not self.instance_id:
+            return
+        api = self._magento_api()
+        try:
+            if self.magento_id:
+                self._update_magento_customer(api, include_address="address" in flags)
+            else:
+                self._create_magento_customer(api)
+        except requests.exceptions.RequestException as exc:
+            self._raise_magento_http_error(exc)
 
-        if self.env.context.get("skip_magento_sync"):
-            return res
-
-        magento_sync_fields = {
-            "email",
-            "prefix",
-            "firstname",
-            "middlename",
-            "lastname",
-            "suffix",
-            "phone",
-            "group_id",
-            "website_id",
-            "store_id",
-            "disable_auto_group_change",
-            "allow_remote_shopping_assistance",
-            "dob",
-            "taxvat",
-            "gender",
-            "send_welcome_email_from",
-            "street",
-            "street2",
-            "city",
-            "region",
-            "postcode",
-            "country_id",
-            "company",
-            "vat_id",
-            "default_billing",
-            "default_shipping",
-            "instance_id",
-            "magento_id",
-        }
-        mapped_sync_fields = set()
+    def _schedule_magento_push(self, changed_fields):
+        if magento_push_skipped(self.env):
+            return
+        sync_fields = set(_CUSTOMER_SYNC_FIELDS)
         for inst in self.mapped("instance_id"):
-            mapped_sync_fields.update(
-                self.env["magento.field.mapping"].sudo().mapped_source_fields("customer", inst)
-            )
-        if not (magento_sync_fields | mapped_sync_fields).intersection(vals.keys()):
-            return res
+            sync_fields |= self.env["magento.field.mapping"].sudo().mapped_source_fields("customer", inst)
+        if not sync_fields.intersection(changed_fields):
+            return
+        flags = {"address"} if _CUSTOMER_ADDRESS_FIELDS.intersection(changed_fields) else set()
+        schedule_magento_push(self.filtered("instance_id"), flags=flags)
 
-        for record in self:
-            if not record.instance_id:
-                continue
-            api = MagentoAPI(record.instance_id)
-            address_fields = {
-                "street",
-                "street2",
-                "city",
-                "postcode",
-                "country_id",
-                "phone",
-                "company",
-                "region",
-                "default_billing",
-                "default_shipping",
-            }
-            include_address = not bool(record.magento_id) or bool(address_fields.intersection(vals.keys()))
-            payload = record._build_magento_payload(include_address=include_address)
-            try:
-                if record.magento_id:
-                    try:
-                        response = api.update_customer(record.magento_id, payload)
-                    except requests.exceptions.HTTPError as exc:
-                        response_obj = exc.response
-                        if response_obj is not None and response_obj.status_code == 400:
-                            message = ""
-                            try:
-                                message = response_obj.json().get("message") or response_obj.text
-                            except Exception:
-                                message = response_obj.text
-                            self._logger.warning(
-                                "Magento customer write update 400 (id=%s): %s",
-                                record.magento_id,
-                                message,
-                            )
-                            if "is not supported" in (message or ""):
-                                payload = record._build_magento_payload_minimal()
-                                self._logger.info(
-                                    "Magento customer write fallback payload (id=%s): %s",
-                                    record.magento_id,
-                                    payload,
-                                )
-                                response = api.update_customer(record.magento_id, payload)
-                            else:
-                                raise
-                        else:
-                            raise
-                else:
-                    payload["password"] = record._validate_default_password()
-                    response = api.create_customer(payload)
-                if isinstance(response, dict):
-                    self._logger.info(
-                        "Magento customer write response (id=%s): %s",
-                        record.magento_id,
-                        response,
-                    )
-                    if not record.magento_id and response.get("id") is not None:
-                        record.with_context(skip_magento_sync=True).write({
-                            "magento_id": str(response.get("id")),
-                        })
-            except requests.exceptions.HTTPError as exc:
-                record._raise_magento_http_error(exc)
+    def write(self, vals):
+        vals = _normalize_yes_no_vals(vals)
+        res = super().write(vals)
+        # Pushed after commit: Magento being slow or down never blocks the save.
+        self._schedule_magento_push(set(vals))
         return res
 
+    @api.model_create_multi
     def create(self, vals_list):
-        clean_vals_list = []
-        for vals in vals_list:
-            clean = dict(vals or {})
-            if "send_welcome_email_from" in clean:
-                val = clean.get("send_welcome_email_from")
-                if isinstance(val, bool):
-                    clean["send_welcome_email_from"] = "yes" if val else "no"
-                elif val in ("True", "False"):
-                    clean["send_welcome_email_from"] = "yes" if val == "True" else "no"
-            if "default_billing" in clean:
-                val = clean.get("default_billing")
-                if isinstance(val, bool):
-                    clean["default_billing"] = "yes" if val else "no"
-                elif val in ("True", "False"):
-                    clean["default_billing"] = "yes" if val == "True" else "no"
-            clean_vals_list.append(clean)
-        records = super().create(clean_vals_list)
-
-        if records.env.context.get("skip_magento_sync"):
-            return records
-        for record in records:
-            if not record.instance_id:
-                continue
-            if record.magento_id:
-                continue
-            api = MagentoAPI(record.instance_id)
-            payload = record._build_magento_payload(include_address=True)
-            payload["password"] = record._validate_default_password()
-            try:
-                response = api.create_customer(payload)
-                if isinstance(response, dict):
-                    values = record._extract_magento_values(response, record.instance_id.id)
-                    record.with_context(skip_magento_sync=True).write(values)
-            except requests.exceptions.HTTPError as exc:
-                record._raise_magento_http_error(exc)
+        records = super().create([_normalize_yes_no_vals(vals) for vals in vals_list])
+        # New customers without a Magento id are created in Magento after commit.
+        if not magento_push_skipped(self.env):
+            schedule_magento_push(
+                records.filtered(lambda r: r.instance_id and not r.magento_id),
+                flags={"address"},
+            )
         return records

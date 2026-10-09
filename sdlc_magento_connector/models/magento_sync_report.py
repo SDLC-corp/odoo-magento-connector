@@ -31,6 +31,7 @@ class MagentoSyncReport(models.Model):
     total_records = fields.Integer(default=0)
     success = fields.Integer(default=0)
     errors = fields.Integer(default=0)
+    skipped = fields.Integer(default=0)
     start_time = fields.Datetime()
     end_time = fields.Datetime()
     categories_created = fields.Integer(default=0)

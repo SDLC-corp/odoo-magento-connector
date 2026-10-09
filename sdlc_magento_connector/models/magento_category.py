@@ -1,12 +1,23 @@
-from odoo import models, fields
-from odoo.exceptions import UserError
 import requests
-from ..services.magento_api import MagentoAPI
+
+from odoo import fields, models
+from odoo.exceptions import UserError
+
+from .magento_product import magento_push_skipped, schedule_magento_push
+
+# Fields whose change triggers the automatic (post-commit) push to Magento.
+_CATEGORY_SYNC_FIELDS = {"name", "is_active", "parent_id", "instance_id"}
 
 
 class MagentoCategory(models.Model):
     _name = "magento.category"
+    _inherit = ["magento.push.error.mixin"]
     _description = "Magento Category"
+
+    _uniq_instance_magento_id = models.UniqueIndex(
+        "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
+        "This Magento category already exists for this instance.",
+    )
 
     name = fields.Char(required=True)
     magento_id = fields.Char()
@@ -58,7 +69,7 @@ class MagentoCategory(models.Model):
 
     def _apply_magento_data(self, data):
         vals = {
-            "magento_id": str(data.get("id") or self.magento_id or ""),
+            "magento_id": str(data.get("id") or self.magento_id or "") or False,
             "name": data.get("name") or self.name,
             "is_active": bool(data.get("is_active")) if data.get("is_active") is not None else self.is_active,
         }
@@ -69,7 +80,9 @@ class MagentoCategory(models.Model):
                 ("magento_id", "=", str(parent_id)),
             ], limit=1)
             if not parent:
-                parent = self.env["magento.category"].create({
+                parent = self.env["magento.category"].with_context(
+                    magento_skip_push=True, skip_magento_sync=True
+                ).create({
                     "instance_id": self.instance_id.id,
                     "magento_id": str(parent_id),
                     "name": f"Magento Category {parent_id}",
@@ -87,96 +100,70 @@ class MagentoCategory(models.Model):
             vals.update(mapped_vals)
         return vals
 
-    def _raise_magento_http_error(self, exc):
-        response = exc.response
-        if response is None:
-            raise UserError(f"Magento API error: {exc}") from exc
-        try:
-            payload = response.json()
-            message = payload.get("message") or response.text
-        except Exception:
-            message = response.text
-        status = response.status_code
-        raise UserError(f"Magento API error ({status}): {message}") from exc
-
     def action_create_magento_category(self):
         for record in self:
             if not record.instance_id:
                 raise UserError("Magento Instance is required.")
-            if not record.parent_id:
-                if record.instance_id.root_category_id:
-                    record.parent_id = False
-                else:
-                    raise UserError("Parent Category with Magento ID is required.")
-            api = MagentoAPI(record.instance_id)
-            if not record.parent_id.magento_id:
+            if not record.parent_id and not record.instance_id.root_category_id:
+                raise UserError("Parent Category with Magento ID is required.")
+            if record.parent_id and not record.parent_id.magento_id:
                 record.parent_id.action_create_magento_category()
-            try:
-                parent_id = int(record.parent_id.magento_id) if record.parent_id else int(record.instance_id.root_category_id)
-            except (TypeError, ValueError):
-                if record.instance_id.root_category_id:
-                    parent_id = int(record.instance_id.root_category_id)
-                else:
-                    raise UserError(
-                        "Parent Category Magento ID must be a number. "
-                        "Run 'Sync Categories' or set the correct Magento ID."
-                    )
+            if record.parent_id:
+                try:
+                    int(record.parent_id.magento_id)
+                except (TypeError, ValueError):
+                    if not record.instance_id.root_category_id:
+                        raise UserError(
+                            "Parent Category Magento ID must be a number. "
+                            "Run 'Sync Categories' or set the correct Magento ID."
+                        ) from None
+            api = record._magento_api()
             payload = record._build_magento_payload()
             try:
                 response = api.create_category(payload)
-            except requests.exceptions.HTTPError as exc:
-                response_obj = exc.response
-                if response_obj is not None:
-                    status = response_obj.status_code
-                    message = ""
-                    try:
-                        payload_err = response_obj.json()
-                        message = payload_err.get("message") or response_obj.text
-                    except Exception:
-                        message = response_obj.text
-                    if not message:
-                        message = f"HTTP {status}"
-                    raise UserError(f"Magento API error ({status}): {message}") from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                record._raise_magento_http_error(exc)
             if isinstance(response, dict):
                 magento_id = response.get("id")
                 if magento_id is not None:
-                    record.write({"magento_id": str(magento_id)})
+                    record.with_context(magento_skip_push=True, skip_magento_sync=True).write(
+                        {"magento_id": str(magento_id)}
+                    )
         return self._rainbow_man_action(f"Created {len(self)} category(s) in Magento.")
 
     def action_update_magento_category(self):
         for record in self:
             if not record.magento_id:
                 raise UserError("Magento ID is required to update a category in Magento.")
-            api = MagentoAPI(record.instance_id)
+            api = record._magento_api()
             try:
                 api.get_category(record.magento_id)
-            except requests.exceptions.HTTPError as exc:
-                response = exc.response
+            except requests.exceptions.RequestException as exc:
+                response = getattr(exc, "response", None)
                 if response is not None and response.status_code == 404:
                     raise UserError("Magento category not found. Use 'Create in Magento' first.") from exc
                 record._raise_magento_http_error(exc)
             payload = record._build_magento_payload(for_update=True)
             try:
                 response = api.update_category(record.magento_id, payload)
-            except requests.exceptions.HTTPError as exc:
+            except requests.exceptions.RequestException as exc:
                 record._raise_magento_http_error(exc)
             if isinstance(response, dict):
                 values = record._apply_magento_data(response)
-                record.with_context(skip_magento_sync=True).write(values)
+                record.with_context(magento_skip_push=True, skip_magento_sync=True).write(values)
         return self._rainbow_man_action(f"Updated {len(self)} category(s) in Magento.")
 
     def action_pull_magento_category(self):
         for record in self:
             if not record.magento_id:
                 raise UserError("Magento ID is required to pull category from Magento.")
-            api = MagentoAPI(record.instance_id)
+            api = record._magento_api()
             try:
                 data = api.get_category(record.magento_id)
-            except requests.exceptions.HTTPError as exc:
+            except requests.exceptions.RequestException as exc:
                 record._raise_magento_http_error(exc)
             values = record._apply_magento_data(data)
-            record.with_context(skip_magento_sync=True).write(values)
+            record.with_context(magento_skip_push=True, skip_magento_sync=True).write(values)
         return self._rainbow_man_action(f"Pulled {len(self)} category(s) from Magento.")
 
     def _rainbow_man_action(self, message):
@@ -189,32 +176,31 @@ class MagentoCategory(models.Model):
             }
         }
 
+    def _magento_auto_push(self, flags):
+        """Automatic (post-commit) push to Magento. Raises on failure."""
+        self.ensure_one()
+        if not self.instance_id:
+            return
+        if self.parent_id and not self.parent_id.magento_id:
+            self.parent_id.action_create_magento_category()
+        if not self.magento_id:
+            self.action_create_magento_category()
+            return
+        api = self._magento_api()
+        payload = self._build_magento_payload(for_update=True)
+        try:
+            api.update_category(self.magento_id, payload)
+        except requests.exceptions.RequestException as exc:
+            self._raise_magento_http_error(exc)
+
     def write(self, vals):
         res = super().write(vals)
-        if self.env.context.get("skip_magento_sync"):
+        if magento_push_skipped(self.env):
             return res
-
-        magento_sync_fields = {"name", "is_active", "parent_id", "instance_id", "magento_id"}
-        mapped_sync_fields = set()
+        sync_fields = set(_CATEGORY_SYNC_FIELDS)
         for inst in self.mapped("instance_id"):
-            mapped_sync_fields.update(
-                self.env["magento.field.mapping"].sudo().mapped_source_fields("category", inst)
-            )
-        if not (magento_sync_fields | mapped_sync_fields).intersection(vals.keys()):
-            return res
-
-        for record in self:
-            if not record.instance_id:
-                continue
-            if record.parent_id and not record.parent_id.magento_id:
-                record.parent_id.with_context(skip_magento_sync=True).action_create_magento_category()
-            if not record.magento_id:
-                record.with_context(skip_magento_sync=True).action_create_magento_category()
-                continue
-            api = MagentoAPI(record.instance_id)
-            payload = record._build_magento_payload(for_update=True)
-            try:
-                api.update_category(record.magento_id, payload)
-            except requests.exceptions.HTTPError as exc:
-                record._raise_magento_http_error(exc)
+            sync_fields |= self.env["magento.field.mapping"].sudo().mapped_source_fields("category", inst)
+        if sync_fields.intersection(vals):
+            # Pushed after commit: Magento being slow or down never blocks the save.
+            schedule_magento_push(self.filtered("instance_id"))
         return res
