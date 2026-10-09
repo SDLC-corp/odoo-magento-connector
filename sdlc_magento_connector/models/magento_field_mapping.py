@@ -33,13 +33,10 @@ class MagentoAvailableField(models.Model):
         default=lambda self: self.env.context.get("default_mapping_type", "product"),
     )
 
-    _sql_constraints = [
-        (
-            "uniq_magento_field",
-            "unique(code, instance_id, mapping_type)",
-            "This Magento field already exists!",
-        ),
-    ]
+    _uniq_magento_field = models.Constraint(
+        "unique(code, instance_id, mapping_type)",
+        "This Magento field already exists!",
+    )
 
 
 class MagentoFieldMapping(models.Model):
@@ -91,13 +88,10 @@ class MagentoFieldMapping(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _sql_constraints = [
-        (
-            "uniq_magento_mapping",
-            "unique(mapping_type, instance_id, odoo_field, magento_field_id)",
-            "Duplicate mapping is not allowed.",
-        ),
-    ]
+    _uniq_magento_mapping = models.Constraint(
+        "unique(mapping_type, instance_id, odoo_field, magento_field_id)",
+        "Duplicate mapping is not allowed.",
+    )
 
     @api.depends("mapping_type")
     def _compute_odoo_model(self):
