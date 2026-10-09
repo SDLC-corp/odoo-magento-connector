@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Magento Console">
-  <rect width="64" height="64" rx="14" fill="#c8103a"/>
-  <path d="M8 50c12-4 30-4 48 0" stroke="#ffffff" stroke-width="2.4"
-        stroke-linecap="round" stroke-dasharray="4 4" opacity="0.6" fill="none"/>
-  <path d="M51 46.5l6 3.5-6.6 2.2z" fill="#ffffff" opacity="0.85"/>
+  <rect width="64" height="64" rx="14" fill="#373330"/>
+  <path d="M8 50c12-4 30-4 48 0" stroke="#ef672f" stroke-width="2.4"
+        stroke-linecap="round" stroke-dasharray="4 4" opacity="0.7" fill="none"/>
+  <path d="M51 46.5l6 3.5-6.6 2.2z" fill="#ef672f" opacity="0.9"/>
   <path d="M17 40V20.5L25.5 15.5l6.5 3.8 6.5-3.8 8.5 5V40l-5.5 3.2V23.6l-3-1.8V40L32 43.6 26.5 40V21.8l-3 1.8v19.6z"
-        fill="#ffffff"/>
-  <path d="M32 19.3v24.3" stroke="#9e0c2d" stroke-width="1.2" opacity="0.35"/>
+        fill="#eb5202"/>
+  <path d="M32 19.3v24.3" stroke="#b84002" stroke-width="1.2" opacity="0.6"/>
 </svg>

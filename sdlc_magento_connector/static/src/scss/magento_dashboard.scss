@@ -1,25 +1,39 @@
-// Magento Console: SDLC TRS house style (odoo-trs-ui).
-// Consumes the shared --trs-* tokens with fallbacks, so it matches retail_theme
-// when that theme is installed and still reads as TRS without it.
-// Feature-module rules: mg- prefix, BEM, no o_ overrides, no global styles.
+// Magento Console: SDLC TRS house style (odoo-trs-ui) in the official Magento admin palette.
+// Structure, type, elevation, state styling and accessibility follow TRS; colours
+// come from Magento's backend theme (variables/_colors.less). Feature-module rules:
+// mg- prefix, BEM, no o_ overrides, no global styles.
 
 .mg-console {
-    // Surfaces and ink (TRS tokens with fallbacks)
-    --mg-bg: var(--trs-sand-light, #f3ece4);
-    --mg-panel: var(--trs-white, #ffffff);
-    --mg-panel-2: var(--trs-sand-tint, #faf5ef);
-    --mg-line: var(--trs-line, #e3d8cc);
-    --mg-line-strong: var(--trs-sand-dark, #cdbca9);
-    --mg-ink: var(--trs-ink, #1a1a1a);
-    --mg-ink-dim: var(--trs-ink-dim, #6b5f55);
-    --mg-accent: var(--trs-crimson, #c8103a);
-    --mg-accent-dark: var(--trs-crimson-dark, #9e0c2d);
-    --mg-bar-alt: #bbaa97;
+    // Brand: Magento phoenix orange (@primary__color). Accents, icons, focus, large figures only;
+    // body text always uses ink, and small white text sits on --mg-brand-dark.
+    --mg-brand: #eb5202;        // @color-phoenix
+    --mg-brand-dark: #c34706;   // @color-phoenix-dark
+    --mg-brand-deep: #b84002;   // @color-phoenix-brown
+    --mg-brand-light: #ef672f;
 
-    // Status: deliberately not the brand colour
+    // Chrome and ink (Magento admin browns)
+    --mg-chrome: #373330;       // admin menu background
+    --mg-ink: #41362f;          // @text__color
+    --mg-ink-dim: #736963;      // @color-brownie-vanilla
+    --mg-secondary: #514943;    // @color-brownie
+    --mg-info: #007bdb;         // @color-blue-pure: text links
+
+    // Surfaces
+    --mg-bg: #f7f3eb;           // ivory
+    --mg-panel: #ffffff;
+    --mg-panel-2: #fbf8f3;
+    --mg-line: #dad1c8;         // gray-brown
+    --mg-line-strong: #c3bbb1;
+
+    // Status: kept apart from the brand. Warn is amber-olive so it never reads as brand orange.
     --mg-ok: #067647;
-    --mg-warn: #b54708;
+    --mg-ok-bg: rgba(121, 162, 46, 0.1);      // Magento green #79a22e
+    --mg-warn: #8a6100;
+    --mg-warn-bg: #fffbe6;                    // Magento lazy-sun-white
+    --mg-warn-line: rgba(138, 97, 0, 0.3);
     --mg-crit: #b42318;
+    --mg-crit-bg: rgba(226, 38, 38, 0.06);    // Magento tomato-brick #e22626
+    --mg-crit-line: rgba(180, 35, 24, 0.3);
 
     // Type
     --mg-display: var(--trs-display, Rockwell, "Roboto Slab", "Zilla Slab", Georgia, serif);
@@ -37,7 +51,7 @@
     overflow-x: hidden;
     padding: 22px 24px 40px;
     background:
-        radial-gradient(1200px 400px at 12% -10%, #e9ddd0 0%, transparent 60%),
+        radial-gradient(1200px 400px at 12% -10%, #efe5d6 0%, transparent 60%),
         var(--mg-bg);
     color: var(--mg-ink);
     font-family: var(--mg-text);
@@ -47,7 +61,7 @@
     scrollbar-width: thin;
 
     :focus-visible {
-        outline: 2px solid var(--mg-accent);
+        outline: 2px solid var(--mg-brand);
         outline-offset: 2px;
     }
 }
@@ -70,6 +84,7 @@
     }
 
     &__mark {
+        display: block;
         width: 42px;
         height: 42px;
         flex: none;
@@ -174,7 +189,7 @@
     transition: background-color 0.15s ease, border-color 0.15s ease;
 
     .fa {
-        color: var(--mg-accent);
+        color: var(--mg-brand);
     }
 
     &:hover:not(:disabled) {
@@ -200,13 +215,13 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--mg-accent);
+    color: var(--mg-info);
     font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
 
     &:hover {
-        color: var(--mg-accent-dark);
+        color: #005ea8;
         text-decoration: underline;
     }
 }
@@ -258,7 +273,7 @@
 
         .fa {
             font-size: 12px;
-            color: var(--mg-accent);
+            color: var(--mg-brand);
         }
 
         &:hover {
@@ -351,9 +366,9 @@
     // Selected uses ink, not brand: brand red already appears in dots and icons.
     &--active,
     &--active:hover {
-        border-color: var(--mg-ink);
+        border-color: var(--mg-chrome);
         background: var(--mg-panel);
-        box-shadow: inset 0 0 0 1px var(--mg-ink);
+        box-shadow: inset 0 0 0 1px var(--mg-chrome);
     }
 }
 
@@ -376,14 +391,14 @@
     }
 
     &--error {
-        border-color: rgba(180, 35, 24, 0.35);
-        background: rgba(180, 35, 24, 0.05);
+        border-color: var(--mg-crit-line);
+        background: var(--mg-crit-bg);
         color: var(--mg-crit);
     }
 
     &--warn {
-        border-color: rgba(181, 71, 8, 0.35);
-        background: rgba(181, 71, 8, 0.06);
+        border-color: var(--mg-warn-line);
+        background: var(--mg-warn-bg);
         color: var(--mg-warn);
     }
 }
@@ -414,7 +429,7 @@
         }
 
         &:focus-visible {
-            outline: 2px solid var(--mg-accent);
+            outline: 2px solid var(--mg-brand);
             outline-offset: -2px;
         }
     }
@@ -450,19 +465,19 @@
 
     // Redundant encoding: tint + top line + coloured figure.
     &__cell--warn {
-        background: linear-gradient(rgba(181, 71, 8, 0.05), rgba(181, 71, 8, 0.05)), var(--mg-panel);
+        background: var(--mg-warn-bg);
         box-shadow: inset 0 3px 0 var(--mg-warn);
 
         .mg-rail__value { color: var(--mg-warn); }
-        &:hover { background: linear-gradient(rgba(181, 71, 8, 0.1), rgba(181, 71, 8, 0.1)), var(--mg-panel); }
+        &:hover { background: linear-gradient(rgba(138, 97, 0, 0.06), rgba(138, 97, 0, 0.06)), var(--mg-warn-bg); }
     }
 
     &__cell--crit {
-        background: linear-gradient(rgba(180, 35, 24, 0.05), rgba(180, 35, 24, 0.05)), var(--mg-panel);
+        background: linear-gradient(var(--mg-crit-bg), var(--mg-crit-bg)), var(--mg-panel);
         box-shadow: inset 0 3px 0 var(--mg-crit);
 
         .mg-rail__value { color: var(--mg-crit); }
-        &:hover { background: linear-gradient(rgba(180, 35, 24, 0.1), rgba(180, 35, 24, 0.1)), var(--mg-panel); }
+        &:hover { background: linear-gradient(rgba(226, 38, 38, 0.11), rgba(226, 38, 38, 0.11)), var(--mg-panel); }
     }
 }
 
@@ -548,7 +563,7 @@
     }
 
     &:focus-visible {
-        outline: 2px solid var(--mg-accent);
+        outline: 2px solid var(--mg-brand);
         outline-offset: -2px;
     }
 }
@@ -615,15 +630,15 @@
     text-transform: uppercase;
 
     &--crit {
-        background: rgba(180, 35, 24, 0.1);
+        background: var(--mg-crit-bg);
         color: var(--mg-crit);
-        box-shadow: inset 0 0 0 1px rgba(180, 35, 24, 0.25);
+        box-shadow: inset 0 0 0 1px var(--mg-crit-line);
     }
 
     &--warn {
-        background: rgba(181, 71, 8, 0.1);
+        background: var(--mg-warn-bg);
         color: var(--mg-warn);
-        box-shadow: inset 0 0 0 1px rgba(181, 71, 8, 0.25);
+        box-shadow: inset 0 0 0 1px var(--mg-warn-line);
     }
 }
 
@@ -671,10 +686,10 @@
         display: block;
         height: 100%;
         border-radius: 999px;
-        background: linear-gradient(90deg, var(--mg-accent-dark), var(--mg-accent));
+        background: linear-gradient(90deg, var(--mg-brand-deep), var(--mg-brand));
 
         &--alt {
-            background: linear-gradient(90deg, #8c7b6b, var(--mg-bar-alt));
+            background: linear-gradient(90deg, var(--mg-secondary), var(--mg-ink-dim));
         }
     }
 }
