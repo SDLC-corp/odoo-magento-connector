@@ -11,8 +11,8 @@ import { Component, onWillStart, onWillUnmount, useEffect, useRef, useState } fr
 
 const { DateTime } = luxon;
 
-/** Coloured-dot fallback for instances without a logo; warm, distinct, not status colours. */
-const INSTANCE_DOTS = ["#c8103a", "#8c7b6b", "#3a5a8c", "#2f7d6d", "#a8572a", "#6b4c8a"];
+/** Coloured-dot fallback for instances without a logo: Magento admin palette, not status colours. */
+const INSTANCE_DOTS = ["#eb5202", "#514943", "#007bdb", "#79a22e", "#b84002", "#736963"];
 
 export class MagentoConsole extends Component {
     static template = "sdlc_magento_connector.MagentoConsole";
@@ -226,12 +226,12 @@ export class MagentoConsole extends Component {
         }
         const css = getComputedStyle(canvas.closest(".mg-console"));
         const token = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
-        const ink = token("--mg-ink", "#1a1a1a");
-        const inkDim = token("--mg-ink-dim", "#6b5f55");
-        const line = token("--mg-line", "#e3d8cc");
+        const ink = token("--mg-ink", "#41362f");
+        const inkDim = token("--mg-ink-dim", "#736963");
+        const line = token("--mg-line", "#dad1c8");
         const panel = token("--mg-panel", "#ffffff");
-        const accent = token("--mg-accent", "#c8103a");
-        const bars = token("--mg-bar-alt", "#bbaa97");
+        const accent = token("--mg-brand", "#eb5202");
+        const bars = token("--mg-secondary", "#514943");
         const font = token("--mg-text", "sans-serif");
 
         const labels = trend.map((p) =>
@@ -262,7 +262,7 @@ export class MagentoConsole extends Component {
                         label: _t("Orders"),
                         data: trend.map((p) => p.orders),
                         yAxisID: "orders",
-                        backgroundColor: bars + "99",
+                        backgroundColor: bars + "59",
                         hoverBackgroundColor: bars,
                         borderRadius: 3,
                         maxBarThickness: 18,
