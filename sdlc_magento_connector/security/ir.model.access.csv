@@ -3,12 +3,9 @@ access_magento_instance_user,magento.instance user,model_magento_instance,base.g
 access_magento_attribute_set_user,magento.attribute.set user,model_magento_attribute_set,base.group_user,1,1,1,1
 access_magento_product_map_user,magento.product.map user,model_magento_product_map,base.group_user,1,1,1,1
 access_magento_category_user,magento.category user,model_magento_category,base.group_user,1,1,1,1
-access_magento_order_user,magento.order user,model_magento_order,base.group_user,1,1,1,1
-access_magento_order_line_user,magento.order.line user,model_magento_order_line,base.group_user,1,1,1,1
 access_magento_customer_user,magento.customer user,model_magento_customer,base.group_user,1,1,1,1
 access_magento_sync_report_user,magento.sync.report user,model_magento_sync_report,base.group_user,1,1,1,1
 access_magento_available_field_user,magento.available.field user,model_magento_available_field,base.group_user,1,1,1,1
 access_magento_field_mapping_user,magento.field.mapping user,model_magento_field_mapping,base.group_user,1,1,1,1
-access_magento_mapping_test_wizard_user,magento.mapping.test.wizard user,model_magento_mapping_test_wizard,base.group_user,1,1,1,1
 access_magento_mapping_report_user,magento.mapping.report user,model_magento_mapping_report,base.group_user,1,1,1,1
 access_magento_mapping_report_line_user,magento.mapping.report.line user,model_magento_mapping_report_line,base.group_user,1,1,1,1

@@ -206,22 +206,5 @@ action = env['magento.field.mapping'].with_context(
                 </form>
             </field>
         </record>
-
-        <record id="view_magento_mapping_test_wizard_form" model="ir.ui.view">
-            <field name="name">magento.mapping.test.wizard.form</field>
-            <field name="model">magento.mapping.test.wizard</field>
-            <field name="arch" type="xml">
-                <form string="Mapping Test Result">
-                    <sheet>
-                        <group>
-                            <field name="message" nolabel="1" readonly="1" widget="text"/>
-                        </group>
-                    </sheet>
-                    <footer>
-                        <button special="cancel" string="Close" class="btn-secondary"/>
-                    </footer>
-                </form>
-            </field>
-        </record>
     </data>
 </odoo>

@@ -189,9 +189,6 @@ class MagentoInstance(models.Model):
     sync_product_ids = fields.One2many(
         "magento.product.map", "instance_id", string="Synced Products"
     )
-    sync_order_ids = fields.One2many(
-        "magento.order", "instance_id", string="Synced Orders"
-    )
 
     # =====================
     # HELPERS

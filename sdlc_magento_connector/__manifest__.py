@@ -7,6 +7,7 @@
     'license': 'LGPL-3',
     'depends': ['base', 'product', 'sale', 'sale_stock', 'account', 'stock'],
     'data': [
+        'security/magento_security.xml',
         'security/ir.model.access.csv',
         'data/cleanup_billing_agreement.xml',
         'views/magento_sale_order_view.xml',

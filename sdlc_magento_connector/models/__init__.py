@@ -2,8 +2,6 @@ from . import magento_instance
 from . import magento_attribute_set
 from . import magento_category
 from . import magento_product
-from . import magento_order
-from . import magento_order_line
 from . import sale_order_inherit
 from . import account_move_inherit
 from . import stock_picking_inherit

@@ -770,13 +770,6 @@ class MagentoFieldMapping(models.Model):
         }
 
 
-class MagentoMappingTestWizard(models.TransientModel):
-    _name = "magento.mapping.test.wizard"
-    _description = "Magento Mapping Test Result"
-
-    message = fields.Text(readonly=True)
-
-
 class MagentoMappingReport(models.Model):
     _name = "magento.mapping.report"
     _description = "Magento Mapping Report"
