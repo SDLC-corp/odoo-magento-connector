@@ -1,9 +1,15 @@
+import logging
+
 import requests
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
 from ..services.magento_api import MagentoAPI
+
+
+_logger = logging.getLogger(__name__)
+
 
 class AccountMove(models.Model):
     _inherit = "account.move"
@@ -29,15 +35,24 @@ class AccountMove(models.Model):
         compute="_compute_magento_sale_order",
         store=True,
     )
+    magento_instance_id = fields.Many2one(
+        "magento.instance",
+        string="Magento Instance",
+        related="magento_sale_order_id.magento_instance_id",
+        store=True,
+        index=True,
+    )
     magento_invoice_id = fields.Char(
         string="Magento Invoice ID",
         readonly=True,
         copy=False,
+        index=True,
     )
     magento_credit_memo_id = fields.Char(
         string="Magento Credit Memo ID",
         readonly=True,
         copy=False,
+        index=True,
     )
     magento_credit_memo_created_at = fields.Datetime(
         string="Credit Memo Created",
@@ -67,7 +82,7 @@ class AccountMove(models.Model):
     currency_field="currency_id",
     compute="_compute_magento_refunded_amount",
     store=True,
-    )  
+    )
 
     # Store Magento credit memo amounts so Odoo UI matches Magento even if taxes/config differ.
     magento_credit_memo_grand_total = fields.Monetary(
@@ -87,6 +102,15 @@ class AccountMove(models.Model):
         currency_field="currency_id",
         readonly=True,
         copy=False,
+    )
+
+    _magento_invoice_uniq = models.Constraint(
+        "unique(magento_instance_id, magento_invoice_id)",
+        "This Magento invoice is already linked to another journal entry of the same instance.",
+    )
+    _magento_credit_memo_uniq = models.Constraint(
+        "unique(magento_instance_id, magento_credit_memo_id)",
+        "This Magento credit memo is already linked to another journal entry of the same instance.",
     )
 
     @api.depends(
@@ -232,8 +256,9 @@ class AccountMove(models.Model):
                 qty = line.quantity or sol.qty_invoiced or sol.product_uom_qty or 0.0
                 if qty <= 0:
                     continue
-                item_qtys.setdefault(sol.magento_item_id, 0.0)
-                item_qtys[sol.magento_item_id] += qty
+                item_id = sol._magento_push_item_id()
+                item_qtys.setdefault(item_id, 0.0)
+                item_qtys[item_id] += qty
 
         if not item_qtys:
             for line in self.invoice_line_ids.filtered(lambda l: l.product_id):
@@ -252,8 +277,9 @@ class AccountMove(models.Model):
                     sol = matches[0]
                     qty = line.quantity or sol.qty_invoiced or sol.product_uom_qty or 0.0
                     if qty > 0:
-                        item_qtys.setdefault(sol.magento_item_id, 0.0)
-                        item_qtys[sol.magento_item_id] += qty
+                        item_id = sol._magento_push_item_id()
+                        item_qtys.setdefault(item_id, 0.0)
+                        item_qtys[item_id] += qty
 
         if not item_qtys:
             return None
@@ -291,8 +317,9 @@ class AccountMove(models.Model):
                 qty = line.quantity or sol.qty_invoiced or sol.product_uom_qty or 0.0
                 if qty <= 0:
                     continue
-                item_qtys.setdefault(sol.magento_item_id, 0.0)
-                item_qtys[sol.magento_item_id] += qty
+                item_id = sol._magento_push_item_id()
+                item_qtys.setdefault(item_id, 0.0)
+                item_qtys[item_id] += qty
 
         if not item_qtys:
             for line in self.invoice_line_ids.filtered(lambda l: l.product_id):
@@ -311,8 +338,9 @@ class AccountMove(models.Model):
                     sol = matches[0]
                     qty = line.quantity or sol.qty_invoiced or sol.product_uom_qty or 0.0
                     if qty > 0:
-                        item_qtys.setdefault(sol.magento_item_id, 0.0)
-                        item_qtys[sol.magento_item_id] += qty
+                        item_id = sol._magento_push_item_id()
+                        item_qtys.setdefault(item_id, 0.0)
+                        item_qtys[item_id] += qty
 
         if not item_qtys:
             return None
@@ -349,11 +377,10 @@ class AccountMove(models.Model):
         if not instance:
             raise UserError(_("Magento Instance is required to create a Magento invoice."))
         if order.magento_status == "complete" or order.magento_invoice_state == "invoiced":
-            api = MagentoAPI(instance)
             try:
-                order._magento_sync_invoices(api)
-            except Exception:
-                pass
+                order._magento_sync_invoices(MagentoAPI(instance.sudo()))
+            except (UserError, requests.exceptions.RequestException) as exc:
+                self.message_post(body=_("Magento invoice sync failed: %s") % exc)
             self.message_post(
                 body=_("Magento order is already complete/invoiced. Skipped creating Magento invoice.")
             )
@@ -364,16 +391,18 @@ class AccountMove(models.Model):
                 _("No Magento order items found on this invoice. "
                   "Ensure Magento order lines exist before pushing the invoice.")
             )
-        api = MagentoAPI(instance)
+        api = MagentoAPI(instance.sudo())
         try:
             invoice_id = api.create_invoice(order.magento_order_id, payload)
-        except requests.exceptions.HTTPError as exc:
+        except requests.exceptions.RequestException as exc:
             order._magento_raise_http_error(exc)
         self.magento_invoice_id = str(invoice_id)
         try:
             order._magento_refresh_from_magento(api, order.magento_order_id)
-        except Exception:
-            pass
+        except (UserError, requests.exceptions.RequestException) as exc:
+            _logger.warning(
+                "Magento order %s refresh after invoice push failed: %s", order.name, exc
+            )
 
     def _magento_create_credit_memo(self):
         self.ensure_one()
@@ -395,39 +424,27 @@ class AccountMove(models.Model):
                 _("No Magento order items found on this refund. "
                   "Ensure Magento order lines exist before pushing the credit memo.")
             )
-        api = MagentoAPI(instance)
+        api = MagentoAPI(instance.sudo())
         try:
             credit_memo_id = api.create_credit_memo(order.magento_order_id, payload)
-        except requests.exceptions.HTTPError as exc:
+        except requests.exceptions.RequestException as exc:
             order._magento_raise_http_error(exc)
         self.magento_credit_memo_id = str(credit_memo_id)
         try:
             credit_data = api.get_credit_memo(credit_memo_id)
-            if credit_data and credit_data.get("created_at"):
-                created_at = fields.Datetime.to_datetime(credit_data.get("created_at"))
-                self.magento_credit_memo_created_at = created_at
-            if credit_data and credit_data.get("increment_id") and not self.ref:
+        except requests.exceptions.RequestException as exc:
+            _logger.warning("Magento credit memo %s could not be read back: %s", credit_memo_id, exc)
+            credit_data = {}
+        if credit_data:
+            if credit_data.get("created_at"):
+                self.magento_credit_memo_created_at = fields.Datetime.to_datetime(
+                    credit_data.get("created_at")
+                )
+            if credit_data.get("increment_id") and not self.ref:
                 # Store the Magento document number as Odoo's external reference.
                 self.ref = credit_data.get("increment_id")
-            if credit_data:
-                # Persist Magento amounts to avoid Odoo tax configuration affecting the display.
-                def _to_float(v):
-                    try:
-                        return float(v)
-                    except (TypeError, ValueError):
-                        return 0.0
-
-                self.magento_credit_memo_grand_total = _to_float(
-                    credit_data.get("grand_total") or credit_data.get("base_grand_total")
-                )
-                self.magento_credit_memo_tax_amount = _to_float(
-                    credit_data.get("tax_amount") or credit_data.get("base_tax_amount")
-                )
-                self.magento_credit_memo_subtotal = _to_float(
-                    credit_data.get("subtotal") or credit_data.get("base_subtotal")
-                )
-        except Exception:
-            credit_data = {}
+            # Persist Magento amounts so tax configuration differences don't affect the display.
+            order._magento_update_credit_memo_amounts(self, credit_data)
         if not self.magento_credit_memo_created_at:
             self.magento_credit_memo_created_at = fields.Datetime.now()
         # Force recompute stored values so list view updates immediately
@@ -491,12 +508,13 @@ class AccountMove(models.Model):
             status_code = (instance.magento_paid_status or "").strip()
             if not status_code:
                 continue
-            api = MagentoAPI(instance)
-            payload = {"entity": {"status": status_code}}
+            # PUT /V1/orders/{id} only edits addresses; the status goes through a comment.
             try:
-                order._magento_update_order(api, payload)
-                order.magento_status = status_code
-            except Exception as exc:
+                order._magento_push_status(
+                    status_code,
+                    _("Invoice %s paid in Odoo.") % move.name,
+                )
+            except (UserError, requests.exceptions.RequestException) as exc:
                 move.message_post(
                     body=_("Failed to update Magento order status on payment: %s") % exc
                 )
