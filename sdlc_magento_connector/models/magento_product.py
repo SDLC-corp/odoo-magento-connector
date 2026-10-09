@@ -50,6 +50,9 @@ class MagentoProductMap(models.Model):
     _description = "Magento Product Mapping"
 
     instance_id = fields.Many2one("magento.instance", required=True, ondelete="cascade")
+    company_id = fields.Many2one(
+        related="instance_id.company_id", store=True, index=True, readonly=True
+    )
     magento_id = fields.Char()
     sku = fields.Char()
     name = fields.Char()

@@ -12,6 +12,9 @@ class MagentoCategory(models.Model):
     magento_id = fields.Char()
     parent_id = fields.Many2one("magento.category", ondelete="set null")
     instance_id = fields.Many2one("magento.instance", required=True, ondelete="cascade")
+    company_id = fields.Many2one(
+        related="instance_id.company_id", store=True, index=True, readonly=True
+    )
     is_active = fields.Boolean(default=True)
 
     def _build_magento_payload(self, for_update=False):

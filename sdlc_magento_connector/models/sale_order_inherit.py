@@ -19,6 +19,11 @@ class SaleOrder(models.Model):
         store=False,
     )
     magento_order_id = fields.Char("Magento Order ID", readonly=True, copy=False)
+    magento_sync_conflict = fields.Boolean(
+        "Magento Conflict", copy=False, readonly=True,
+        help="Set when Magento changed an order that is no longer a draft in Odoo; the lines were not overwritten.",
+    )
+    magento_conflict_note = fields.Text(copy=False, readonly=True)
     magento_increment_id = fields.Char("Magento Increment ID", readonly=True, copy=False)
     magento_status = fields.Char("Magento Status", readonly=True, copy=False)
     magento_currency = fields.Char("Magento Currency", readonly=True, copy=False)

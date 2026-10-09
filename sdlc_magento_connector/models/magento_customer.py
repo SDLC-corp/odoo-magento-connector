@@ -11,6 +11,9 @@ class MagentoCustomer(models.Model):
     _description = "Magento Customer"
 
     instance_id = fields.Many2one("magento.instance", required=True, ondelete="cascade")
+    company_id = fields.Many2one(
+        related="instance_id.company_id", string="Odoo Company", store=True, index=True, readonly=True
+    )
     magento_id = fields.Char(string="Magento ID")
     email = fields.Char(required=True)
     prefix = fields.Char(string="Name Prefix")

@@ -16,6 +16,7 @@ _logger = logging.getLogger(__name__)
 class MagentoInstance(models.Model):
     _name = "magento.instance"
     _description = "Magento Instance"
+    _inherit = ["mail.thread"]
 
     _AUTO_SYNC_TRIGGER_FIELDS = {
         "auto_sync_enabled",
@@ -46,13 +47,15 @@ class MagentoInstance(models.Model):
             "Use localhost only when Magento runs on the same host/container as Odoo."
         ),
     )
-    access_token = fields.Char(required=True)
+    access_token = fields.Char(required=True, groups="sdlc_magento_connector.group_magento_manager")
     active = fields.Boolean(default=True)
     verify_ssl = fields.Boolean(default=True)
     website_id = fields.Integer(string="Magento Website ID")
     store_id = fields.Integer(string="Magento Store ID")
     store_code = fields.Char(string="Magento Store Code")
-    customer_default_password = fields.Char(string="Magento User Password")
+    customer_default_password = fields.Char(
+        string="Magento User Password", groups="sdlc_magento_connector.group_magento_manager"
+    )
     customer_password_min_length = fields.Integer(
         string="Customer Password Min Length",
         default=8,
@@ -189,6 +192,70 @@ class MagentoInstance(models.Model):
     sync_product_ids = fields.One2many(
         "magento.product.map", "instance_id", string="Synced Products"
     )
+
+    # ---- Shared contract fields (Phase 0); consumed by views, dashboard and record rules ----
+    company_id = fields.Many2one(
+        "res.company", required=True, index=True, default=lambda self: self.env.company
+    )
+    state = fields.Selection(
+        [("draft", "Draft"), ("connected", "Connected"), ("error", "Connection Error")],
+        default="draft", required=True, copy=False, tracking=True,
+    )
+    last_connection_message = fields.Char(readonly=True, copy=False)
+    last_sync_at = fields.Datetime(readonly=True, copy=False)
+    product_count = fields.Integer(compute="_compute_record_counts")
+    customer_count = fields.Integer(compute="_compute_record_counts")
+    category_count = fields.Integer(compute="_compute_record_counts")
+    order_count = fields.Integer(compute="_compute_record_counts")
+    sync_error_count = fields.Integer(compute="_compute_record_counts")
+
+    def _compute_record_counts(self):
+        counts = {}
+        for model, field_name, key in (
+            ("magento.product.map", "instance_id", "product_count"),
+            ("magento.customer", "instance_id", "customer_count"),
+            ("magento.category", "instance_id", "category_count"),
+            ("sale.order", "magento_instance_id", "order_count"),
+        ):
+            rows = self.env[model]._read_group(
+                [(field_name, "in", self.ids)], [field_name], ["__count"]
+            )
+            counts[key] = {inst.id: n for inst, n in rows}
+        rows = self.env["magento.sync.report"]._read_group(
+            [("instance_id", "in", self.ids), ("errors", ">", 0)], ["instance_id"], ["__count"]
+        )
+        counts["sync_error_count"] = {inst.id: n for inst, n in rows}
+        for rec in self:
+            for key, per_instance in counts.items():
+                rec[key] = per_instance.get(rec.id, 0)
+
+    def _action_open_related(self, model, field_name, name):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": name,
+            "res_model": model,
+            "view_mode": "list,form",
+            "domain": [(field_name, "=", self.id)],
+            "context": {"default_%s" % field_name: self.id},
+        }
+
+    def action_view_products(self):
+        return self._action_open_related("magento.product.map", "instance_id", "Products")
+
+    def action_view_customers(self):
+        return self._action_open_related("magento.customer", "instance_id", "Customers")
+
+    def action_view_categories(self):
+        return self._action_open_related("magento.category", "instance_id", "Categories")
+
+    def action_view_orders(self):
+        return self._action_open_related("sale.order", "magento_instance_id", "Orders")
+
+    def action_view_sync_errors(self):
+        action = self._action_open_related("magento.sync.report", "instance_id", "Sync Errors")
+        action["domain"].append(("errors", ">", 0))
+        return action
 
     # =====================
     # HELPERS
