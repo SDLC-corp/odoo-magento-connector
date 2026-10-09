@@ -45,6 +45,19 @@ class TestBindingConstraints(MagentoTestCommon):
         self.assertDuplicateRejected(
             lambda: Customer.create([self._customer_vals(self.instance, email="other@example.com")]))
 
+    def test_c4_product_map_duplicate_sku_rejected(self):
+        Map = self._model("magento.product.map")
+        Map.create(dict(self._map_vals(self.instance), magento_id="15"))
+        self.assertDuplicateRejected(
+            lambda: Map.create(dict(self._map_vals(self.instance), magento_id="16")),
+            "magento.product.map must be unique per (instance, sku)")
+
+    def test_c4_attribute_set_duplicate_rejected(self):
+        AttributeSet = self._model("magento.attribute.set")
+        vals = {"instance_id": self.instance.id, "magento_id": "9", "name": "Bag"}
+        AttributeSet.create(dict(vals))
+        self.assertDuplicateRejected(lambda: AttributeSet.create(dict(vals, name="Bag 2")))
+
     def test_c4_same_magento_id_on_two_instances_is_allowed(self):
         self._model("magento.product.map").create([
             self._map_vals(self.instance), self._map_vals(self.other_instance)])
@@ -59,5 +72,12 @@ class TestBindingConstraints(MagentoTestCommon):
         Map.create([
             dict(self._map_vals(self.instance), magento_id=False, sku="LOCAL-1"),
             dict(self._map_vals(self.instance), magento_id=False, sku="LOCAL-2"),
+            dict(self._map_vals(self.instance), magento_id="", sku="LOCAL-3"),
+            dict(self._map_vals(self.instance), magento_id="", sku="LOCAL-4"),
+        ])
+        Category = self._model("magento.category")
+        Category.create([
+            {"instance_id": self.instance.id, "magento_id": False, "name": "Draft A"},
+            {"instance_id": self.instance.id, "magento_id": False, "name": "Draft B"},
         ])
         self.env.flush_all()

@@ -66,13 +66,30 @@ class TestPushDecoupling(MagentoTestCommon):
                          "The push must run post-commit, not inside write()")
         self.assertFalse(self.http_attempts)
 
+    def test_c1_postcommit_push_failure_is_recorded_not_raised(self):
+        mocks = self._magento_down()
+        self.product.write({"name": "Fusion Backpack v6"})
+        self.assertFalse(any(m.called for m in mocks.values()), "No push inside write()")
+        self.env.flush_all()
+        # The push opens its own cursor after commit; in registry test mode that
+        # cursor shares the test transaction, so the queued push can run here.
+        with self.enter_registry_test_mode():
+            self.env.cr.postcommit.run()
+        self.assertTrue(any(m.called for m in mocks.values()), "The queued push must call Magento")
+        self.product_map.invalidate_recordset()
+        if "magento_last_error" in self.product_map._fields:
+            self.assertTrue(self.product_map.magento_last_error,
+                            "A failed post-commit push must be recorded on the map")
+        self.assertEqual(self.product.name, "Fusion Backpack v6")
+
     def test_c1_skip_push_context_makes_no_api_call(self):
         mocks = self._magento_down()
         self.product.with_context(magento_skip_push=True).write({"name": "Fusion Backpack v5"})
         self.product_map.with_context(magento_skip_push=True).write({"price": 65.0})
         self.env.flush_all()
         # Run whatever was queued for after the commit: nothing may reach Magento.
-        self.env.cr.postcommit.run()
+        with self.enter_registry_test_mode():
+            self.env.cr.postcommit.run()
         for name, mock in mocks.items():
             self.assertFalse(mock.called, "%s called despite magento_skip_push" % name)
         self.assertFalse(self.http_attempts, "HTTP attempted despite magento_skip_push")
