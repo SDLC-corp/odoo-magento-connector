@@ -1,660 +1,741 @@
-.o_magento_dash_shell {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-}
+// Magento Console: SDLC TRS house style (odoo-trs-ui).
+// Consumes the shared --trs-* tokens with fallbacks, so it matches retail_theme
+// when that theme is installed and still reads as TRS without it.
+// Feature-module rules: mg- prefix, BEM, no o_ overrides, no global styles.
 
-.o_magento_dash_scroll {
-    flex: 1 1 auto;
-    min-height: 0;
+.mg-console {
+    // Surfaces and ink (TRS tokens with fallbacks)
+    --mg-bg: var(--trs-sand-light, #f3ece4);
+    --mg-panel: var(--trs-white, #ffffff);
+    --mg-panel-2: var(--trs-sand-tint, #faf5ef);
+    --mg-line: var(--trs-line, #e3d8cc);
+    --mg-line-strong: var(--trs-sand-dark, #cdbca9);
+    --mg-ink: var(--trs-ink, #1a1a1a);
+    --mg-ink-dim: var(--trs-ink-dim, #6b5f55);
+    --mg-accent: var(--trs-crimson, #c8103a);
+    --mg-accent-dark: var(--trs-crimson-dark, #9e0c2d);
+    --mg-bar-alt: #bbaa97;
+
+    // Status: deliberately not the brand colour
+    --mg-ok: #067647;
+    --mg-warn: #b54708;
+    --mg-crit: #b42318;
+
+    // Type
+    --mg-display: var(--trs-display, Rockwell, "Roboto Slab", "Zilla Slab", Georgia, serif);
+    --mg-text: var(--trs-text, "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system,
+               BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif);
+
+    // Shape and elevation
+    --mg-gap: 18px;
+    --mg-r-control: 8px;
+    --mg-r-card: 12px;
+    --mg-shadow: 0 1px 2px rgba(60, 40, 20, 0.04), 0 10px 24px -14px rgba(60, 40, 20, 0.18);
+
+    height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    -ms-overflow-style: auto;
+    padding: 22px 24px 40px;
+    background:
+        radial-gradient(1200px 400px at 12% -10%, #e9ddd0 0%, transparent 60%),
+        var(--mg-bg);
+    color: var(--mg-ink);
+    font-family: var(--mg-text);
+    font-size: 13.5px;
+    line-height: 1.5;
+    scrollbar-color: var(--mg-line-strong) transparent;
     scrollbar-width: thin;
-    box-sizing: border-box;
-    -webkit-overflow-scrolling: touch;
 
-    &::-webkit-scrollbar {
-        display: block;
-        width: 10px;
-    }
-
-    &::-webkit-scrollbar-thumb {
-        background: linear-gradient(180deg, #ffb86f, #ff7a00);
-        border-radius: 999px;
-        border: 2px solid rgba(255, 245, 233, 0.9);
-    }
-
-    &::-webkit-scrollbar-track {
-        background: rgba(255, 240, 222, 0.8);
+    :focus-visible {
+        outline: 2px solid var(--mg-accent);
+        outline-offset: 2px;
     }
 }
 
-.o_magento_dash_root {
-    --md-bg-1: #fff8ec;
-    --md-bg-2: #ffe9d1;
-    --md-bg-3: #ffd3a4;
-    --md-card: #fffdf8;
-    --md-card-soft: #fff4e7;
-    --md-text: #2e1e0d;
-    --md-muted: #8a6a44;
-    --md-border: #f2d6b2;
-    --md-orange: #f57b00;
-    --md-orange-soft: #ffb257;
-    --md-rose: #ff6957;
-    --md-deep: #2d1a0d;
-    --md-success: #15874a;
-    --md-danger: #d04938;
-
-    font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
-    color: var(--md-text);
-    min-height: 100%;
-    padding: 20px 20px 24px;
-    border-radius: 18px;
-    position: relative;
-    isolation: isolate;
-    background:
-        radial-gradient(760px 360px at 8% -12%, rgba(255, 164, 62, 0.37), transparent 55%),
-        radial-gradient(680px 300px at 92% -14%, rgba(255, 207, 146, 0.72), transparent 50%),
-        radial-gradient(520px 280px at 80% 108%, rgba(255, 156, 72, 0.2), transparent 58%),
-        linear-gradient(135deg, var(--md-bg-1), var(--md-bg-2) 58%, var(--md-bg-3));
-}
-
-.o_magento_dash_root::before,
-.o_magento_dash_root::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    pointer-events: none;
-    border-radius: 999px;
-    filter: blur(1px);
-}
-
-.o_magento_dash_root::before {
-    width: 240px;
-    height: 240px;
-    right: 8%;
-    top: 16%;
-    background: radial-gradient(circle, rgba(255, 196, 130, 0.42), rgba(255, 196, 130, 0));
-}
-
-.o_magento_dash_root::after {
-    width: 200px;
-    height: 200px;
-    left: 6%;
-    bottom: 10%;
-    background: radial-gradient(circle, rgba(255, 151, 51, 0.25), rgba(255, 151, 51, 0));
-}
-
-.o_magento_dash_header {
+// ---------------------------------------------------------------- masthead
+.mg-masthead {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 16px;
+    gap: var(--mg-gap);
+    padding-bottom: 18px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--mg-line);
+
+    &__id {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    &__mark {
+        width: 42px;
+        height: 42px;
+        flex: none;
+        border-radius: 11px;
+        box-shadow: var(--mg-shadow);
+    }
+
+    &__text {
+        min-width: 0;
+    }
+
+    &__title {
+        margin: 0;
+        font-family: var(--mg-display);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--mg-ink);
+    }
+
+    &__sub {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--mg-ink-dim);
+    }
+
+    &__actions {
+        flex: none;
+    }
 }
 
-.o_magento_dash_title_wrap h1 {
-    font-size: 30px;
-    margin: 0;
-    letter-spacing: 0.25px;
-    font-weight: 700;
-}
-
-.o_magento_dash_title_row {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.o_magento_live_badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #ff9a2c, #ff6f1f 68%, #ff5630);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.75px;
-    text-transform: uppercase;
-    box-shadow: 0 0 0 1px rgba(255, 194, 129, 0.45), 0 10px 18px rgba(247, 117, 29, 0.32);
-    animation: magentoLivePulse 1.5s ease-in-out infinite;
-}
-
-.o_magento_live_dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9);
-    animation: magentoLiveDot 1.5s ease-out infinite;
-}
-
-.o_magento_dash_title_wrap p {
-    margin: 3px 0 0;
-    color: var(--md-muted);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.o_magento_dash_controls {
+.mg-conn {
     display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+
+    &__item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--mg-ink-dim);
+        white-space: nowrap;
+    }
+
+    &__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--mg-line-strong);
+    }
+
+    &__name {
+        font-weight: 650;
+        color: var(--mg-ink);
+    }
+
+    &__state {
+        font-weight: 600;
+    }
+
+    &__sync::before {
+        content: "·";
+        margin-right: 6px;
+    }
+
+    &__item--ok {
+        .mg-conn__dot { background: var(--mg-ok); }
+        .mg-conn__state { color: var(--mg-ok); }
+    }
+
+    &__item--crit {
+        .mg-conn__dot {
+            background: var(--mg-crit);
+            animation: mg-pulse 1.8s ease-in-out infinite;
+        }
+        .mg-conn__state { color: var(--mg-crit); }
+    }
+}
+
+@keyframes mg-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.mg-btn {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-}
-
-.o_magento_dash_select,
-.o_magento_dash_refresh {
-    border: 1px solid var(--md-border);
-    border-radius: 12px;
-    background: rgba(255, 253, 248, 0.88);
-    backdrop-filter: blur(4px);
-    color: var(--md-text);
-    height: 38px;
-    padding: 0 14px;
+    padding: 9px 16px 9px 14px;
+    border: 1px solid var(--mg-line);
+    border-radius: var(--mg-r-control);
+    background: var(--mg-panel-2);
+    color: var(--mg-ink);
     font-size: 13px;
-    font-weight: 600;
-    box-shadow: 0 7px 14px rgba(205, 129, 48, 0.14);
+    font-weight: 550;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+
+    .fa {
+        color: var(--mg-accent);
+    }
+
+    &:hover:not(:disabled) {
+        background: var(--mg-panel);
+        border-color: var(--mg-line-strong);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    &__spin {
+        animation: mg-spin 0.9s linear infinite;
+    }
 }
 
-.o_magento_dash_refresh {
-    background: linear-gradient(135deg, #ff9a2c, #ff7a00 62%, #ff5f34);
-    color: #fff;
+@keyframes mg-spin {
+    to { transform: rotate(360deg); }
+}
+
+.mg-link {
+    padding: 0;
     border: 0;
-    font-weight: 700;
-    letter-spacing: 0.25px;
-}
-
-.o_magento_dash_refresh:hover {
-    filter: saturate(1.1);
-    transform: translateY(-1px);
-}
-
-.o_magento_dash_select:focus,
-.o_magento_dash_refresh:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 153, 44, 0.2);
-}
-
-.o_magento_dash_grid {
-    display: grid;
-    gap: 14px;
-}
-
-.o_magento_dash_kpi_grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    margin-bottom: 14px;
-}
-
-.o_magento_dash_main_grid {
-    grid-template-columns: 2fr 1fr 1fr;
-    margin-bottom: 14px;
-}
-
-.o_magento_dash_bottom_grid {
-    grid-template-columns: minmax(320px, 2fr) minmax(300px, 1fr);
-}
-
-.o_magento_dash_bottom_grid_single {
-    grid-template-columns: 1fr;
-}
-
-.o_magento_dash_card_full {
-    grid-column: 1 / -1;
-}
-
-.o_magento_dash_card {
-    background: linear-gradient(170deg, rgba(255, 255, 255, 0.96), rgba(255, 245, 232, 0.92));
-    border: 1px solid var(--md-border);
-    border-radius: 18px;
-    padding: 16px;
-    box-shadow:
-        0 16px 30px rgba(177, 106, 30, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.85);
-    animation: magentoDashIn 360ms ease forwards;
-    transition: transform 180ms ease, box-shadow 180ms ease;
-}
-
-.o_magento_dash_card:hover {
-    transform: translateY(-2px);
-    box-shadow:
-        0 22px 36px rgba(177, 106, 30, 0.16),
-        inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-
-.o_magento_dash_card:nth-child(2) { animation-delay: 40ms; }
-.o_magento_dash_card:nth-child(3) { animation-delay: 80ms; }
-.o_magento_dash_card:nth-child(4) { animation-delay: 120ms; }
-
-.o_magento_kpi_card {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.o_magento_kpi_card .o_magento_delta {
-    display: none;
-}
-
-.o_magento_kpi_primary {
-    background: linear-gradient(130deg, #fff4e0, #ffe8c6 58%, #ffd8a6);
-    border-color: #f8c88e;
-}
-
-.o_magento_kpi_label {
-    color: var(--md-muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.75px;
-    font-weight: 700;
-}
-
-.o_magento_kpi_card strong {
-    font-size: 32px;
-    line-height: 1.1;
-    font-weight: 800;
-}
-
-.o_magento_kpi_sub {
-    font-size: 13px;
-    font-weight: 700;
-    color: #744a1f;
-}
-
-.o_magento_delta {
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.o_magento_delta_up {
-    color: var(--md-success);
-}
-
-.o_magento_delta_down {
-    color: var(--md-danger);
-}
-
-.o_magento_card_head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.o_magento_card_head h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.35px;
-}
-
-.o_magento_chip {
-    font-size: 10px;
-    font-weight: 700;
-    border-radius: 999px;
-    background: linear-gradient(120deg, #ffe3bf, #ffd09a);
-    color: #6a4012;
-    padding: 5px 11px;
-    border: 1px solid #f7c286;
-}
-
-.o_magento_chart_card {
-    background: linear-gradient(160deg, #fff3e2, #ffe6c7 58%, #ffd7ab);
-    border-color: #f2c28a;
-}
-
-.o_magento_chart_card .o_magento_card_head h2,
-.o_magento_chart_card .o_magento_chart_legend,
-.o_magento_chart_card .o_magento_x_axis {
-    color: #5a3818;
-}
-
-.o_magento_chart_card .o_magento_chip {
-    background: linear-gradient(120deg, #ffb25a, #ff8a1f);
-    color: #2b1a07;
-    border-color: transparent;
-}
-
-.o_magento_chart_svg {
-    width: 100%;
-    height: 220px;
-    display: block;
-    background:
-        linear-gradient(180deg, rgba(255, 216, 170, 0.45), rgba(255, 238, 211, 0.32)),
-        repeating-linear-gradient(
-            to top,
-            rgba(173, 117, 56, 0.2),
-            rgba(173, 117, 56, 0.2) 1px,
-            transparent 1px,
-            transparent 44px
-        );
-    border-radius: 12px;
-    border: 1px solid rgba(206, 146, 80, 0.4);
-}
-
-.o_magento_sales_area {
-    fill: rgba(255, 139, 41, 0.26);
-}
-
-.o_magento_sales_line {
-    fill: none;
-    stroke: #ff9a32;
-    stroke-width: 3.2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    filter: drop-shadow(0 3px 5px rgba(255, 160, 78, 0.35));
-}
-
-.o_magento_orders_line {
-    fill: none;
-    stroke: #ff6d63;
-    stroke-width: 2;
-    stroke-dasharray: 5 5;
-    stroke-linecap: round;
-}
-
-.o_magento_chart_legend {
-    display: flex;
-    gap: 16px;
-    font-size: 12px;
-    margin-top: 10px;
-    color: var(--md-muted);
+    background: none;
+    color: var(--mg-accent);
+    font-size: 12.5px;
     font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+        color: var(--mg-accent-dark);
+        text-decoration: underline;
+    }
 }
 
-.o_magento_dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 6px;
-}
-
-.o_magento_dot_sales { background: #ff8a00; }
-.o_magento_dot_orders { background: #ff6d63; }
-
-.o_magento_x_axis {
-    margin-top: 8px;
-    display: grid;
-    grid-auto-flow: column;
-    gap: 4px;
-    font-size: 10px;
-    color: #9e876f;
-}
-
-.o_magento_target_ring_wrap {
+// ---------------------------------------------------------------- nav pills
+.mg-nav {
     display: flex;
-    justify-content: center;
-    margin: 4px 0 10px;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    margin-bottom: var(--mg-gap);
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--mg-line);
+
+    &__group {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    &__heading {
+        padding-left: 2px;
+        font-size: 11px;
+        font-weight: 680;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--mg-ink-dim);
+    }
+
+    &__row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    &__btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 14px 7px 12px;
+        border: 1px solid var(--mg-line);
+        border-radius: 999px;
+        background: var(--mg-panel);
+        color: var(--mg-ink-dim);
+        font-size: 12.5px;
+        font-weight: 550;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+        .fa {
+            font-size: 12px;
+            color: var(--mg-accent);
+        }
+
+        &:hover {
+            background: var(--mg-panel-2);
+            border-color: var(--mg-line-strong);
+            color: var(--mg-ink);
+        }
+    }
 }
 
-.o_magento_target_ring {
-    width: 148px;
-    height: 148px;
-    border-radius: 50%;
-    padding: 13px;
-    box-shadow: inset 0 0 0 1px rgba(255, 190, 122, 0.45);
-}
-
-.o_magento_target_ring_inner {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: linear-gradient(180deg, #fffefc, #fff5e6);
+// ---------------------------------------------------------------- filter chips
+.mg-filters {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    box-shadow: inset 0 0 0 1px rgba(252, 213, 166, 0.65);
-}
-
-.o_magento_target_ring_inner strong {
-    font-size: 30px;
-}
-
-.o_magento_target_ring_inner span {
-    color: var(--md-muted);
-    font-size: 12px;
-}
-
-.o_magento_target_meta {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 6px;
-}
-
-.o_magento_target_meta div {
-    background: linear-gradient(180deg, #fff6e8, #ffefd9);
-    border-radius: 12px;
-    padding: 8px 10px;
-    border: 1px solid #f6d7ad;
-}
-
-.o_magento_target_meta span {
-    color: var(--md-muted);
-    font-size: 11px;
-    display: block;
-}
-
-.o_magento_target_meta strong {
-    font-size: 14px;
-}
-
-.o_magento_donut_wrap {
-    display: flex;
-    justify-content: center;
-    margin: 6px 0 10px;
-}
-
-.o_magento_donut {
-    width: 154px;
-    height: 154px;
-    border-radius: 50%;
-    padding: 15px;
-    box-shadow: inset 0 0 0 1px rgba(255, 179, 99, 0.35);
-}
-
-.o_magento_donut_center {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: linear-gradient(180deg, #fffefc, #fff5e8);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.o_magento_donut_center span {
-    font-size: 11px;
-    color: var(--md-muted);
-}
-
-.o_magento_donut_center strong {
-    font-size: 22px;
-}
-
-.o_magento_category_item {
-    display: flex;
     justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-    margin-bottom: 8px;
-    padding-bottom: 5px;
-    border-bottom: 1px dashed rgba(237, 188, 126, 0.55);
+    gap: 10px 24px;
+    margin-bottom: var(--mg-gap);
 }
 
-.o_magento_category_name {
+.mg-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+
+    &__label {
+        margin-right: 4px;
+        font-size: 11px;
+        font-weight: 680;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--mg-ink-dim);
+    }
+}
+
+.mg-chip {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-}
-
-.o_magento_category_swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
-
-.o_magento_progress_row,
-.o_magento_status_row {
-    margin-bottom: 10px;
-}
-
-.o_magento_progress_head,
-.o_magento_status_row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    font-size: 12px;
-    color: var(--md-muted);
-}
-
-.o_magento_progress_track,
-.o_magento_status_track {
-    margin-top: 4px;
-    height: 9px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #f8e7d3, #f2dcc2);
-    overflow: hidden;
-}
-
-.o_magento_progress_fill,
-.o_magento_status_fill {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #ffcb7f, #ff9a2a 62%, #ff6e43);
-    box-shadow: 0 0 10px rgba(255, 143, 31, 0.22);
-}
-
-.o_magento_status_name {
-    color: var(--md-text);
-    text-transform: capitalize;
-}
-
-.o_magento_status_count {
-    color: var(--md-muted);
-}
-
-.o_magento_sync_stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 8px;
-}
+    padding: 7px 13px 7px 10px;
+    border: 1px solid var(--mg-line);
+    border-radius: 999px;
+    background: var(--mg-panel);
+    color: var(--mg-ink);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 
-.o_magento_sync_stats div {
-    border: 1px solid var(--md-border);
-    border-radius: 12px;
-    padding: 8px;
-    background: linear-gradient(180deg, #fff8ef, #fff1dd);
-}
-
-.o_magento_sync_stats span {
-    font-size: 11px;
-    color: var(--md-muted);
-    display: block;
-}
-
-.o_magento_sync_stats strong {
-    font-size: 15px;
-}
-
-.o_magento_sync_last,
-.o_magento_sync_tail,
-.o_magento_dash_footer {
-    margin-top: 12px;
-    color: var(--md-muted);
-    font-size: 12px;
-}
-
-.o_magento_dash_placeholder,
-.o_magento_dash_error,
-.o_magento_dash_empty {
-    background: linear-gradient(180deg, #fffefb, #fff3e3);
-    border: 1px solid var(--md-border);
-    border-radius: 14px;
-    padding: 16px;
-    color: var(--md-muted);
-}
-
-.o_magento_dash_error {
-    color: var(--md-danger);
-}
-
-@media (max-width: 1400px) {
-    .o_magento_dash_main_grid {
-        grid-template-columns: 1fr 1fr;
+    &--compact {
+        padding: 7px 13px;
+        font-variant-numeric: tabular-nums;
     }
-    .o_magento_chart_card {
-        grid-column: 1 / span 2;
+
+    &__dot {
+        width: 10px;
+        height: 10px;
+        flex: none;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    }
+
+    &__logo {
+        height: 16px;
+        max-width: 54px;
+        flex: none;
+        object-fit: contain;
+    }
+
+    &__count {
+        font-weight: 500;
+        color: var(--mg-ink-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__flag {
+        width: 7px;
+        height: 7px;
+        flex: none;
+        border-radius: 50%;
+        background: var(--mg-crit);
+    }
+
+    &:hover {
+        border-color: var(--mg-line-strong);
+        background: var(--mg-panel-2);
+    }
+
+    // Selected uses ink, not brand: brand red already appears in dots and icons.
+    &--active,
+    &--active:hover {
+        border-color: var(--mg-ink);
+        background: var(--mg-panel);
+        box-shadow: inset 0 0 0 1px var(--mg-ink);
     }
 }
 
-@media (max-width: 992px) {
-    .o_magento_dash_root {
-        padding: 14px 12px 18px;
-        border-radius: 14px;
+// ---------------------------------------------------------------- notices
+.mg-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-bottom: var(--mg-gap);
+    padding: 16px 18px;
+    border: 1px solid var(--mg-line);
+    border-radius: var(--mg-r-card);
+    background: var(--mg-panel);
+    color: var(--mg-ink-dim);
+    font-size: 13px;
+
+    strong {
+        color: var(--mg-ink);
     }
-    .o_magento_dash_header {
+
+    &--error {
+        border-color: rgba(180, 35, 24, 0.35);
+        background: rgba(180, 35, 24, 0.05);
+        color: var(--mg-crit);
+    }
+
+    &--warn {
+        border-color: rgba(181, 71, 8, 0.35);
+        background: rgba(181, 71, 8, 0.06);
+        color: var(--mg-warn);
+    }
+}
+
+// ---------------------------------------------------------------- KPI rail
+.mg-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 1px;
+    margin-bottom: var(--mg-gap);
+    border: 1px solid var(--mg-line);
+    border-radius: var(--mg-r-card);
+    background: var(--mg-line);
+    box-shadow: var(--mg-shadow);
+    overflow: hidden;
+
+    &__cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 16px 18px;
+        background: var(--mg-panel);
+        cursor: pointer;
+        transition: background-color 0.12s ease, box-shadow 0.12s ease;
+
+        &:hover {
+            background: var(--mg-panel-2);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--mg-accent);
+            outline-offset: -2px;
+        }
+    }
+
+    &__label {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--mg-ink-dim);
+        white-space: nowrap;
+    }
+
+    &__note {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: none;
+        opacity: 0.8;
+    }
+
+    &__value {
+        font-size: 26px;
+        font-weight: 680;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    // Redundant encoding: tint + top line + coloured figure.
+    &__cell--warn {
+        background: linear-gradient(rgba(181, 71, 8, 0.05), rgba(181, 71, 8, 0.05)), var(--mg-panel);
+        box-shadow: inset 0 3px 0 var(--mg-warn);
+
+        .mg-rail__value { color: var(--mg-warn); }
+        &:hover { background: linear-gradient(rgba(181, 71, 8, 0.1), rgba(181, 71, 8, 0.1)), var(--mg-panel); }
+    }
+
+    &__cell--crit {
+        background: linear-gradient(rgba(180, 35, 24, 0.05), rgba(180, 35, 24, 0.05)), var(--mg-panel);
+        box-shadow: inset 0 3px 0 var(--mg-crit);
+
+        .mg-rail__value { color: var(--mg-crit); }
+        &:hover { background: linear-gradient(rgba(180, 35, 24, 0.1), rgba(180, 35, 24, 0.1)), var(--mg-panel); }
+    }
+}
+
+// ---------------------------------------------------------------- panels
+.mg-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--mg-gap);
+
+    &--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.mg-flow {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--mg-gap);
+    align-items: start;
+}
+
+.mg-panel {
+    min-width: 0;
+    padding: 18px 20px 20px;
+    border: 1px solid var(--mg-line);
+    border-radius: var(--mg-r-card);
+    background: var(--mg-panel);
+    box-shadow: var(--mg-shadow);
+
+    &--chart {
+        display: flex;
+        flex-direction: column;
+    }
+
+    &__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    &__title {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 680;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--mg-ink-dim);
+    }
+
+    &__hint {
+        margin: 0;
+        font-size: 11px;
+        color: var(--mg-ink-dim);
+        white-space: nowrap;
+    }
+}
+
+.mg-chart {
+    position: relative;
+    flex: 1;
+    min-height: 260px;
+    max-height: 340px;
+}
+
+.mg-num {
+    text-align: right;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+// Shared clickable-row behaviour: pointer, hover tint, focus ring inside the row.
+%mg-row-action {
+    cursor: pointer;
+    border-radius: var(--mg-r-control);
+    transition: background-color 0.12s ease;
+
+    &:hover {
+        background: var(--mg-panel-2);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--mg-accent);
+        outline-offset: -2px;
+    }
+}
+
+// ---------------------------------------------------------------- needs action
+.mg-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    &__row {
+        @extend %mg-row-action;
+        display: grid;
+        grid-template-columns: 66px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        margin: 0 -8px;
+        padding: 10px 8px;
+        box-shadow: inset 0 -1px 0 var(--mg-line);
+
+        &:last-child {
+            box-shadow: none;
+        }
+    }
+
+    &__name {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 550;
+
+        small {
+            overflow: hidden;
+            font-size: 11.5px;
+            font-weight: 400;
+            color: var(--mg-ink-dim);
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    &__count {
+        font-size: 15px;
+        font-weight: 680;
+    }
+
+    &__go {
+        color: var(--mg-ink-dim);
+    }
+}
+
+.mg-pill {
+    display: inline-grid;
+    place-items: center;
+    padding: 3px 0;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+
+    &--crit {
+        background: rgba(180, 35, 24, 0.1);
+        color: var(--mg-crit);
+        box-shadow: inset 0 0 0 1px rgba(180, 35, 24, 0.25);
+    }
+
+    &--warn {
+        background: rgba(181, 71, 8, 0.1);
+        color: var(--mg-warn);
+        box-shadow: inset 0 0 0 1px rgba(181, 71, 8, 0.25);
+    }
+}
+
+// ---------------------------------------------------------------- bar lists
+.mg-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    &__row {
+        @extend %mg-row-action;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        margin: 0 -8px;
+        padding: 6px 8px;
+    }
+
+    &__label {
+        overflow: hidden;
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        small {
+            margin-left: 6px;
+            font-size: 11px;
+            color: var(--mg-ink-dim);
+        }
+    }
+
+    &__track {
+        height: 7px;
+        border-radius: 999px;
+        background: var(--mg-panel-2);
+        box-shadow: inset 0 0 0 1px var(--mg-line);
+        overflow: hidden;
+    }
+
+    &__fill {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--mg-accent-dark), var(--mg-accent));
+
+        &--alt {
+            background: linear-gradient(90deg, #8c7b6b, var(--mg-bar-alt));
+        }
+    }
+}
+
+// ---------------------------------------------------------------- empty states
+.mg-empty {
+    margin: 4px 0 0;
+    padding: 14px 0;
+    color: var(--mg-ink-dim);
+    font-size: 12.5px;
+
+    &--ok .fa {
+        margin-right: 4px;
+        color: var(--mg-ok);
+    }
+}
+
+// ---------------------------------------------------------------- responsive
+@media (max-width: 1200px) {
+    .mg-flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .mg-console {
+        padding: 16px 14px 32px;
+    }
+
+    .mg-masthead {
+        flex-wrap: wrap;
+    }
+
+    .mg-grid,
+    .mg-flow {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .mg-rail {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mg-filters {
         flex-direction: column;
         align-items: flex-start;
     }
-    .o_magento_dash_kpi_grid,
-    .o_magento_dash_main_grid,
-    .o_magento_dash_bottom_grid {
-        grid-template-columns: 1fr;
-    }
-    .o_magento_chart_card {
-        grid-column: auto;
-    }
-    .o_magento_kpi_card strong {
-        font-size: 24px;
-    }
 }
 
-@keyframes magentoDashIn {
-    from {
-        transform: translateY(8px);
-        opacity: 0;
+// ---------------------------------------------------------------- motion
+@media (prefers-reduced-motion: reduce) {
+    .mg-btn,
+    .mg-nav__btn,
+    .mg-chip,
+    .mg-rail__cell,
+    .mg-list__row,
+    .mg-bars__row {
+        transition: none;
     }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
 
-@keyframes magentoLivePulse {
-    0%,
-    100% {
-        filter: saturate(1);
-        transform: translateY(0);
-    }
-    50% {
-        filter: saturate(1.12);
-        transform: translateY(-1px);
-    }
-}
-
-@keyframes magentoLiveDot {
-    0% {
-        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.85);
-        opacity: 1;
-    }
-    70% {
-        box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
-        opacity: 0.85;
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-        opacity: 1;
+    .mg-conn__item--crit .mg-conn__dot,
+    .mg-btn__spin {
+        animation: none;
     }
 }
