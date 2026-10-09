@@ -11,12 +11,22 @@
         <field name="category_id" ref="module_category_magento"/>
     </record>
 
-    <!-- Runs syncs and works the records; cannot see credentials or change instances. -->
+    <!--
+        Runs syncs and works the records; cannot see credentials or change instances.
+        Order/invoice/shipment syncs create sale orders, invoices and pickings, and the
+        Operations menus open those models, so the operator also needs the standard
+        Sales (all documents), Inventory user and Invoicing rights.
+    -->
     <record id="group_magento_user" model="res.groups">
         <field name="name">User</field>
         <field name="sequence">10</field>
         <field name="privilege_id" ref="res_groups_privilege_magento"/>
-        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="implied_ids" eval="[
+            (4, ref('base.group_user')),
+            (4, ref('sales_team.group_sale_salesman_all_leads')),
+            (4, ref('stock.group_stock_user')),
+            (4, ref('account.group_account_invoice')),
+        ]"/>
     </record>
 
     <!-- Configures instances, credentials, mappings and schedules. -->
@@ -26,6 +36,66 @@
         <field name="privilege_id" ref="res_groups_privilege_magento"/>
         <field name="implied_ids" eval="[(4, ref('group_magento_user'))]"/>
         <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
+    <!--
+        Multi-company record rules. Global (no groups) so they bind every user,
+        managers included; a user only sees Magento data of the companies
+        currently selected in the company switcher.
+    -->
+    <record id="rule_magento_instance_company" model="ir.rule">
+        <field name="name">Magento instance: multi-company</field>
+        <field name="model_id" ref="model_magento_instance"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_map_company" model="ir.rule">
+        <field name="name">Magento product binding: multi-company</field>
+        <field name="model_id" ref="model_magento_product_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_customer_company" model="ir.rule">
+        <field name="name">Magento customer binding: multi-company</field>
+        <field name="model_id" ref="model_magento_customer"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_category_company" model="ir.rule">
+        <field name="name">Magento category binding: multi-company</field>
+        <field name="model_id" ref="model_magento_category"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_sync_report_company" model="ir.rule">
+        <field name="name">Magento sync report: multi-company</field>
+        <field name="model_id" ref="model_magento_sync_report"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <!-- Instance-scoped models without their own company_id follow their instance. -->
+    <record id="rule_magento_attribute_set_company" model="ir.rule">
+        <field name="name">Magento attribute set: multi-company</field>
+        <field name="model_id" ref="model_magento_attribute_set"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_field_mapping_company" model="ir.rule">
+        <field name="name">Magento field mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_field_mapping"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_available_field_company" model="ir.rule">
+        <field name="name">Magento available field: multi-company</field>
+        <field name="model_id" ref="model_magento_available_field"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_mapping_report_company" model="ir.rule">
+        <field name="name">Magento mapping report: multi-company</field>
+        <field name="model_id" ref="model_magento_mapping_report"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
     </record>
 
 </odoo>
