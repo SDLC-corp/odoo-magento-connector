@@ -5,6 +5,8 @@ from .common import MagentoTestCommon
 
 USER_GROUP = "sdlc_magento_connector.group_magento_user"
 MANAGER_GROUP = "sdlc_magento_connector.group_magento_manager"
+SALES_READ_GROUP = "sales_team.group_sale_salesman_all_leads"
+ORDERS_ACTION = "sdlc_magento_connector.action_magento_order"
 
 
 @tagged("post_install", "-at_install", "magento")
@@ -43,22 +45,26 @@ class TestSecurity(MagentoTestCommon):
 
 @tagged("post_install", "-at_install", "magento")
 class TestDashboard(MagentoTestCommon):
-    """D1: dashboard data for Magento users, without sudo, with countries."""
+    """D1: the Magento Console payload (magento.dashboard) runs with the caller's
+    rights, never leaks another company's data, and every figure drills down."""
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         cls.company_a = cls.env.company
         cls.company_b = cls.env["res.company"].create({"name": "Magento Company B"})
-        cls.instance_b = cls.create_instance("Store B", company=cls.company_b)
+        cls.instance.write({"state": "connected"})
+        cls.instance_b = cls.create_instance("Store B", company=cls.company_b, state="connected")
         Partner = cls.env["res.partner"]
-        cls.partner_us = Partner.create({"name": "Veronica Costello", "country_id": cls.env.ref("base.us").id,
+        cls.country_fr = cls.env.ref("base.fr")
+        cls.partner_us = Partner.create({"name": "Veronica Costello", "country_id": cls.country_us.id,
                                          "email": "roni_cost@example.com"})
-        cls.partner_fr = Partner.create({"name": "Jean Dupont", "country_id": cls.env.ref("base.fr").id,
+        cls.partner_fr = Partner.create({"name": "Jean Dupont", "country_id": cls.country_fr.id,
                                          "email": "jean.dupont@example.fr"})
         SaleOrder = cls.env["sale.order"].with_context(skip_magento_sync=True, magento_skip_push=True)
         cls.order_a = SaleOrder.create({
             "partner_id": cls.partner_us.id,
+            "partner_shipping_id": cls.partner_us.id,
             "company_id": cls.company_a.id,
             "magento_instance_id": cls.instance.id,
             "magento_order_id": "100",
@@ -67,45 +73,102 @@ class TestDashboard(MagentoTestCommon):
         })
         cls.order_b = SaleOrder.with_company(cls.company_b).create({
             "partner_id": cls.partner_fr.id,
+            "partner_shipping_id": cls.partner_fr.id,
             "company_id": cls.company_b.id,
             "magento_instance_id": cls.instance_b.id,
             "magento_order_id": "200",
             "magento_increment_id": "000000200",
             "magento_status": "processing",
         })
-        cls.user_a = cls.create_user("mg_user_d1", USER_GROUP, company=cls.company_a)
+        # Only the Magento group: no right to read sale.order.
+        cls.magento_only_user = cls.create_user("mg_user_d1", USER_GROUP, company=cls.company_a)
+        # Magento group + sales read rights, but only company A.
+        cls.sales_user_a = cls.create_user(
+            "mg_sales_d1", "%s,%s" % (USER_GROUP, SALES_READ_GROUP), company=cls.company_a)
 
-    def _dashboard_model(self, user):
-        name = "magento.dashboard" if "magento.dashboard" in self.env else "magento.instance"
-        return self.env[name].with_user(user)
+    def _console(self, user):
+        self.assertIn("magento.dashboard", self.env, "magento.dashboard model is part of the contract")
+        return self.env["magento.dashboard"].with_user(user)
 
     def test_d1_dashboard_model_exists(self):
-        self.assertIn("magento.dashboard", self.env, "magento.dashboard model is part of the contract")
+        self.assertIn("magento.dashboard", self.env)
 
-    def test_d1_dashboard_runs_for_magento_user(self):
-        data = self._dashboard_model(self.user_a).get_dashboard_data()
+    def test_d1_runs_for_magento_only_user_with_orders_hidden(self):
+        user = self.magento_only_user
+        data = self._console(user).get_dashboard_data()
         self.assertIsInstance(data, dict)
+        can_read_orders = self.env["sale.order"].with_user(user).has_access("read")
+        self.assertEqual(data["orders_hidden"], not can_read_orders)
+        if not can_read_orders:
+            self.assertFalse(data["by_country"])
+            self.assertFalse(data["trend"])
+            self.assertFalse([k for k in data["kpis"] if k["drill"]["res_model"] == "sale.order"],
+                             "Order figures must be hidden from a user who can't read orders")
+            self.assertFalse([a for a in data["attention"] if a["drill"]["res_model"] == "sale.order"])
 
-    def test_d1_dashboard_respects_company_isolation(self):
-        data = self._dashboard_model(self.user_a).get_dashboard_data()
-        instance_ids = {row.get("id") for row in data.get("instances", [])}
-        self.assertNotIn(self.instance_b.id, instance_ids,
-                         "A company-A user must not see company-B instances")
-        if "kpis" in data and "total_orders" in data["kpis"]:
-            expected = self.env["sale.order"].search_count([
-                ("magento_order_id", "!=", False), ("company_id", "=", self.company_a.id)])
-            self.assertEqual(data["kpis"]["total_orders"], expected,
-                             "A company-A user must not count company-B orders (no sudo)")
-            # Asking explicitly for the company-B instance must not reveal its orders either.
-            data_b = self._dashboard_model(self.user_a).get_dashboard_data(instance_id=self.instance_b.id)
-            self.assertNotEqual(data_b.get("selected_instance_id"), self.instance_b.id)
-            self.assertLessEqual(data_b["kpis"]["total_orders"], expected)
-        country_names = {row.get("name") for row in data.get("top_countries", [])}
-        self.assertNotIn(self.env.ref("base.fr").name, country_names,
-                         "Company-B order countries leaked into the dashboard")
+    def test_d1_no_cross_company_leak(self):
+        console = self._console(self.sales_user_a)
+        data = console.get_dashboard_data()
+        self.assertFalse(data["orders_hidden"])
+        instance_ids = {row["id"] for row in data["instances"]}
+        self.assertIn(self.instance.id, instance_ids)
+        self.assertNotIn(self.instance_b.id, instance_ids, "Company-B instance leaked")
+        self.assertNotIn(self.instance_b.id, data["scope_ids"])
 
-    def test_d1_top_countries_from_orders(self):
-        data = self._dashboard_model(self.user_a).get_dashboard_data()
-        top = data.get("top_countries")
-        self.assertTrue(top, "top_countries must not be empty when orders have countries")
-        self.assertIn(self.env.ref("base.us").name, {row.get("name") for row in top})
+        orders_kpi = {k["key"]: k for k in data["kpis"]}.get("orders")
+        self.assertTrue(orders_kpi, "The orders KPI must be present for a user who can read orders")
+        orders = self.env["sale.order"].with_user(self.sales_user_a).search(orders_kpi["drill"]["domain"])
+        self.assertIn(self.order_a, orders)
+        self.assertNotIn(self.order_b, orders)
+        self.assertEqual(orders_kpi["value"], len(orders))
+        self.assertNotIn(self.country_fr.name, {row["name"] for row in data["by_country"]},
+                         "Company-B order countries leaked")
+
+        # Asking explicitly for the company-B instance must not widen the scope.
+        data_b = console.get_dashboard_data(instance_ids=[self.instance_b.id])
+        self.assertNotIn(self.instance_b.id, data_b["selected_ids"])
+        self.assertNotIn(self.instance_b.id, data_b["scope_ids"])
+
+    def test_d1_top_countries_from_shipping_country(self):
+        data = self._console(self.sales_user_a).get_dashboard_data()
+        countries = data["by_country"]
+        self.assertTrue(countries, "Top countries must not be empty when orders have shipping countries")
+        us_rows = [row for row in countries if row.get("code") == "US"]
+        self.assertTrue(us_rows, "The shipping country of the order must be listed")
+        self.assertGreaterEqual(us_rows[0]["orders"], 1)
+        self.assertEqual(us_rows[0]["drill"]["res_model"], "sale.order")
+
+    def test_d1_every_kpi_with_a_value_drills_down(self):
+        for user in (self.sales_user_a, self.magento_only_user):
+            data = self._console(user).get_dashboard_data()
+            self.assertTrue(data["kpis"])
+            for item in data["kpis"] + data["attention"]:
+                drill = item.get("drill") or {}
+                if item.get("value") or item.get("count") or "value" not in item:
+                    self.assertTrue(drill.get("res_model"), "%s has no drill-down model" % item["key"])
+                    self.assertIsInstance(drill.get("domain"), list, "%s has no domain" % item["key"])
+                    self.assertTrue(self.env[drill["res_model"]].with_user(user).has_access("read"),
+                                    "%s drills into a model the user cannot read" % item["key"])
+
+    def test_d1_nav_links_omit_what_the_user_cannot_open(self):
+        def xml_ids(user):
+            groups = self._console(user).get_nav_links()
+            return {link["xml_id"] for group in groups for link in group["links"]}
+
+        def can_open(user, xml_id):
+            action = self.env.ref(xml_id, raise_if_not_found=False)
+            if not action:
+                return False
+            if action.group_ids and not (action.group_ids & user.all_group_ids):
+                return False
+            model = getattr(action, "res_model", False) or getattr(action, "model_name", False)
+            return not model or self.env[model].with_user(user).has_access("read")
+
+        for user in (self.magento_only_user, self.sales_user_a):
+            expected = {xml_id for xml_id, *_rest in self.env["magento.dashboard"].NAV_LINKS
+                        if can_open(user, xml_id)}
+            self.assertEqual(xml_ids(user), expected)
+        if self.env.ref(ORDERS_ACTION, raise_if_not_found=False):
+            self.assertNotIn(ORDERS_ACTION, xml_ids(self.magento_only_user),
+                             "A user who can't read orders must not get the Orders link")
+            self.assertIn(ORDERS_ACTION, xml_ids(self.sales_user_a))
