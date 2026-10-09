@@ -1,17 +1,37 @@
+import logging
 import os
+import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import requests
 from requests.compat import urlparse, urlunparse
 from requests.utils import quote
 
+_logger = logging.getLogger(__name__)
+
+
 class MagentoAPI:
+    # Transient failures retried with exponential backoff (Retry-After honoured).
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
+    MAX_BACKOFF = 30.0  # never sleep longer than this per attempt
+    RETRY_STATUSES = frozenset({429, 502, 503, 504})
+    # For non-idempotent calls (POST) only retry when Magento certainly did not
+    # process the request: rate limiting / unavailable, or connection never made.
+    RETRY_STATUSES_UNSAFE_METHODS = frozenset({429, 503})
+    IDEMPOTENT_METHODS = frozenset({"get", "put", "delete", "head", "options"})
+    TIMEOUT = 60
+
     def __init__(self, instance):
         self.instance = instance
         self.base_url = instance.base_url.rstrip("/")
         self._store_code = None
         self._guest_cart_rest_prefix = "/rest/V1"
         self.headers = {"Content-Type": "application/json"}
-        access_token = getattr(instance, "access_token", None)
+        # The token is restricted to Magento managers (field ``groups``). Syncs may
+        # be run by Magento users or cron, so read only the secret with sudo.
+        access_token = getattr(instance.sudo(), "access_token", None)
         if isinstance(access_token, str):
             access_token = access_token.strip()
         if access_token:
@@ -118,70 +138,105 @@ class MagentoAPI:
                 base_urls.append(fallback_url)
         return base_urls
 
-    def _is_loopback_base_url(self, base_url):
-        host = (urlparse(base_url).hostname or "").strip().lower()
-        return host in {"localhost", "127.0.0.1", "::1"}
+    def _ssl_error(self, url, exc):
+        """Build a clear SSL error. We never silently fall back to verify=False."""
+        return requests.exceptions.SSLError(
+            f"SSL certificate verification failed for {url}: {exc}. "
+            "If this Magento server uses a self-signed or internal certificate, either install "
+            "its CA certificate on the Odoo server or untick 'Verify SSL' (verify_ssl) on the "
+            "Magento instance.",
+            request=getattr(exc, "request", None),
+            response=getattr(exc, "response", None),
+        )
 
-    def _is_localhost_related_base_url(self, base_url):
-        host = (urlparse(base_url).hostname or "").strip().lower()
-        if host in {"localhost", "127.0.0.1", "::1"}:
-            return True
+    def _retry_delay(self, attempt, response=None):
+        """Seconds to wait before retry ``attempt`` (0-based); honours Retry-After."""
+        delay = self.BACKOFF_BASE * (2 ** attempt)
+        retry_after = response.headers.get("Retry-After") if response is not None else None
+        if retry_after:
+            retry_after = retry_after.strip()
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                try:
+                    when = parsedate_to_datetime(retry_after)
+                    if when.tzinfo is None:
+                        when = when.replace(tzinfo=timezone.utc)
+                    delay = (when - datetime.now(timezone.utc)).total_seconds()
+                except (TypeError, ValueError, IndexError):
+                    pass
+        return max(0.0, min(delay, self.MAX_BACKOFF))
 
-        original_host = (urlparse(self.base_url).hostname or "").strip().lower()
-        if original_host not in {"localhost", "127.0.0.1", "::1"}:
-            return False
-
-        localhost_related_hosts = {
-            "host.docker.internal",
-            "host.containers.internal",
-            "gateway.docker.internal",
-        }
-        if self._container_gateway_ip:
-            localhost_related_hosts.add(self._container_gateway_ip)
-        return host in localhost_related_hosts
+    def _sleep(self, seconds):
+        if seconds > 0:
+            time.sleep(seconds)
 
     def _request(self, method, endpoint, *, params=None, payload=None):
-        last_exc = None
-        primary_exc = None
-        for base_url in self._base_urls:
-            request_kwargs = {
-                "headers": self.headers,
-                "timeout": 60,
-                "verify": self.verify,
-            }
-            if params is not None:
-                request_kwargs["params"] = params
-            if payload is not None:
-                request_kwargs["json"] = payload
-            url = f"{base_url}{endpoint}"
+        """Send one HTTP request, trying the container fallback hosts, retrying
+        transient failures (429/502/503/504, connection errors, timeouts) up to
+        ``MAX_RETRIES`` times with exponential backoff."""
+        method = (method or "get").lower()
+        idempotent = method in self.IDEMPOTENT_METHODS
+        retry_statuses = self.RETRY_STATUSES if idempotent else self.RETRY_STATUSES_UNSAFE_METHODS
+        request_kwargs = {
+            "headers": self.headers,
+            "timeout": self.TIMEOUT,
+            "verify": self.verify,
+        }
+        if params is not None:
+            request_kwargs["params"] = params
+        if payload is not None:
+            request_kwargs["json"] = payload
 
-            try:
-                response = requests.request(method, url, **request_kwargs)
+        for attempt in range(self.MAX_RETRIES + 1):
+            primary_exc = None
+            last_exc = None
+            retry_response = None
+            retryable = False
+            for base_url in list(self._base_urls):
+                url = f"{base_url}{endpoint}"
+                _logger.debug("Magento %s %s (attempt %s)", method.upper(), url, attempt + 1)
+                try:
+                    response = requests.request(method, url, **request_kwargs)
+                except requests.exceptions.SSLError as exc:
+                    # SSLError subclasses ConnectionError: handle first, never retry, never downgrade.
+                    raise self._ssl_error(url, exc) from exc
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                    if base_url == self.base_url and primary_exc is None:
+                        primary_exc = exc
+                    last_exc = exc
+                    # A POST that timed out after connecting may have been applied by Magento.
+                    if idempotent or isinstance(exc, requests.exceptions.ConnectTimeout) or not isinstance(
+                        exc, requests.exceptions.Timeout
+                    ):
+                        retryable = True
+                    continue
+
+                # Remember a working fallback host so later calls try it first.
+                if base_url != self._base_urls[0]:
+                    self._base_urls.remove(base_url)
+                    self._base_urls.insert(0, base_url)
+
+                if response.status_code in retry_statuses and attempt < self.MAX_RETRIES:
+                    retry_response = response
+                    retryable = True
+                    break
                 response.raise_for_status()
                 return response
-            except requests.exceptions.SSLError as exc:
-                # Local Magento often uses self-signed certs; retry loopback once without SSL verify.
-                if self.verify and self._is_localhost_related_base_url(base_url):
-                    retry_kwargs = dict(request_kwargs)
-                    retry_kwargs["verify"] = False
-                    try:
-                        response = requests.request(method, url, **retry_kwargs)
-                        response.raise_for_status()
-                        return response
-                    except requests.exceptions.RequestException as retry_exc:
-                        if base_url == self.base_url and primary_exc is None:
-                            primary_exc = retry_exc
-                        last_exc = retry_exc
-                        continue
-                if base_url == self.base_url and primary_exc is None:
-                    primary_exc = exc
-                last_exc = exc
-                continue
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-                if base_url == self.base_url and primary_exc is None:
-                    primary_exc = exc
-                last_exc = exc
-                continue
+
+            if attempt >= self.MAX_RETRIES or not retryable:
+                break
+            delay = self._retry_delay(attempt, retry_response)
+            _logger.warning(
+                "Magento %s %s: transient failure (%s), retry %s/%s in %.1fs",
+                method.upper(),
+                endpoint,
+                retry_response.status_code if retry_response is not None else type(last_exc).__name__,
+                attempt + 1,
+                self.MAX_RETRIES,
+                delay,
+            )
+            self._sleep(delay)
 
         if primary_exc is not None:
             raise primary_exc
@@ -189,17 +244,27 @@ class MagentoAPI:
             raise last_exc
         raise requests.exceptions.RequestException("Magento request failed without response.")
 
+    @staticmethod
+    def _json(response):
+        """Decode a JSON body; empty bodies (e.g. 204) decode to ``{}``."""
+        if response is None or response.status_code == 204 or not (response.content or b"").strip():
+            return {}
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise requests.exceptions.InvalidJSONError(
+                f"Magento returned a non-JSON response (HTTP {response.status_code}) for {response.url}",
+                response=response,
+            ) from exc
+
     def _get(self, endpoint, params=None):
-        response = self._request("get", endpoint, params=params)
-        return response.json()
+        return self._json(self._request("get", endpoint, params=params))
 
     def _post(self, endpoint, payload=None):
-        response = self._request("post", endpoint, payload=payload)
-        return response.json()
+        return self._json(self._request("post", endpoint, payload=payload))
 
     def _put(self, endpoint, payload=None):
-        response = self._request("put", endpoint, payload=payload)
-        return response.json()
+        return self._json(self._request("put", endpoint, payload=payload))
 
     def _resolve_store_code(self):
         if self._store_code is not None:
@@ -291,7 +356,9 @@ class MagentoAPI:
                 raise ValueError(f"Unsupported HTTP method: {method}")
             except requests.exceptions.HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else 0
-                can_retry = idx < (len(prefixes) - 1) and status in (400, 401, 403, 404)
+                # 401/403 are real auth/permission errors: surface them, never mask them
+                # by retrying another store prefix.
+                can_retry = idx < (len(prefixes) - 1) and status in (400, 404)
                 if can_retry:
                     last_exc = exc
                     continue
@@ -299,6 +366,26 @@ class MagentoAPI:
         if last_exc:
             raise last_exc
         raise requests.exceptions.HTTPError("Magento request failed without HTTP response.")
+
+    def add_order_comment(self, order_id, comment="", status=None, notify=False):
+        """Add a status-history comment to a Magento order (optionally changing its status).
+
+        ``POST /V1/orders/{order_id}/comments``. This is the supported way to change an
+        order status; it does not rewrite the order like ``PUT /V1/orders`` does.
+        """
+        status_history = {
+            "comment": comment or "",
+            "is_customer_notified": int(bool(notify)),
+            "is_visible_on_front": 0,
+        }
+        if status:
+            status_history["status"] = status
+        payload = {"statusHistory": status_history}
+        return self._request_with_prefix_fallback(
+            "post",
+            lambda prefix: f"{prefix}/orders/{order_id}/comments",
+            payload=payload,
+        )
 
     def get_store_configs(self):
         return self._get("/rest/V1/store/storeConfigs")
@@ -518,42 +605,6 @@ class MagentoAPI:
             include_all_scope=True,
             payload=payload,
         )
-
-    def make_product_saleable_for_cart(self, sku, qty=0.0):
-        sku_value = str(sku or "").strip()
-        if not sku_value:
-            return False
-
-        product = self.get_product(sku_value) or {}
-        stock_item = ((product.get("extension_attributes") or {}).get("stock_item") or {})
-
-        try:
-            current_qty = float(stock_item.get("qty") or 0.0)
-        except (TypeError, ValueError):
-            current_qty = 0.0
-        try:
-            requested_qty = float(qty or 0.0)
-        except (TypeError, ValueError):
-            requested_qty = 0.0
-
-        target_qty = max(current_qty, requested_qty, 1.0)
-        payload = {
-            "product": {
-                "sku": sku_value,
-                "extension_attributes": {
-                    "stock_item": {
-                        "qty": target_qty,
-                        "is_in_stock": True,
-                        "use_config_manage_stock": False,
-                        "manage_stock": False,
-                        "use_config_backorders": False,
-                        "backorders": 1,
-                    }
-                },
-            }
-        }
-        self.update_product(sku_value, payload)
-        return True
 
     def add_product_media(self, sku, payload):
         safe_sku = quote(str(sku or "").strip(), safe="")

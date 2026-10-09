@@ -2,15 +2,89 @@ import calendar
 import logging
 from datetime import datetime, timedelta
 
+import pytz
 import requests
 from requests.compat import urlparse, urlunparse
 
 from odoo import api, models, fields
+from odoo.addons.base.models.res_partner import _tz_get
 from odoo.exceptions import ValidationError, UserError
 from ..services.magento_api import MagentoAPI
 
 
 _logger = logging.getLogger(__name__)
+
+# Records processed between two commits when a sync runs from cron.
+_SYNC_BATCH_SIZE = 50
+# Error/skip lines kept in a sync report's notes.
+_MAX_NOTE_LINES = 50
+
+
+def _short_reason(exc, limit=300):
+    """One-line failure reason for logs/reports; never dumps payloads."""
+    if isinstance(exc, UserError):
+        text = str(exc.args[0] if exc.args else exc)
+    else:
+        text = "%s: %s" % (type(exc).__name__, exc)
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+class _SyncStats:
+    """Counters of one sync run, returned by the ``sync_*`` methods as a dict."""
+
+    def __init__(self, label):
+        self.label = label
+        self.created = 0
+        self.updated = 0
+        self.errors = 0
+        self.skipped = 0
+        self.processed = 0
+        self.inventory_updated = 0
+        self.error_messages = []
+        self.skip_messages = []
+
+    def add(self, outcome):
+        setattr(self, outcome, getattr(self, outcome) + 1)
+
+    def error(self, kind, magento_id, exc, instance=None, reason=None, step=None):
+        self.errors += 1
+        reason = reason or _short_reason(exc)
+        what = "%s %s" % (kind, magento_id) if magento_id is not None else "%s list fetch" % kind
+        if step:
+            what += " [%s]" % step
+        self.error_messages.append("%s: %s" % (what, reason))
+        _logger.warning(
+            "Magento sync (instance %s): %s failed: %s",
+            instance.name if instance else "-", what, reason,
+            exc_info=_logger.isEnabledFor(logging.DEBUG),
+        )
+
+    def skip(self, kind, magento_id, reason, instance=None):
+        self.skipped += 1
+        self.skip_messages.append("%s %s: %s" % (kind, magento_id, reason))
+        _logger.info(
+            "Magento sync (instance %s): %s %s skipped: %s",
+            instance.name if instance else "-", kind, magento_id, reason,
+        )
+
+    def merge(self, counts):
+        for key in ("created", "updated", "errors", "skipped", "processed", "inventory_updated"):
+            setattr(self, key, getattr(self, key) + int((counts or {}).get(key) or 0))
+        self.error_messages.extend((counts or {}).get("error_messages") or [])
+        self.skip_messages.extend((counts or {}).get("skip_messages") or [])
+
+    def as_dict(self):
+        return {
+            "created": self.created,
+            "updated": self.updated,
+            "errors": self.errors,
+            "skipped": self.skipped,
+            "processed": self.processed,
+            "inventory_updated": self.inventory_updated,
+            "error_messages": list(self.error_messages),
+            "skip_messages": list(self.skip_messages),
+        }
 
 
 class MagentoInstance(models.Model):
@@ -23,6 +97,7 @@ class MagentoInstance(models.Model):
         "auto_sync_frequency",
         "auto_sync_hour",
         "auto_sync_minute",
+        "auto_sync_tz",
         "auto_sync_hour_interval",
         "auto_sync_weekday",
         "auto_sync_weekly_date",
@@ -132,6 +207,12 @@ class MagentoInstance(models.Model):
         string="Minute",
         default=0,
         help="Minute in hour (0-59), used for daily/weekly/monthly schedules.",
+    )
+    auto_sync_tz = fields.Selection(
+        _tz_get,
+        string="Schedule Timezone",
+        default=lambda self: self.env.user.tz or "UTC",
+        help="Timezone in which the auto sync hour/minute/day are interpreted.",
     )
     auto_sync_hour_interval = fields.Selection(
         [(str(i), "Every %s hour(s)" % i) for i in range(1, 25)],
@@ -414,15 +495,34 @@ class MagentoInstance(models.Model):
                 pass
         return max(0, min(6, int(self.auto_sync_weekday or "0")))
 
+    # =====================
+    # AUTO SYNC SCHEDULE
+    # =====================
+    def _get_auto_sync_tz(self):
+        """Timezone the schedule hours/minutes are expressed in."""
+        self.ensure_one()
+        tz_name = self.auto_sync_tz or self.env.user.tz or self.company_id.partner_id.tz or "UTC"
+        try:
+            return pytz.timezone(tz_name)
+        except pytz.UnknownTimeZoneError:
+            return pytz.utc
+
     @api.model
-    def _build_monthly_datetime(self, year, month, day, hour):
+    def _build_monthly_datetime(self, year, month, day, hour, minute=0):
         last_day = calendar.monthrange(year, month)[1]
         safe_day = min(day, last_day)
-        return datetime(year, month, safe_day, hour, 0, 0)
+        return datetime(year, month, safe_day, hour, minute, 0)
 
-    def _compute_auto_sync_nextcall(self):
+    def _compute_auto_sync_nextcall(self, now=None):
+        """Next run as a naive UTC datetime.
+
+        Hour/minute/weekday/day settings are interpreted in the instance's
+        timezone (``auto_sync_tz``, falling back to the user's timezone).
+        """
         self.ensure_one()
-        now_dt = fields.Datetime.to_datetime(fields.Datetime.now())
+        tz = self._get_auto_sync_tz()
+        now_utc = fields.Datetime.to_datetime(now or fields.Datetime.now())
+        now_dt = pytz.utc.localize(now_utc).astimezone(tz).replace(tzinfo=None)
         frequency = self.auto_sync_frequency or "hourly"
         hour = self._normalized_auto_sync_hour()
         minute = self._normalized_auto_sync_minute()
@@ -435,35 +535,33 @@ class MagentoInstance(models.Model):
             if interval > 1:
                 while next_dt.hour % interval != 0:
                     next_dt += timedelta(hours=1)
-            return next_dt
-
-        if frequency == "daily":
+        elif frequency == "daily":
             next_dt = now_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if next_dt <= now_dt:
                 next_dt += timedelta(days=1)
-            return next_dt
-
-        if frequency == "weekly":
+        elif frequency == "weekly":
             target_weekday = self._normalized_auto_sync_weekday()
             next_dt = now_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
             delta_days = (target_weekday - next_dt.weekday()) % 7
             next_dt += timedelta(days=delta_days)
             if next_dt <= now_dt:
                 next_dt += timedelta(days=7)
-            return next_dt
+        else:
+            day = self._normalized_auto_sync_month_day()
+            year = now_dt.year
+            month = now_dt.month
+            next_dt = self._build_monthly_datetime(year, month, day, hour, minute)
+            if next_dt <= now_dt:
+                if month == 12:
+                    year += 1
+                    month = 1
+                else:
+                    month += 1
+                next_dt = self._build_monthly_datetime(year, month, day, hour, minute)
 
-        day = self._normalized_auto_sync_month_day()
-        year = now_dt.year
-        month = now_dt.month
-        next_dt = self._build_monthly_datetime(year, month, day, hour)
-        if next_dt <= now_dt:
-            if month == 12:
-                year += 1
-                month = 1
-            else:
-                month += 1
-            next_dt = self._build_monthly_datetime(year, month, day, hour)
-        return next_dt
+        # Local wall-clock time -> naive UTC (ir.cron stores UTC).
+        local_dt = tz.localize(next_dt, is_dst=False)
+        return local_dt.astimezone(pytz.utc).replace(tzinfo=None)
 
     def _prepare_auto_sync_cron_vals(self):
         self.ensure_one()
@@ -563,12 +661,72 @@ class MagentoInstance(models.Model):
             crons.unlink()
         return result
 
+    # =====================
+    # CRON ENTRYPOINTS
+    # =====================
+    def _is_magento_cron(self):
+        return bool(self.env.context.get("magento_cron"))
+
+    def _magento_commit_batch(self, processed):
+        """Commit progress during cron runs only. Interactive runs never commit."""
+        if not self._is_magento_cron():
+            return
+        self.env["ir.cron"]._commit_progress(processed)
+
+    def _run_isolated_step(self, label, func):
+        """Run a whole sync step; an unexpected crash must not stop the other steps.
+
+        Interactive runs use a savepoint (no commit happens inside). Cron runs commit
+        batches inside the step, so a savepoint cannot span it: roll back the
+        uncommitted part instead.
+        """
+        self.ensure_one()
+        try:
+            if self._is_magento_cron():
+                return func()
+            with self.env.cr.savepoint():
+                return func()
+        except Exception as exc:  # noqa: BLE001
+            if self._is_magento_cron():
+                self.env.cr.rollback()
+            _logger.warning(
+                "Magento %s sync aborted for instance %s: %s",
+                label, self.name, _short_reason(exc), exc_info=_logger.isEnabledFor(logging.DEBUG),
+            )
+            return {"errors": 1, "error_messages": ["%s sync aborted: %s" % (label, _short_reason(exc))]}
+
     def cron_run_auto_sync(self):
-        for instance in self:
+        """Per-instance scheduled run (code of the cron built by ``_apply_auto_sync_cron``)."""
+        for instance in self.with_context(magento_cron=True):
+            if not instance.active:
+                continue
             try:
-                instance._sync_selected_auto_and_report()
-            except Exception:
+                instance._sync_selected_auto_and_report(source_action="cron_auto_scope")
+            except Exception:  # noqa: BLE001
+                self.env.cr.rollback()
                 _logger.exception("Magento auto sync failed for instance %s", instance.name)
+            else:
+                instance._magento_commit_batch(0)
+        return True
+
+    @api.model
+    def _cron_sync_all(self):
+        """Global scheduled run over every active instance.
+
+        Instances with their own auto-sync schedule are skipped (their per-instance
+        cron runs them), so an instance is never synced twice by two schedulers.
+        The scope of each instance follows its Products/Customers/Categories/Orders
+        auto-sync options.
+        """
+        instances = self.search([("active", "=", True), ("auto_sync_enabled", "=", False)])
+        for instance in instances.with_context(magento_cron=True):
+            try:
+                instance._sync_selected_auto_and_report(source_action="cron_sync_all")
+            except Exception:  # noqa: BLE001
+                self.env.cr.rollback()
+                _logger.exception("Magento scheduled sync failed for instance %s", instance.name)
+            else:
+                instance._magento_commit_batch(0)
         return True
 
     def _get_auto_sync_scope(self):
@@ -592,75 +750,144 @@ class MagentoInstance(models.Model):
         }
         return mapping.get(enabled[0], "all")
 
-    def _sync_selected_auto_and_report(self):
+    def _sync_selected_auto_and_report(self, source_action="cron_auto_scope"):
         self.ensure_one()
         scope = self._get_auto_sync_scope()
         if not any(scope.values()):
             now_time = fields.Datetime.now()
-            self.env["magento.sync.report"].create({
-                "instance_id": self.id,
-                "sync_type": "all",
-                "mode": "cron",
-                "source_action": "cron_auto_scope",
-                "total_records": 0,
-                "success": 0,
-                "errors": 1,
-                "start_time": now_time,
-                "end_time": now_time,
-                "notes": "Auto sync is enabled but no scope is selected.",
-            })
+            self._create_sync_report(
+                "all", {"errors": 1}, now_time, now_time, source_action=source_action,
+                notes="Auto sync is enabled but no scope is selected.",
+            )
             return False
 
         sync_steps = [
-            ("category", self.sync_categories, "categories_created", "categories_updated"),
-            ("product", self.sync_products, "products_created", "products_updated"),
-            ("order", self.sync_orders, "orders_created", "orders_updated"),
-            ("customer", self.sync_customers, "customers_created", "customers_updated"),
+            ("category", "sync_categories"),
+            ("product", "sync_products"),
+            ("order", "sync_orders"),
+            ("customer", "sync_customers"),
         ]
-
-        for sync_type, sync_method, created_key, updated_key in sync_steps:
+        for sync_type, method_name in sync_steps:
             if not scope.get(sync_type):
                 continue
-
             start_time = fields.Datetime.now()
-            counts = {"created": 0, "updated": 0, "inventory_updated": 0}
-            error_note = False
-
-            try:
-                result = sync_method()
-                if isinstance(result, dict):
-                    counts.update(result)
-            except Exception as exc:
-                if isinstance(exc, UserError):
-                    _logger.warning("Auto sync %s failed for %s: %s", sync_type, self.name, exc)
-                else:
-                    _logger.exception("Auto sync %s failed for %s", sync_type, self.name)
-                error_note = "%s sync failed: %s" % (sync_type.capitalize(), exc)
-
-            end_time = fields.Datetime.now()
-            created_count = int(counts.get("created") or 0)
-            updated_count = int(counts.get("updated") or 0)
-            total_records = created_count + updated_count
-
-            report_vals = {
-                "instance_id": self.id,
-                "sync_type": sync_type,
-                "mode": "cron",
-                "source_action": "cron_auto_scope",
-                "total_records": total_records,
-                "success": 0 if error_note else total_records,
-                "errors": 1 if error_note else 0,
-                "start_time": start_time,
-                "end_time": end_time,
-                created_key: created_count,
-                updated_key: updated_count,
-                "notes": error_note or False,
-            }
-            if sync_type == "product":
-                report_vals["inventory_updated"] = int(counts.get("inventory_updated") or 0)
-
-            self.env["magento.sync.report"].create(report_vals)
+            counts = self._run_isolated_step(sync_type, getattr(self, method_name)) or {}
+            self._create_sync_report(
+                sync_type, counts, start_time, fields.Datetime.now(), source_action=source_action,
+            )
+            self._magento_commit_batch(0)
         return True
+
+    # =====================
+    # SYNC BOOKKEEPING
+    # =====================
+    _REPORT_COUNT_FIELDS = {
+        "category": ("categories_created", "categories_updated"),
+        "product": ("products_created", "products_updated"),
+        "order": ("orders_created", "orders_updated"),
+        "customer": ("customers_created", "customers_updated"),
+    }
+
+    def _create_sync_report(self, sync_type, counts, start_time, end_time, *, source_action=None,
+                            notes=None, per_type_counts=None):
+        """Write an honest ``magento.sync.report``: real error and skip counts.
+
+        ``total_records`` = records seen; ``success`` = created + updated;
+        ``errors`` = record failures plus failed sub-steps and fetch errors.
+        """
+        self.ensure_one()
+        counts = counts or {}
+        created = int(counts.get("created") or 0)
+        updated = int(counts.get("updated") or 0)
+        errors = int(counts.get("errors") or 0)
+        skipped = int(counts.get("skipped") or 0)
+        is_cron = self._is_magento_cron()
+        vals = {
+            "instance_id": self.id,
+            "sync_type": sync_type,
+            "mode": "cron" if is_cron else "manual",
+            "source_action": source_action or ("cron" if is_cron else "manual"),
+            "total_records": int(counts.get("processed") or (created + updated + errors + skipped)),
+            "success": created + updated,
+            "errors": errors,
+            "start_time": start_time,
+            "end_time": end_time,
+            "inventory_updated": int(counts.get("inventory_updated") or 0),
+        }
+        for type_key, type_counts in (per_type_counts or {sync_type: counts}).items():
+            field_names = self._REPORT_COUNT_FIELDS.get(type_key)
+            if field_names:
+                vals[field_names[0]] = int(type_counts.get("created") or 0)
+                vals[field_names[1]] = int(type_counts.get("updated") or 0)
+        report_model = self.env["magento.sync.report"].sudo()
+        if "skipped" in report_model._fields:
+            vals["skipped"] = skipped
+        note_lines = [notes] if notes else []
+        if skipped:
+            note_lines.append("Skipped: %s" % skipped)
+            note_lines.extend("  - %s" % msg for msg in (counts.get("skip_messages") or [])[:_MAX_NOTE_LINES])
+        if errors:
+            note_lines.append("Errors: %s" % errors)
+            note_lines.extend("  - %s" % msg for msg in (counts.get("error_messages") or [])[:_MAX_NOTE_LINES])
+        vals["notes"] = "\n".join(note_lines) or False
+        return report_model.create(vals)
+
+    def _sync_notification(self, label, counts):
+        counts = counts or {}
+        total = int(counts.get("created") or 0) + int(counts.get("updated") or 0)
+        errors = int(counts.get("errors") or 0)
+        skipped = int(counts.get("skipped") or 0)
+        message = f"{label} sync complete. Synced: {total}"
+        if skipped:
+            message += f", skipped: {skipped}"
+        if errors:
+            message += f", errors: {errors} (see Sync Reports)"
+            first = (counts.get("error_messages") or [])[:1]
+            if first:
+                message += f". First error: {first[0]}"
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Magento Sync",
+                "message": message,
+                "type": "warning" if errors else "success",
+                "sticky": bool(errors),
+            },
+        }
+
+    def _mark_synced(self):
+        """Stamp ``last_sync_at``; bookkeeping, so allowed for Magento users too."""
+        self.sudo().write({"last_sync_at": fields.Datetime.now()})
+
+    def _sync_record(self, stats, kind, magento_id, func):
+        """Run ``func`` for one Magento record inside a savepoint.
+
+        ``func`` returns ``"created"``, ``"updated"``, ``("skipped", reason)`` or None.
+        A failure rolls back only this record, is logged at WARNING with the Magento
+        id and reason, and is counted in ``stats``.
+        """
+        stats.processed += 1
+        try:
+            with self.env.cr.savepoint():
+                outcome = func()
+        except Exception as exc:  # noqa: BLE001
+            stats.error(kind, magento_id, exc, instance=self)
+            return False
+        if isinstance(outcome, tuple) and outcome and outcome[0] == "skipped":
+            stats.skip(kind, magento_id, outcome[1], instance=self)
+        elif outcome in ("created", "updated"):
+            stats.add(outcome)
+        return True
+
+    def _fetch_list(self, stats, kind, func):
+        """Fetch the list of Magento records; a failure is reported, not raised."""
+        try:
+            result = func()
+        except Exception as exc:  # noqa: BLE001
+            stats.error(kind, None, exc, instance=self, reason=self._format_magento_request_error(exc, self))
+            return None
+        return result
 
     def _flatten_categories(self, node, parent_id=None):
         items = []
@@ -697,16 +924,18 @@ class MagentoInstance(models.Model):
         return journal, method
 
     # =====================
-    # SYNC METHODS
+    # ERRORS
     # =====================
-    def _raise_magento_request_user_error(self, exc, instance):
+    def _format_magento_request_error(self, exc, instance):
         base_url = (getattr(instance, "base_url", "") or "").strip()
+        if isinstance(exc, UserError):
+            return str(exc.args[0] if exc.args else exc)
         if isinstance(exc, requests.exceptions.HTTPError):
             if exc.response is not None:
                 status = exc.response.status_code
                 body = (exc.response.text or "").strip()
-                if len(body) > 1200:
-                    body = body[:1200] + "..."
+                if len(body) > 500:
+                    body = body[:500] + "..."
                 extra = ""
                 if status in (401, 403):
                     extra = " Check the Magento access token permissions for REST API access."
@@ -716,23 +945,15 @@ class MagentoInstance(models.Model):
                         "(e.g. /rest/V1/store/websites). Base URL must be Magento root "
                         "(do not include /rest or /rest/V1)."
                     )
-                raise UserError(
-                    f"Magento HTTP {status}: {body}.{extra}"
-                ) from exc
-            raise UserError(f"Magento HTTP error: {exc}") from exc
+                return f"Magento HTTP {status}: {body}.{extra}"
+            return f"Magento HTTP error: {exc}"
         if isinstance(exc, (requests.exceptions.MissingSchema, requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL)):
-            raise UserError(
-                f"Invalid Magento base URL '{base_url}'. Use a full URL like https://magento.example.com"
-            ) from exc
+            return f"Invalid Magento base URL '{base_url}'. Use a full URL like https://magento.example.com"
         if isinstance(exc, requests.exceptions.SSLError):
-            raise UserError(
-                f"Magento SSL verification failed for '{base_url}': {exc}. "
-                "For local/self-signed certs, disable 'Verify SSL' on the instance."
-            ) from exc
+            # The API client already explains the verify_ssl option.
+            return f"Magento SSL error for '{base_url}': {exc}"
         if isinstance(exc, requests.exceptions.Timeout):
-            raise UserError(
-                f"Magento request timed out for '{base_url}'. Check server availability."
-            ) from exc
+            return f"Magento request timed out for '{base_url}'. Check server availability."
         if isinstance(exc, requests.exceptions.ConnectionError):
             host = (urlparse(base_url).hostname or "").strip().lower()
             loopback_hint = ""
@@ -744,912 +965,427 @@ class MagentoInstance(models.Model):
                     "host-gateway (example Docker Compose: extra_hosts: ['host.docker.internal:host-gateway']). "
                     "Otherwise use the Magento server domain or IP."
                 )
-            raise UserError(
+            return (
                 f"Magento connection failed for '{base_url}'. "
                 f"Details: {exc}. Check host, port, protocol (http/https), and if Magento is running."
                 f"{loopback_hint}"
-            ) from exc
-        raise UserError(f"Magento API error: {exc}") from exc
+            )
+        return f"Magento API error: {exc}"
 
+    def _raise_magento_request_user_error(self, exc, instance):
+        raise UserError(self._format_magento_request_error(exc, instance)) from exc
+
+    # =====================
+    # SYNC METHODS
+    # =====================
     def sync_categories(self):
-        total_created = 0
-        total_updated = 0
+        stats = _SyncStats("category")
+        cat_model = self.env["magento.category"].with_context(skip_magento_sync=True)
         for instance in self:
-            created = 0
-            updated = 0
             api = MagentoAPI(instance)
-            try:
-                tree = api.get_categories()
-            except requests.exceptions.RequestException as exc:
-                self._raise_magento_request_user_error(exc, instance)
-
-            flat = instance._flatten_categories(tree)
-            cat_model = self.env["magento.category"]
-
-            for item in flat:
+            tree = instance._fetch_list(stats, "category", api.get_categories)
+            if tree is None:
+                continue
+            for index, item in enumerate(instance._flatten_categories(tree), start=1):
                 if item.get("id") is None:
                     continue
-
-                cat = cat_model.search([
-                    ("instance_id", "=", instance.id),
-                    ("magento_id", "=", str(item["id"])),
-                ], limit=1)
-
-                parent = False
-                if item.get("parent_id"):
-                    parent = cat_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("magento_id", "=", str(item["parent_id"])),
-                    ], limit=1)
-
-                vals = {
-                    "name": item.get("name"),
-                    "parent_id": parent.id if parent else False,
-                }
-                mapped_vals = self.env["magento.field.mapping"].sudo().apply_inbound_mapping_to_vals(
-                    mapping_type="category",
-                    instance=instance,
-                    source_payload=item,
+                instance._sync_record(
+                    stats, "category", item["id"],
+                    lambda item=item: instance._sync_category_record(cat_model, item),
                 )
-                if mapped_vals:
-                    vals.update(mapped_vals)
+                if index % _SYNC_BATCH_SIZE == 0:
+                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+            instance._mark_synced()
+            instance._magento_commit_batch(0)
+        return stats.as_dict()
 
-                if cat:
-                    cat.with_context(skip_magento_sync=True).write(vals)
-                    updated += 1
-                else:
-                    vals.update({
-                        "instance_id": instance.id,
-                        "magento_id": str(item["id"]),
-                    })
-                    cat_model.with_context(skip_magento_sync=True).create(vals)
-                    created += 1
-            total_created += created
-            total_updated += updated
-        return {
-            "created": total_created,
-            "updated": total_updated,
+    def _sync_category_record(self, cat_model, item):
+        self.ensure_one()
+        cat = cat_model.search([
+            ("instance_id", "=", self.id),
+            ("magento_id", "=", str(item["id"])),
+        ], limit=1)
+        parent = cat_model.browse()
+        if item.get("parent_id"):
+            parent = cat_model.search([
+                ("instance_id", "=", self.id),
+                ("magento_id", "=", str(item["parent_id"])),
+            ], limit=1)
+        vals = {
+            "name": item.get("name"),
+            "parent_id": parent.id or False,
         }
+        mapped_vals = self.env["magento.field.mapping"].sudo().apply_inbound_mapping_to_vals(
+            mapping_type="category",
+            instance=self,
+            source_payload=item,
+        )
+        if mapped_vals:
+            vals.update(mapped_vals)
+        if cat:
+            cat.write(vals)
+            return "updated"
+        vals.update({"instance_id": self.id, "magento_id": str(item["id"])})
+        cat_model.create(vals)
+        return "created"
 
     def sync_attribute_sets(self):
-        total_created = 0
-        total_updated = 0
-        attr_model = self.env["magento.attribute.set"]
+        stats = _SyncStats("attribute set")
+        # active_test=False: an archived set must be found again, not duplicated.
+        attr_model = self.env["magento.attribute.set"].with_context(
+            skip_magento_sync=True, active_test=False
+        )
         for instance in self:
-            created = 0
-            updated = 0
             api = MagentoAPI(instance)
-            try:
-                sets = api.get_attribute_sets()
-            except requests.exceptions.RequestException as exc:
-                self._raise_magento_request_user_error(exc, instance)
-
+            sets = instance._fetch_list(stats, "attribute set", api.get_attribute_sets)
+            if sets is None:
+                continue
             for item in sets:
                 set_id = item.get("attribute_set_id") or item.get("id")
                 if set_id is None:
                     continue
-                name = (
-                    item.get("attribute_set_name")
-                    or item.get("name")
-                    or f"Attribute Set {set_id}"
+                instance._sync_record(
+                    stats, "attribute set", set_id,
+                    lambda item=item, set_id=set_id: instance._sync_attribute_set_record(attr_model, item, set_id),
                 )
-                attr_set = attr_model.search([
-                    ("instance_id", "=", instance.id),
-                    ("magento_id", "=", str(set_id)),
-                ], limit=1)
-                vals = {
-                    "name": name,
-                    "instance_id": instance.id,
-                    "magento_id": str(set_id),
-                    "active": True,
-                }
-                if attr_set:
-                    attr_set.with_context(skip_magento_sync=True).write(vals)
-                    updated += 1
-                else:
-                    attr_model.with_context(skip_magento_sync=True).create(vals)
-                    created += 1
-            total_created += created
-            total_updated += updated
-        return {
-            "created": total_created,
-            "updated": total_updated,
+            instance._mark_synced()
+            instance._magento_commit_batch(0)
+        return stats.as_dict()
+
+    def _sync_attribute_set_record(self, attr_model, item, set_id):
+        self.ensure_one()
+        name = item.get("attribute_set_name") or item.get("name") or f"Attribute Set {set_id}"
+        attr_set = attr_model.search([
+            ("instance_id", "=", self.id),
+            ("magento_id", "=", str(set_id)),
+        ], limit=1)
+        vals = {
+            "name": name,
+            "instance_id": self.id,
+            "magento_id": str(set_id),
+            "active": True,
         }
+        if attr_set:
+            attr_set.write(vals)
+            return "updated"
+        attr_model.create([vals])
+        return "created"
 
     def action_sync_categories(self):
         self.ensure_one()
         start_time = fields.Datetime.now()
         counts = self.sync_categories()
-        end_time = fields.Datetime.now()
-        total_records = counts.get("created", 0) + counts.get("updated", 0)
-        self.env["magento.sync.report"].create({
-            "instance_id": self.id,
-            "sync_type": "category",
-            "mode": "manual",
-            "source_action": "manual",
-            "total_records": total_records,
-            "success": total_records,
-            "errors": 0,
-            "start_time": start_time,
-            "end_time": end_time,
-            "categories_created": counts.get("created", 0),
-            "categories_updated": counts.get("updated", 0),
-        })
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Category sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
+        self._create_sync_report("category", counts, start_time, fields.Datetime.now())
+        return self._sync_notification("Category", counts)
 
     def action_sync_attribute_sets(self):
         self.ensure_one()
         counts = self.sync_attribute_sets()
-        total_records = counts.get("created", 0) + counts.get("updated", 0)
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Attribute set sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
+        return self._sync_notification("Attribute set", counts)
+
+    @api.model
+    def _supported_product_types(self):
+        field = self.env["magento.product.map"]._fields["type_id"]
+        return {value for value in field.get_values(self.env) if value}
 
     def sync_products(self):
-        total_created = 0
-        total_updated = 0
-        total_inventory = 0
+        stats = _SyncStats("product")
+        supported_types = self._supported_product_types()
         for instance in self:
-            created = 0
-            updated = 0
-            inventory_updated = 0
             api = MagentoAPI(instance)
-            try:
-                products = api.get_products()
-            except requests.exceptions.RequestException as exc:
-                self._raise_magento_request_user_error(exc, instance)
-
-            map_model = self.env["magento.product.map"]
-
-            for p in products:
+            products = instance._fetch_list(stats, "product", api.get_products)
+            if products is None:
+                continue
+            for index, p in enumerate(products, start=1):
                 sku = p.get("sku")
                 if not sku:
                     continue
-
-                try:
-                    product_data = api.get_product(sku)
-                except requests.exceptions.RequestException:
-                    continue
-
-                product = self.env["product.product"].search(
-                    [("default_code", "=", sku)], limit=1
+                instance._sync_record(
+                    stats, "product", p.get("id") or sku,
+                    lambda p=p: instance._sync_product_record(api, p, supported_types, stats),
                 )
+                if index % _SYNC_BATCH_SIZE == 0:
+                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+            instance._mark_synced()
+            instance._magento_commit_batch(0)
+        return stats.as_dict()
 
-                if not product:
-                    product = self.env["product.product"].create({
-                        "name": p.get("name") or sku,
-                        "default_code": sku,
-                    })
+    def _sync_product_record(self, api, p, supported_types, stats):
+        self.ensure_one()
+        sku = p.get("sku")
+        type_id = p.get("type_id")
+        if type_id and type_id not in supported_types:
+            return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
 
-                mapping = False
-                magento_id = p.get("id")
-                if magento_id is not None:
-                    mapping = map_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("magento_id", "=", str(magento_id)),
-                    ], limit=1)
-                if not mapping:
-                    mapping = map_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("sku", "=", sku),
-                    ], limit=1)
-                if not mapping:
-                    mapping = map_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("odoo_product_id", "=", product.id),
-                    ], limit=1)
+        product_data = api.get_product(sku) or {}
+        type_id = product_data.get("type_id") or type_id
+        if type_id and type_id not in supported_types:
+            return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
 
-                if not mapping:
-                    mapping = map_model.create({
-                        "instance_id": instance.id,
-                        "magento_id": str(magento_id) if magento_id is not None else False,
-                        "sku": sku,
-                        "name": p.get("name"),
-                        "odoo_product_id": product.id,
-                    })
-                    created += 1
-                else:
-                    updated += 1
+        # active_test=False everywhere: a product disabled in Magento is archived in
+        # Odoo and must be found again on the next sync, not duplicated.
+        map_model = self.env["magento.product.map"].with_context(active_test=False)
+        product_model = self.env["product.product"].with_context(active_test=False)
 
-                values = mapping._apply_magento_data(product_data)
-                values["odoo_product_id"] = product.id
-                media_entries = product_data.get("media_gallery_entries") or []
-                if media_entries:
-                    entry_id = media_entries[0].get("id")
-                    if entry_id:
-                        try:
-                            media = api.get_product_media(sku, entry_id)
-                            content = (media or {}).get("content") or {}
-                            if content.get("base64_encoded_data"):
-                                values["image_1920"] = content["base64_encoded_data"]
-                        except requests.exceptions.RequestException:
-                            pass
-                mapping.with_context(skip_magento_sync=True).write(values)
-                stock_item = (product_data.get("extension_attributes") or {}).get("stock_item")
-                if stock_item is not None:
-                    inventory_updated += 1
-            total_created += created
-            total_updated += updated
-            total_inventory += inventory_updated
-        return {
-            "created": total_created,
-            "updated": total_updated,
-            "inventory_updated": total_inventory,
-        }
+        magento_id = p.get("id") if p.get("id") is not None else product_data.get("id")
+        mapping = map_model.browse()
+        if magento_id is not None:
+            mapping = map_model.search([
+                ("instance_id", "=", self.id),
+                ("magento_id", "=", str(magento_id)),
+            ], limit=1)
+        if not mapping:
+            mapping = map_model.search([
+                ("instance_id", "=", self.id),
+                ("sku", "=", sku),
+            ], limit=1)
+
+        product = mapping.odoo_product_id
+        if not product:
+            product = product_model.search([("default_code", "=", sku)], limit=1)
+        if not product:
+            product = product_model.create({
+                "name": p.get("name") or product_data.get("name") or sku,
+                "default_code": sku,
+            })
+
+        if not mapping:
+            mapping = map_model.search([
+                ("instance_id", "=", self.id),
+                ("odoo_product_id", "=", product.id),
+            ], limit=1)
+
+        if not mapping:
+            mapping = map_model.create({
+                "instance_id": self.id,
+                "magento_id": str(magento_id) if magento_id is not None else False,
+                "sku": sku,
+                "name": p.get("name"),
+                "odoo_product_id": product.id,
+            })
+            outcome = "created"
+        else:
+            outcome = "updated"
+
+        values = mapping._apply_magento_data(product_data)
+        values["odoo_product_id"] = product.id
+        media_entries = product_data.get("media_gallery_entries") or []
+        entry_id = media_entries[0].get("id") if media_entries else None
+        if entry_id:
+            try:
+                media = api.get_product_media(sku, entry_id)
+                content = (media or {}).get("content") or {}
+                if content.get("base64_encoded_data"):
+                    values["image_1920"] = content["base64_encoded_data"]
+            except requests.exceptions.RequestException as exc:
+                # Image is cosmetic: keep the product, log the reason.
+                _logger.warning(
+                    "Magento product %s (instance %s): image fetch failed: %s",
+                    sku, self.name, _short_reason(exc),
+                )
+        mapping.with_context(skip_magento_sync=True).write(values)
+        stock_item = (product_data.get("extension_attributes") or {}).get("stock_item")
+        if stock_item is not None:
+            stats.inventory_updated += 1
+        return outcome
 
     def action_sync_products(self):
         self.ensure_one()
         start_time = fields.Datetime.now()
         counts = self.sync_products()
-        end_time = fields.Datetime.now()
-        total_records = counts.get("created", 0) + counts.get("updated", 0)
-        self.env["magento.sync.report"].create({
-            "instance_id": self.id,
-            "sync_type": "product",
-            "mode": "manual",
-            "source_action": "manual",
-            "total_records": total_records,
-            "success": total_records,
-            "errors": 0,
-            "start_time": start_time,
-            "end_time": end_time,
-            "products_created": counts.get("created", 0),
-            "products_updated": counts.get("updated", 0),
-            "inventory_updated": counts.get("inventory_updated", 0),
-        })
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Product sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
+        self._create_sync_report("product", counts, start_time, fields.Datetime.now())
+        return self._sync_notification("Product", counts)
 
     def sync_orders(self):
-        total_created = 0
-        total_updated = 0
+        stats = _SyncStats("order")
         for instance in self:
-            created = 0
-            updated = 0
             api = MagentoAPI(instance)
-            try:
-                orders = api.get_orders()
-            except requests.exceptions.RequestException as exc:
-                self._raise_magento_request_user_error(exc, instance)
-
-            order_model = self.env["sale.order"].with_context(skip_magento_sync=True)
-
-            for data in orders:
+            orders = instance._fetch_list(stats, "order", api.get_orders)
+            if orders is None:
+                continue
+            for index, data in enumerate(orders, start=1):
                 magento_id = data.get("entity_id") or data.get("id")
                 if not magento_id:
                     continue
+                order_box = []
+                ok = instance._sync_record(
+                    stats, "order", magento_id,
+                    lambda data=data, magento_id=magento_id, box=order_box: instance._sync_order_record(
+                        api, data, magento_id, box
+                    ),
+                )
+                if ok and order_box:
+                    instance._sync_order_followups(api, order_box[0], magento_id, stats)
+                if index % _SYNC_BATCH_SIZE == 0:
+                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+            instance._mark_synced()
+            instance._magento_commit_batch(0)
+        return stats.as_dict()
 
-                order = order_model.search([
-                    ("magento_order_id", "=", str(magento_id)),
-                ], limit=1)
+    def _find_magento_order(self, magento_id):
+        """Existing Odoo order for this instance's Magento order id.
 
-                values = order_model._magento_prepare_order_vals(data, instance)
-                if values.get("magento_invoice_state") == "not_invoiced":
-                    try:
-                        invoices = api.get_invoices(order_id=magento_id)
-                    except requests.exceptions.RequestException as exc:
-                        _logger.warning(
-                            "Magento invoice lookup failed for order %s: %s",
-                            magento_id,
-                            exc,
-                        )
-                        invoices = []
-                    if invoices:
-                        total_invoiced, invoice_state = order_model._magento_compute_invoice_summary(
-                            data, invoices
-                        )
-                        if invoice_state != "not_invoiced":
-                            values["magento_total_invoiced"] = total_invoiced
-                            values["magento_invoice_state"] = invoice_state
+        Searched with sudo so a salesman-restricted user cannot create a duplicate
+        of an order they are not allowed to see; the record is returned in the
+        caller's environment, so writing it still respects access rights.
+        """
+        self.ensure_one()
+        order_model = self.env["sale.order"]
+        orders = order_model.sudo().with_context(active_test=False)
+        order = orders.search([
+            ("magento_instance_id", "=", self.id),
+            ("magento_order_id", "=", str(magento_id)),
+        ], limit=1)
+        if not order:
+            # Orders imported before orders were bound to an instance.
+            order = orders.search([
+                ("magento_instance_id", "=", False),
+                ("magento_order_id", "=", str(magento_id)),
+            ], limit=1)
+        return order_model.browse(order.ids)
 
-                if order:
-                    # If the order is still assigned to the user who created it (typical for cron/admin
-                    # sync), clear it so Sales users can see it under Sale's personal record rule.
-                    if (
-                        order.user_id
-                        and order.create_uid
-                        and order.user_id.id == order.create_uid.id
-                    ):
-                        values.setdefault("user_id", False)
-                    order.write(values)
-                    order._magento_sync_order_lines(data)
-                    updated += 1
-                else:
-                    # Sale's default record rule for salesmen is:
-                    #   user_id = current user OR user_id is False
-                    # Sync jobs typically run under cron/admin; keep Magento orders
-                    # unassigned so Sales users can still see them in the UI.
-                    values.setdefault("user_id", False)
-                    order = order_model.create(values)
-                    order._magento_sync_order_lines(data)
-                    created += 1
-                if order.magento_invoice_state in ("partial", "invoiced"):
-                    try:
-                        order._magento_sync_invoices(api)
-                    except Exception as exc:
-                        _logger.warning(
-                            "Magento invoice sync failed for order %s: %s",
-                            order.name,
-                            exc,
-                        )
-                if order.magento_payment_state in ("partial", "paid"):
-                    try:
-                        order._magento_apply_payments_from_magento()
-                    except Exception as exc:
-                        _logger.warning(
-                            "Magento payment sync failed for order %s: %s",
-                            order.name,
-                            exc,
-                        )
-                try:
-                    order._magento_sync_credit_memos(api)
-                except Exception as exc:
-                    _logger.warning(
-                        "Magento credit memo sync failed for order %s: %s",
-                        order.name,
-                        exc,
-                    )
-                try:
-                    order._magento_sync_shipments(api)
-                except Exception as exc:
-                    _logger.warning(
-                        "Magento shipment sync failed for order %s: %s",
-                        order.name,
-                        exc,
-                    )
-                try:
-                    order._magento_push_shipments()
-                except Exception as exc:
-                    _logger.warning(
-                        "Magento shipment push failed for order %s: %s",
-                        order.name,
-                        exc,
-                    )
-            total_created += created
-            total_updated += updated
-        return {
-            "created": total_created,
-            "updated": total_updated,
-        }
+    def _sync_order_record(self, api, data, magento_id, order_box):
+        self.ensure_one()
+        order_model = self.env["sale.order"].with_context(skip_magento_sync=True)
+        order = self._find_magento_order(magento_id).with_context(skip_magento_sync=True)
+
+        values = order_model._magento_prepare_order_vals(data, self)
+        if values.get("magento_invoice_state") == "not_invoiced":
+            try:
+                invoices = api.get_invoices(order_id=magento_id)
+            except requests.exceptions.RequestException as exc:
+                _logger.warning(
+                    "Magento order %s (instance %s): invoice lookup failed: %s",
+                    magento_id, self.name, _short_reason(exc),
+                )
+                invoices = []
+            if invoices:
+                total_invoiced, invoice_state = order_model._magento_compute_invoice_summary(
+                    data, invoices
+                )
+                if invoice_state != "not_invoiced":
+                    values["magento_total_invoiced"] = total_invoiced
+                    values["magento_invoice_state"] = invoice_state
+
+        if order:
+            # If the order is still assigned to the user who created it (typical for cron/admin
+            # sync), clear it so Sales users can see it under Sale's personal record rule.
+            if order.user_id and order.create_uid and order.user_id.id == order.create_uid.id:
+                values.setdefault("user_id", False)
+            order.write(values)
+            order._magento_sync_order_lines(data)
+            outcome = "updated"
+        else:
+            # Sale's default record rule for salesmen is:
+            #   user_id = current user OR user_id is False
+            # Sync jobs typically run under cron/admin; keep Magento orders
+            # unassigned so Sales users can still see them in the UI.
+            values.setdefault("user_id", False)
+            order = order_model.create(values)
+            order._magento_sync_order_lines(data)
+            outcome = "created"
+        order_box.append(order)
+        return outcome
+
+    def _sync_order_followups(self, api, order, magento_id, stats):
+        """Invoices, payments, credit memos and shipments of one order.
+
+        Each step has its own savepoint: a failure is counted and logged but keeps
+        the order itself and the other steps.
+        """
+        self.ensure_one()
+        steps = []
+        if order.magento_invoice_state in ("partial", "invoiced"):
+            steps.append(("invoice sync", lambda: order._magento_sync_invoices(api)))
+        if order.magento_payment_state in ("partial", "paid"):
+            steps.append(("payment sync", lambda: order._magento_apply_payments_from_magento()))
+        steps.append(("credit memo sync", lambda: order._magento_sync_credit_memos(api)))
+        steps.append(("shipment sync", lambda: order._magento_sync_shipments(api)))
+        steps.append(("shipment push", lambda: order._magento_push_shipments()))
+        for label, step in steps:
+            try:
+                with self.env.cr.savepoint():
+                    step()
+            except Exception as exc:  # noqa: BLE001
+                stats.error("order", magento_id, exc, instance=self, step=label)
 
     def action_sync_orders(self):
         self.ensure_one()
         start_time = fields.Datetime.now()
         counts = self.sync_orders()
-        end_time = fields.Datetime.now()
-        total_records = counts.get("created", 0) + counts.get("updated", 0)
-        self.env["magento.sync.report"].create({
-            "instance_id": self.id,
-            "sync_type": "order",
-            "mode": "manual",
-            "source_action": "manual",
-            "total_records": total_records,
-            "success": total_records,
-            "errors": 0,
-            "start_time": start_time,
-            "end_time": end_time,
-            "orders_created": counts.get("created", 0),
-            "orders_updated": counts.get("updated", 0),
-        })
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Order sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
+        self._create_sync_report("order", counts, start_time, fields.Datetime.now())
+        return self._sync_notification("Order", counts)
 
     def sync_customers(self):
-        total_created = 0
-        total_updated = 0
-        customer_model = self.env["magento.customer"]
+        stats = _SyncStats("customer")
+        customer_model = self.env["magento.customer"].with_context(
+            skip_magento_sync=True, active_test=False
+        )
         for instance in self:
-            created = 0
-            updated = 0
             api = MagentoAPI(instance)
-            try:
-                customers = api.get_customers()
-            except requests.exceptions.RequestException as exc:
-                self._raise_magento_request_user_error(exc, instance)
-            for data in customers:
-                magento_id = str(data.get("id") or "")
-                email = data.get("email") or ""
-                customer = False
-                if magento_id:
-                    customer = customer_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("magento_id", "=", magento_id),
-                    ], limit=1)
-                if not customer and email:
-                    customer = customer_model.search([
-                        ("instance_id", "=", instance.id),
-                        ("email", "=", email),
-                    ], limit=1)
-                values = customer_model._extract_magento_values(data, instance.id)
-                if customer:
-                    customer.with_context(skip_magento_sync=True).write(values)
-                    updated += 1
-                else:
-                    customer_model.with_context(skip_magento_sync=True).create(values)
-                    created += 1
-            total_created += created
-            total_updated += updated
-        return {
-            "created": total_created,
-            "updated": total_updated,
-        }
+            customers = instance._fetch_list(stats, "customer", api.get_customers)
+            if customers is None:
+                continue
+            for index, data in enumerate(customers, start=1):
+                instance._sync_record(
+                    stats, "customer", data.get("id") or data.get("email"),
+                    lambda data=data: instance._sync_customer_record(customer_model, data),
+                )
+                if index % _SYNC_BATCH_SIZE == 0:
+                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+            instance._mark_synced()
+            instance._magento_commit_batch(0)
+        return stats.as_dict()
+
+    def _sync_customer_record(self, customer_model, data):
+        self.ensure_one()
+        magento_id = str(data.get("id") or "")
+        email = data.get("email") or ""
+        customer = customer_model.browse()
+        if magento_id:
+            customer = customer_model.search([
+                ("instance_id", "=", self.id),
+                ("magento_id", "=", magento_id),
+            ], limit=1)
+        if not customer and email:
+            customer = customer_model.search([
+                ("instance_id", "=", self.id),
+                ("email", "=", email),
+            ], limit=1)
+        values = customer_model._extract_magento_values(data, self.id)
+        if customer:
+            customer.write(values)
+            return "updated"
+        # List form: works whether or not magento.customer.create is model_create_multi.
+        customer_model.create([values])
+        return "created"
 
     def action_sync_customers(self):
         self.ensure_one()
         start_time = fields.Datetime.now()
         counts = self.sync_customers()
-        end_time = fields.Datetime.now()
-        total_records = counts.get("created", 0) + counts.get("updated", 0)
-        self.env["magento.sync.report"].create({
-            "instance_id": self.id,
-            "sync_type": "customer",
-            "mode": "manual",
-            "source_action": "manual",
-            "total_records": total_records,
-            "success": total_records,
-            "errors": 0,
-            "start_time": start_time,
-            "end_time": end_time,
-            "customers_created": counts.get("created", 0),
-            "customers_updated": counts.get("updated", 0),
-        })
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Customer sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
+        self._create_sync_report("customer", counts, start_time, fields.Datetime.now())
+        return self._sync_notification("Customer", counts)
 
     def sync_all_and_report(self):
         self.ensure_one()
         start_time = fields.Datetime.now()
-        cat_counts = self.sync_categories()
-        prod_counts = self.sync_products()
-        order_counts = self.sync_orders()
-        cust_counts = self.sync_customers()
-        end_time = fields.Datetime.now()
-        total_records = (
-            cat_counts.get("created", 0)
-            + cat_counts.get("updated", 0)
-            + prod_counts.get("created", 0)
-            + prod_counts.get("updated", 0)
-            + order_counts.get("created", 0)
-            + order_counts.get("updated", 0)
-            + cust_counts.get("created", 0)
-            + cust_counts.get("updated", 0)
+        per_type = {}
+        for sync_type, method_name in (
+            ("category", "sync_categories"),
+            ("product", "sync_products"),
+            ("order", "sync_orders"),
+            ("customer", "sync_customers"),
+        ):
+            per_type[sync_type] = self._run_isolated_step(sync_type, getattr(self, method_name)) or {}
+        total = _SyncStats("all")
+        for counts in per_type.values():
+            total.merge(counts)
+        totals = total.as_dict()
+        self._create_sync_report(
+            "all", totals, start_time, fields.Datetime.now(), per_type_counts=per_type,
         )
-        report_vals = {
-            "instance_id": self.id,
-            "sync_type": "all",
-            "mode": "cron" if self.env.context.get("magento_auto_sync_cron") else "manual",
-            "source_action": "cron" if self.env.context.get("magento_auto_sync_cron") else "manual",
-            "total_records": total_records,
-            "success": total_records,
-            "errors": 0,
-            "start_time": start_time,
-            "end_time": end_time,
-            "categories_created": cat_counts.get("created", 0),
-            "categories_updated": cat_counts.get("updated", 0),
-            "products_created": prod_counts.get("created", 0),
-            "products_updated": prod_counts.get("updated", 0),
-            "orders_created": order_counts.get("created", 0),
-            "orders_updated": order_counts.get("updated", 0),
-            "customers_created": cust_counts.get("created", 0),
-            "customers_updated": cust_counts.get("updated", 0),
-            "inventory_updated": prod_counts.get("inventory_updated", 0),
-        }
-        self.env["magento.sync.report"].create(report_vals)
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": "Magento Sync",
-                "message": f"Sync complete. Total: {total_records}",
-                "type": "success",
-                "sticky": False,
-            },
-        }
-
-    # =====================
-    # DASHBOARD DATA
-    # =====================
-    @api.model
-    def get_dashboard_data(self, instance_id=False, days=8):
-        try:
-            days = int(days or 8)
-        except (TypeError, ValueError):
-            days = 8
-        days = max(7, min(days, 90))
-
-        instance_model = self.env["magento.instance"].sudo()
-        instances = instance_model.search([("active", "=", True)], order="name asc")
-
-        selected_instance_id = False
-        if instance_id:
-            try:
-                selected_instance_id = int(instance_id)
-            except (TypeError, ValueError):
-                selected_instance_id = False
-        if selected_instance_id and not instances.filtered(lambda r: r.id == selected_instance_id):
-            selected_instance_id = False
-
-        order_model = self.env["sale.order"].sudo()
-        customer_model = self.env["magento.customer"].sudo()
-        product_model = self.env["magento.product.map"].sudo()
-        sync_model = self.env["magento.sync.report"].sudo()
-
-        order_domain = [("magento_order_id", "!=", False)]
-        customer_domain = []
-        product_domain = []
-        sync_domain = []
-        if selected_instance_id:
-            order_domain.append(("magento_instance_id", "=", selected_instance_id))
-            customer_domain.append(("instance_id", "=", selected_instance_id))
-            product_domain.append(("instance_id", "=", selected_instance_id))
-            sync_domain.append(("instance_id", "=", selected_instance_id))
-
-        today = fields.Date.context_today(self)
-        start_date = today - timedelta(days=days - 1)
-        prev_end_date = start_date - timedelta(days=1)
-        prev_start_date = prev_end_date - timedelta(days=days - 1)
-
-        def _dt(date_obj):
-            return datetime(date_obj.year, date_obj.month, date_obj.day)
-
-        current_start_dt = fields.Datetime.to_string(_dt(start_date))
-        current_end_dt = fields.Datetime.to_string(_dt(today + timedelta(days=1)))
-        prev_start_dt = fields.Datetime.to_string(_dt(prev_start_date))
-        prev_end_dt = fields.Datetime.to_string(_dt(start_date))
-
-        def _sum_amount(model, domain, field_name):
-            data = model.read_group(domain, [f"{field_name}:sum"], [])
-            if not data:
-                return 0.0
-            return float(data[0].get(f"{field_name}_sum") or 0.0)
-
-        def _pct_change(current, previous):
-            if previous:
-                return round(((current - previous) / previous) * 100.0, 2)
-            if current:
-                return 100.0
-            return 0.0
-
-        total_sales = _sum_amount(order_model, order_domain, "amount_total")
-        if not total_sales:
-            total_sales = _sum_amount(order_model, order_domain, "magento_total_invoiced")
-        if not total_sales:
-            total_sales = _sum_amount(order_model, order_domain, "magento_total_paid")
-
-        pending_domain = order_domain + [
-            ("state", "!=", "cancel"),
-            ("magento_status", "not in", ["closed", "canceled", "cancelled"]),
-        ]
-        pending_sales = _sum_amount(order_model, pending_domain, "amount_total")
-        if not pending_sales:
-            pending_sales = _sum_amount(order_model, pending_domain, "magento_total_invoiced")
-        if not pending_sales:
-            pending_sales = _sum_amount(order_model, pending_domain, "magento_total_paid")
-        total_orders = order_model.search_count(order_domain)
-        total_customers = customer_model.search_count(customer_domain)
-        total_products = product_model.search_count(product_domain)
-
-        current_order_domain = order_domain + [
-            ("date_order", ">=", current_start_dt),
-            ("date_order", "<", current_end_dt),
-        ]
-        prev_order_domain = order_domain + [
-            ("date_order", ">=", prev_start_dt),
-            ("date_order", "<", prev_end_dt),
-        ]
-        current_sales = _sum_amount(order_model, current_order_domain, "amount_total")
-        prev_sales = _sum_amount(order_model, prev_order_domain, "amount_total")
-        current_orders = order_model.search_count(current_order_domain)
-        prev_orders = order_model.search_count(prev_order_domain)
-
-        current_customer_domain = customer_domain + [
-            ("create_date", ">=", current_start_dt),
-            ("create_date", "<", current_end_dt),
-        ]
-        prev_customer_domain = customer_domain + [
-            ("create_date", ">=", prev_start_dt),
-            ("create_date", "<", prev_end_dt),
-        ]
-        current_customers = customer_model.search_count(current_customer_domain)
-        prev_customers = customer_model.search_count(prev_customer_domain)
-
-        current_product_domain = product_domain + [
-            ("create_date", ">=", current_start_dt),
-            ("create_date", "<", current_end_dt),
-        ]
-        prev_product_domain = product_domain + [
-            ("create_date", ">=", prev_start_dt),
-            ("create_date", "<", prev_end_dt),
-        ]
-        current_products = product_model.search_count(current_product_domain)
-        prev_products = product_model.search_count(prev_product_domain)
-
-        grouped = order_model.read_group(
-            current_order_domain,
-            ["amount_total:sum"],
-            ["date_order:day"],
-            lazy=False,
-            orderby="date_order:day asc",
-        )
-
-        def _parse_group_day(row):
-            range_data = row.get("__range") or {}
-            if isinstance(range_data, dict):
-                for range_key in ("date_order:day", "date_order"):
-                    date_range = range_data.get(range_key) or {}
-                    date_from = date_range.get("from") if isinstance(date_range, dict) else False
-                    if not date_from:
-                        continue
-                    try:
-                        dt_value = fields.Datetime.to_datetime(date_from)
-                        if dt_value:
-                            return dt_value.date()
-                    except Exception:
-                        pass
-                    try:
-                        day_value = fields.Date.to_date(str(date_from)[:10])
-                        if day_value:
-                            return day_value
-                    except Exception:
-                        pass
-
-            grouped_key = row.get("date_order:day") or row.get("date_order")
-            if not grouped_key:
-                return False
-            if isinstance(grouped_key, datetime):
-                return grouped_key.date()
-            if hasattr(grouped_key, "year") and hasattr(grouped_key, "month") and hasattr(grouped_key, "day"):
-                return grouped_key
-
-            grouped_value = str(grouped_key).strip()
-            if not grouped_value:
-                return False
-
-            for parser in (fields.Datetime.to_datetime, fields.Date.to_date):
-                try:
-                    parsed = parser(grouped_value)
-                except Exception:
-                    parsed = False
-                if not parsed:
-                    continue
-                if isinstance(parsed, datetime):
-                    return parsed.date()
-                return parsed
-
-            try:
-                parsed = fields.Date.to_date(grouped_value[:10])
-                if parsed:
-                    return parsed
-            except Exception:
-                pass
-
-            for date_format in ("%d %b %Y", "%d %B %Y", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y"):
-                try:
-                    return datetime.strptime(grouped_value, date_format).date()
-                except Exception:
-                    continue
-
-            _logger.warning("Unable to parse grouped date key for Magento dashboard: %s", grouped_value)
-            return False
-
-        grouped_map = {}
-        for row in grouped:
-            day = _parse_group_day(row)
-            if not day:
-                continue
-            grouped_map[day] = {
-                "sales": float(row.get("amount_total_sum") or 0.0),
-                "orders": int(row.get("__count") or 0),
-            }
-
-        sales_series = []
-        current = start_date
-        while current <= today:
-            day_data = grouped_map.get(current, {"sales": 0.0, "orders": 0})
-            sales_series.append(
-                {
-                    "date": fields.Date.to_string(current),
-                    "sales": round(day_data["sales"], 2),
-                    "orders": day_data["orders"],
-                }
-            )
-            current += timedelta(days=1)
-
-        status_groups = order_model.read_group(
-            order_domain,
-            [],
-            ["magento_status"],
-            lazy=False,
-        )
-        status_rows = []
-        status_total = 0
-        for row in status_groups:
-            count = int(row.get("__count") or 0)
-            if not count:
-                continue
-            status_total += count
-            status_rows.append(
-                {
-                    "label": row.get("magento_status") or "unknown",
-                    "count": count,
-                }
-            )
-        status_rows.sort(key=lambda item: item["count"], reverse=True)
-        status_rows = status_rows[:6]
-        for item in status_rows:
-            item["share"] = round((item["count"] * 100.0 / status_total), 2) if status_total else 0.0
-
-        category_sql = """
-            SELECT c.name, COUNT(rel.product_id) AS product_count
-              FROM magento_category c
-              JOIN magento_product_category_rel rel ON rel.category_id = c.id
-              JOIN magento_product_map p ON p.id = rel.product_id
-             {where_clause}
-             GROUP BY c.id, c.name
-             ORDER BY product_count DESC, c.name ASC
-             LIMIT 5
-        """
-        where_clause = ""
-        params = []
-        if selected_instance_id:
-            where_clause = "WHERE p.instance_id = %s"
-            params.append(selected_instance_id)
-        self.env.cr.execute(category_sql.format(where_clause=where_clause), params)
-        top_categories = []
-        for name, count in self.env.cr.fetchall():
-            top_categories.append(
-                {
-                    "name": name or "Uncategorized",
-                    "value": int(count or 0),
-                }
-            )
-        categories_total = sum(item["value"] for item in top_categories)
-        for item in top_categories:
-            item["share"] = round((item["value"] * 100.0 / categories_total), 2) if categories_total else 0.0
-
-        country_groups = customer_model.read_group(
-            customer_domain + [("country_id", "!=", False)],
-            ["country_id"],
-            ["country_id"],
-            lazy=False,
-        )
-        country_rows = []
-        for row in country_groups:
-            count = int(row.get("country_id_count") or 0)
-            if not count:
-                continue
-            country = row.get("country_id")
-            country_rows.append(
-                {
-                    "name": country[1] if country else "Unknown",
-                    "count": count,
-                    "share": round((count * 100.0 / total_customers), 2) if total_customers else 0.0,
-                }
-            )
-        country_rows.sort(key=lambda item: item["count"], reverse=True)
-        country_rows = country_rows[:6]
-
-        delivered_orders = order_model.search_count(
-            order_domain + [("delivery_status", "=", "full")]
-        )
-        not_delivered_orders = order_model.search_count(
-            order_domain + [("delivery_status", "!=", "full")]
-        )
-        avg_order_value = round(total_sales / total_orders, 2) if total_orders else 0.0
-        delivered_rate = round((delivered_orders * 100.0 / total_orders), 2) if total_orders else 0.0
-
-        month_start = today.replace(day=1)
-        prev_month_end = month_start - timedelta(days=1)
-        prev_month_start = prev_month_end.replace(day=1)
-        month_start_dt = fields.Datetime.to_string(_dt(month_start))
-        month_end_dt = fields.Datetime.to_string(_dt(today + timedelta(days=1)))
-        prev_month_start_dt = fields.Datetime.to_string(_dt(prev_month_start))
-        prev_month_end_dt = fields.Datetime.to_string(_dt(month_start))
-
-        month_sales = _sum_amount(
-            order_model,
-            order_domain + [("date_order", ">=", month_start_dt), ("date_order", "<", month_end_dt)],
-            "amount_total",
-        )
-        prev_month_sales = _sum_amount(
-            order_model,
-            order_domain + [("date_order", ">=", prev_month_start_dt), ("date_order", "<", prev_month_end_dt)],
-            "amount_total",
-        )
-        if prev_month_sales > 0:
-            target_sales = prev_month_sales
-        elif month_sales > 0:
-            target_sales = month_sales * 1.15
-        else:
-            target_sales = 1.0
-        target_progress = round(min(100.0, (month_sales * 100.0 / target_sales)), 2) if target_sales else 0.0
-
-        manual_syncs = sync_model.search_count(sync_domain + [("mode", "=", "manual")])
-        cron_syncs = sync_model.search_count(sync_domain + [("mode", "=", "cron")])
-        sync_errors = _sum_amount(sync_model, sync_domain, "errors")
-        sync_success = _sum_amount(sync_model, sync_domain, "success")
-        last_sync = sync_model.search(sync_domain, limit=1, order="synced_at desc, id desc")
-
-        currency = self.env.company.currency_id.name or "USD"
-        return {
-            "instances": [{"id": rec.id, "name": rec.name} for rec in instances],
-            "selected_instance_id": selected_instance_id or False,
-            "period_days": days,
-            "generated_at": fields.Datetime.to_string(fields.Datetime.now()),
-            "currency": currency,
-            "kpis": {
-                "total_sales": round(total_sales, 2),
-                "pending_amount": round(pending_sales, 2),
-                "total_orders": total_orders,
-                "total_customers": total_customers,
-                "total_products": total_products,
-                "delivered_orders": delivered_orders,
-                "not_delivered_orders": not_delivered_orders,
-                "avg_order_value": avg_order_value,
-                "delivered_rate": delivered_rate,
-                "sales_change": _pct_change(current_sales, prev_sales),
-                "orders_change": _pct_change(current_orders, prev_orders),
-                "customers_change": _pct_change(current_customers, prev_customers),
-                "products_change": _pct_change(current_products, prev_products),
-            },
-            "sales_series": sales_series,
-            "monthly_target": {
-                "current": round(month_sales, 2),
-                "target": round(target_sales, 2),
-                "progress": target_progress,
-                "delta": _pct_change(month_sales, prev_month_sales),
-            },
-            "top_categories": top_categories,
-            "top_countries": country_rows,
-            "order_status": status_rows,
-            "sync_health": {
-                "manual_runs": manual_syncs,
-                "cron_runs": cron_syncs,
-                "success_records": int(sync_success),
-                "error_records": int(sync_errors),
-                "last_sync_at": fields.Datetime.to_string(last_sync.synced_at) if last_sync else False,
-            },
-        }
+        return self._sync_notification("Full", totals)
 
     # =====================
     # TEST CONNECTION
@@ -1657,27 +1393,32 @@ class MagentoInstance(models.Model):
     def action_test_connection(self):
         self.ensure_one()
         base_url = self._normalize_base_url(self.base_url)
-        access_token = (self.access_token or "").strip()
-        if not access_token:
+        # The token is manager-only; read it (and only it) with sudo.
+        if not (self.sudo().access_token or "").strip():
             raise UserError("Magento access token is missing on this instance.")
-
-        updates = {}
         if base_url != (self.base_url or ""):
-            updates["base_url"] = base_url
-        if access_token != (self.access_token or ""):
-            updates["access_token"] = access_token
-        if updates:
-            self.write(updates)
-
-        api = MagentoAPI(self)
+            self.write({"base_url": base_url})
 
         try:
-            api.get_websites()  # light endpoint
-        except requests.exceptions.RequestException as exc:
-            self._raise_magento_request_user_error(exc, self)
-        except Exception as exc:
-            raise UserError(f"Connection failed: {exc}") from exc
+            MagentoAPI(self).get_websites()  # light endpoint
+        except Exception as exc:  # noqa: BLE001
+            message = self._format_magento_request_error(exc, self)
+            self.sudo().write({"state": "error", "last_connection_message": message[:1000]})
+            _logger.warning("Magento connection test failed for instance %s: %s", self.name, _short_reason(exc))
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": "Magento Connection",
+                    "message": message,
+                    "type": "danger",
+                    "sticky": True,
+                    "next": {"type": "ir.actions.client", "tag": "soft_reload"},
+                },
+            }
 
+        message = "Connection successful (%s)." % fields.Datetime.to_string(fields.Datetime.now())
+        self.sudo().write({"state": "connected", "last_connection_message": message})
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
@@ -1686,5 +1427,6 @@ class MagentoInstance(models.Model):
                 "message": "Connection successful.",
                 "type": "success",
                 "sticky": False,
+                "next": {"type": "ir.actions.client", "tag": "soft_reload"},
             },
         }
