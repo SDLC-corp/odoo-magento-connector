@@ -169,6 +169,10 @@ class TestDashboard(MagentoTestCommon):
                         if can_open(user, xml_id)}
             self.assertEqual(xml_ids(user), expected)
         if self.env.ref(ORDERS_ACTION, raise_if_not_found=False):
-            self.assertNotIn(ORDERS_ACTION, xml_ids(self.magento_only_user),
+            # Magento User implies Sales rights (its syncs create orders), so the
+            # negative case is an internal user outside the Magento groups.
+            plain_user = self.create_user("mg_plain_d1", "base.group_user", company=self.company_a)
+            self.assertNotIn(ORDERS_ACTION, xml_ids(plain_user),
                              "A user who can't read orders must not get the Orders link")
+            self.assertIn(ORDERS_ACTION, xml_ids(self.magento_only_user))
             self.assertIn(ORDERS_ACTION, xml_ids(self.sales_user_a))
