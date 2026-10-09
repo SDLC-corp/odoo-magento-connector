@@ -8,3 +8,4 @@ from . import stock_picking_inherit
 from . import magento_customer
 from . import magento_field_mapping
 from . import magento_sync_report
+from . import magento_dashboard
