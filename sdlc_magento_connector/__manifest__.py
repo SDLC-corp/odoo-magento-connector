@@ -1,6 +1,6 @@
 {
     'name': 'SDLC Magento 2 Connector',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.1.0',
     'category': 'Connector',
     'summary': 'Magento 2 Connector for Odoo',
     'author': 'SDLC Corp',
