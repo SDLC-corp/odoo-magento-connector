@@ -1,5 +1,6 @@
 import calendar
 import logging
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 
 import pytz
@@ -7,6 +8,7 @@ import requests
 from requests.compat import urlparse, urlunparse
 
 from odoo import api, models, fields
+from odoo.modules import module as odoo_module
 from odoo.addons.base.models.res_partner import _tz_get
 from odoo.exceptions import ValidationError, UserError
 from ..services.magento_api import MagentoAPI
@@ -16,6 +18,8 @@ _logger = logging.getLogger(__name__)
 
 # Records processed between two commits when a sync runs from cron.
 _SYNC_BATCH_SIZE = 50
+# Magento product types the product import supports.
+_IMPORTABLE_PRODUCT_TYPES = frozenset({"simple", "virtual", "downloadable"})
 # Error/skip lines kept in a sync report's notes.
 _MAX_NOTE_LINES = 50
 
@@ -667,47 +671,64 @@ class MagentoInstance(models.Model):
     def _is_magento_cron(self):
         return bool(self.env.context.get("magento_cron"))
 
+    def _magento_can_commit(self):
+        """Commit only inside a real ``ir.cron`` job (its progress record is in the
+        context), never for manual/server-action calls of the cron entrypoints, never
+        in interactive runs and never under tests."""
+        in_test_mode = getattr(self.env.registry, "in_test_mode", None)
+        return bool(
+            self._is_magento_cron()
+            and self.env.context.get("ir_cron_progress_id")
+            and self.env.context.get("cron_id")
+            and not odoo_module.current_test
+            and not (in_test_mode() if callable(in_test_mode) else False)
+        )
+
     def _magento_commit_batch(self, processed):
-        """Commit progress during cron runs only. Interactive runs never commit."""
-        if not self._is_magento_cron():
-            return
-        self.env["ir.cron"]._commit_progress(processed)
+        """Commit progress during real cron runs only. Interactive runs never commit."""
+        if self._magento_can_commit():
+            self.env["ir.cron"]._commit_progress(processed)
+
+    def _magento_isolation(self):
+        """Savepoint isolating a whole step/instance.
+
+        When batches are committed (real cron) a savepoint cannot span the commits;
+        records are then isolated by their own savepoints and everything before the
+        failure is already committed, so no rollback is needed (or done).
+        """
+        if self._magento_can_commit():
+            return nullcontext()
+        return self.env.cr.savepoint()
 
     def _run_isolated_step(self, label, func):
-        """Run a whole sync step; an unexpected crash must not stop the other steps.
-
-        Interactive runs use a savepoint (no commit happens inside). Cron runs commit
-        batches inside the step, so a savepoint cannot span it: roll back the
-        uncommitted part instead.
-        """
+        """Run a whole sync step; an unexpected crash must not stop the other steps."""
         self.ensure_one()
         try:
-            if self._is_magento_cron():
-                return func()
-            with self.env.cr.savepoint():
+            with self._magento_isolation():
                 return func()
         except Exception as exc:  # noqa: BLE001
-            if self._is_magento_cron():
-                self.env.cr.rollback()
             _logger.warning(
                 "Magento %s sync aborted for instance %s: %s",
                 label, self.name, _short_reason(exc), exc_info=_logger.isEnabledFor(logging.DEBUG),
             )
             return {"errors": 1, "error_messages": ["%s sync aborted: %s" % (label, _short_reason(exc))]}
 
-    def cron_run_auto_sync(self):
-        """Per-instance scheduled run (code of the cron built by ``_apply_auto_sync_cron``)."""
+    def _run_scheduled_sync(self, source_action):
         for instance in self.with_context(magento_cron=True):
             if not instance.active:
                 continue
             try:
-                instance._sync_selected_auto_and_report(source_action="cron_auto_scope")
+                with instance._magento_isolation():
+                    instance._sync_selected_auto_and_report(source_action=source_action)
             except Exception:  # noqa: BLE001
-                self.env.cr.rollback()
-                _logger.exception("Magento auto sync failed for instance %s", instance.name)
+                _logger.exception("Magento scheduled sync failed for instance %s", instance.name)
             else:
                 instance._magento_commit_batch(0)
         return True
+
+    def cron_run_auto_sync(self):
+        """Per-instance scheduled run (code of the cron built by ``_apply_auto_sync_cron``)."""
+        return self._run_scheduled_sync("cron_auto_scope")
 
     @api.model
     def _cron_sync_all(self):
@@ -719,15 +740,7 @@ class MagentoInstance(models.Model):
         auto-sync options.
         """
         instances = self.search([("active", "=", True), ("auto_sync_enabled", "=", False)])
-        for instance in instances.with_context(magento_cron=True):
-            try:
-                instance._sync_selected_auto_and_report(source_action="cron_sync_all")
-            except Exception:  # noqa: BLE001
-                self.env.cr.rollback()
-                _logger.exception("Magento scheduled sync failed for instance %s", instance.name)
-            else:
-                instance._magento_commit_batch(0)
-        return True
+        return instances._run_scheduled_sync("cron_sync_all")
 
     def _get_auto_sync_scope(self):
         self.ensure_one()
@@ -1085,8 +1098,10 @@ class MagentoInstance(models.Model):
 
     @api.model
     def _supported_product_types(self):
+        """Magento product types the importer handles. Configurable, bundle and grouped
+        exist in the selection (for display/export) but are not imported yet (Phase 2)."""
         field = self.env["magento.product.map"]._fields["type_id"]
-        return {value for value in field.get_values(self.env) if value}
+        return _IMPORTABLE_PRODUCT_TYPES & set(field.get_values(self.env))
 
     def sync_products(self):
         stats = _SyncStats("product")
@@ -1222,34 +1237,16 @@ class MagentoInstance(models.Model):
             instance._magento_commit_batch(0)
         return stats.as_dict()
 
-    def _find_magento_order(self, magento_id):
-        """Existing Odoo order for this instance's Magento order id.
-
-        Searched with sudo so a salesman-restricted user cannot create a duplicate
-        of an order they are not allowed to see; the record is returned in the
-        caller's environment, so writing it still respects access rights.
-        """
-        self.ensure_one()
-        order_model = self.env["sale.order"]
-        orders = order_model.sudo().with_context(active_test=False)
-        order = orders.search([
-            ("magento_instance_id", "=", self.id),
-            ("magento_order_id", "=", str(magento_id)),
-        ], limit=1)
-        if not order:
-            # Orders imported before orders were bound to an instance.
-            order = orders.search([
-                ("magento_instance_id", "=", False),
-                ("magento_order_id", "=", str(magento_id)),
-            ], limit=1)
-        return order_model.browse(order.ids)
-
     def _sync_order_record(self, api, data, magento_id, order_box):
         self.ensure_one()
         order_model = self.env["sale.order"].with_context(skip_magento_sync=True)
-        order = self._find_magento_order(magento_id).with_context(skip_magento_sync=True)
+        # Instance-scoped lookup (Agent B's helper), done with sudo so a salesman-restricted
+        # user cannot create a duplicate of an order they may not see; the order is then
+        # used in the caller's environment, so writing it still respects access rights.
+        found = order_model.sudo()._magento_find_order(self, magento_id)
+        order = order_model.browse(found.ids)
 
-        values = order_model._magento_prepare_order_vals(data, self)
+        values = order_model._magento_prepare_order_vals(data, self, order=order)
         if values.get("magento_invoice_state") == "not_invoiced":
             try:
                 invoices = api.get_invoices(order_id=magento_id)
@@ -1288,10 +1285,11 @@ class MagentoInstance(models.Model):
         return outcome
 
     def _sync_order_followups(self, api, order, magento_id, stats):
-        """Invoices, payments, credit memos and shipments of one order.
+        """Invoices, payments, credit memos, shipment import and shipment push of one order.
 
-        Each step has its own savepoint: a failure is counted and logged but keeps
-        the order itself and the other steps.
+        Run after the order's own savepoint. The helpers raise on real failure; each step
+        has its own savepoint, so a failure (e.g. Magento rejecting a shipment) is counted
+        and logged but keeps the imported order and the other steps.
         """
         self.ensure_one()
         steps = []
