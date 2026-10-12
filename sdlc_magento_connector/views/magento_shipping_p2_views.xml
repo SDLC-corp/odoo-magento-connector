@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Roadmap 2.7: shipments with tracking, cancel / hold / release hold. -->
+<odoo>
+    <!-- Sale order form: hold buttons, on-hold badge, Magento-only cancellation -->
+    <record id="sale_order_form_magento_lifecycle_p2" model="ir.ui.view">
+        <field name="name">sale.order.form.magento.lifecycle.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_order_form_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/header" position="inside">
+                <field name="magento_on_hold" invisible="1"/>
+                <field name="magento_cancel_conflict" invisible="1"/>
+                <button name="action_magento_hold"
+                        type="object"
+                        string="Hold in Magento"
+                        class="btn-secondary"
+                        groups="sdlc_magento_connector.group_magento_user"
+                        confirm="Put this order on hold in Magento?"
+                        invisible="not magento_order_id or magento_on_hold or state == 'cancel' or magento_state in ('complete', 'closed', 'canceled', 'payment_review')"/>
+                <button name="action_magento_unhold"
+                        type="object"
+                        string="Release Hold"
+                        class="btn-secondary"
+                        groups="sdlc_magento_connector.group_magento_user"
+                        invisible="not magento_order_id or not magento_on_hold"/>
+            </xpath>
+            <xpath expr="//form/sheet/div[hasclass('oe_title')]" position="before">
+                <div class="alert alert-warning" role="status" invisible="not magento_on_hold">
+                    <span class="badge rounded-pill text-bg-warning me-2">On hold in Magento</span>
+                    Magento will not invoice or ship this order until the hold is released.
+                </div>
+                <div class="alert alert-danger" role="alert" invisible="not magento_cancel_conflict">
+                    <strong>Cancelled in Magento only.</strong>
+                    Magento cancelled this order, but it already has a posted invoice or a done
+                    delivery in Odoo, so it was left open. Issue a credit note or a return, then
+                    cancel it here. The details are in the chatter.
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Magento orders list: on-hold badge -->
+    <record id="view_sale_order_tree_magento_only_lifecycle_p2" model="ir.ui.view">
+        <field name="name">sale.order.tree.magento.only.lifecycle.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="view_sale_order_tree_magento_only"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='magento_status']" position="after">
+                <field name="magento_on_hold" string="Hold" widget="boolean_toggle" readonly="1"
+                       optional="hide"/>
+                <field name="magento_cancel_conflict" string="Cancelled in Magento only"
+                       widget="boolean" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Magento orders search: on hold / cancelled in Magento only -->
+    <record id="view_sale_order_search_magento_lifecycle_p2" model="ir.ui.view">
+        <field name="name">sale.order.search.magento.lifecycle.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="view_sale_order_search_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='magento_not_invoiced']" position="after">
+                <separator/>
+                <filter name="magento_on_hold" string="On hold in Magento"
+                        domain="[('magento_on_hold', '=', True)]"/>
+                <filter name="magento_cancel_conflict" string="Cancelled in Magento only"
+                        domain="[('magento_cancel_conflict', '=', True)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Delivery form: tracking numbers, MSI source, tracking push -->
+    <record id="view_stock_picking_form_magento_tracking_p2" model="ir.ui.view">
+        <field name="name">stock.picking.form.magento.tracking.p2</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="view_stock_picking_form_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_push_shipment_to_magento']" position="after">
+                <button name="action_push_magento_tracking"
+                        type="object"
+                        string="Push Tracking to Magento"
+                        class="btn-secondary"
+                        groups="stock.group_stock_user"
+                        invisible="not magento_shipment_id"/>
+            </xpath>
+            <xpath expr="//field[@name='magento_shipment_id']" position="after">
+                <field name="magento_tracking_ref" placeholder="e.g. 1Z999AA10123456784"/>
+                <field name="magento_source_code" invisible="not magento_source_code"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Magento shipments list: tracking and source columns -->
+    <record id="view_magento_shipment_list_tracking_p2" model="ir.ui.view">
+        <field name="name">magento.shipment.list.tracking.p2</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="view_magento_shipment_list"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='magento_total_qty']" position="before">
+                <field name="magento_shipment_increment_id" string="Magento Shipment #" optional="show"/>
+                <field name="magento_tracking_ref" string="Tracking" optional="show"/>
+                <field name="magento_source_code" string="Source" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
