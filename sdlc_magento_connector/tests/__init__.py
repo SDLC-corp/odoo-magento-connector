@@ -5,3 +5,4 @@ from . import test_push_decoupling
 from . import test_constraints
 from . import test_security_dashboard
 from . import test_idempotent_documents
+from . import test_incremental_sync

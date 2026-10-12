@@ -1,12 +1,16 @@
+import http.client
 import logging
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from itertools import islice
 
 import requests
 from requests.compat import urlparse, urlunparse
 from requests.utils import quote
+from urllib3 import exceptions as urllib3_exceptions
 
 _logger = logging.getLogger(__name__)
 
@@ -167,6 +171,39 @@ class MagentoAPI:
                     pass
         return max(0.0, min(delay, self.MAX_BACKOFF))
 
+    @staticmethod
+    def _connection_never_established(exc):
+        """True only when ``exc`` proves the request never reached Magento.
+
+        That is a connect timeout, or a failure to open the connection (urllib3
+        ``NewConnectionError``, which covers refused connections and, as
+        ``NameResolutionError``, DNS failures), possibly wrapped in ``MaxRetryError``.
+        Anything else (``ProtocolError`` "Connection aborted", ``RemoteDisconnected``,
+        read timeouts, unknown errors) may come after the request was sent, so it
+        is treated as unsafe to repeat for a non-idempotent call.
+        """
+        if isinstance(exc, requests.exceptions.ConnectTimeout):
+            return True
+        if isinstance(exc, requests.exceptions.Timeout):
+            return False
+        seen = set()
+        pending = [exc]
+        while pending:
+            err = pending.pop()
+            if err is None or id(err) in seen:
+                continue
+            seen.add(id(err))
+            if isinstance(err, (urllib3_exceptions.ProtocolError, http.client.RemoteDisconnected,
+                                urllib3_exceptions.ReadTimeoutError)):
+                return False
+            if isinstance(err, (urllib3_exceptions.NewConnectionError, socket.gaierror, ConnectionRefusedError)):
+                return True
+            pending.append(getattr(err, "reason", None))
+            pending.append(err.__cause__)
+            pending.append(err.__context__)
+            pending.extend(arg for arg in getattr(err, "args", ()) if isinstance(arg, BaseException))
+        return False
+
     def _sleep(self, seconds):
         if seconds > 0:
             time.sleep(seconds)
@@ -205,10 +242,10 @@ class MagentoAPI:
                     if base_url == self.base_url and primary_exc is None:
                         primary_exc = exc
                     last_exc = exc
-                    # A POST that timed out after connecting may have been applied by Magento.
-                    if idempotent or isinstance(exc, requests.exceptions.ConnectTimeout) or not isinstance(
-                        exc, requests.exceptions.Timeout
-                    ):
+                    # A POST that failed after the request was sent (read timeout,
+                    # "Connection aborted", RemoteDisconnected...) may have been applied by
+                    # Magento: retrying it could create a duplicate invoice/shipment/order.
+                    if idempotent or self._connection_never_established(exc):
                         retryable = True
                     continue
 
@@ -367,6 +404,158 @@ class MagentoAPI:
             raise last_exc
         raise requests.exceptions.HTTPError("Magento request failed without HTTP response.")
 
+    # ------------------------------------------------------------------
+    # Paginated searchCriteria
+    # ------------------------------------------------------------------
+    MAX_PAGE_SIZE = 300  # Magento rejects searchCriteria[pageSize] > 300
+    DEFAULT_PAGE_SIZE = 100
+    DEFAULT_SORT = (("updated_at", "ASC"), ("entity_id", "ASC"))
+    # Key of the record id in each search *result* (used to detect a repeated
+    # page). Sorting uses the collection column ``entity_id`` for orders,
+    # products and customers alike (an EAV product collection has no ``id``
+    # column), but product and customer results expose it as ``id``.
+    ID_KEYS = {
+        "order": "entity_id",
+        "product": "id",
+        "customer": "id",
+        "invoice": "entity_id",
+        "creditmemo": "entity_id",
+        "shipment": "entity_id",
+        "attribute_set": "attribute_set_id",
+    }
+    # Defensive hard stop against a server that never ends a listing.
+    MAX_PAGES = 100000
+
+    @classmethod
+    def clamp_page_size(cls, page_size):
+        """Page size within [1, 300] (Magento's maximum searchCriteria pageSize)."""
+        try:
+            page_size = int(page_size or cls.DEFAULT_PAGE_SIZE)
+        except (TypeError, ValueError):
+            page_size = cls.DEFAULT_PAGE_SIZE
+        return max(1, min(cls.MAX_PAGE_SIZE, page_size))
+
+    @staticmethod
+    def build_search_params(filters=None, sort=None, page_size=None, current_page=None, fields=None):
+        """Flatten a search into Magento ``searchCriteria`` query parameters.
+
+        ``filters`` is a list of filter groups: groups are ANDed, the filters of
+        one group are ORed. A group is one ``(field, value[, condition])`` tuple
+        or a list of them. ``sort`` is a sequence of ``(field, "ASC"|"DESC")``.
+        """
+        params = {}
+        for g_idx, group in enumerate(filters or ()):
+            if group and isinstance(group[0], str):
+                group = [group]
+            for f_idx, flt in enumerate(group):
+                condition = flt[2] if len(flt) > 2 and flt[2] else "eq"
+                prefix = "searchCriteria[filter_groups][%d][filters][%d]" % (g_idx, f_idx)
+                params[prefix + "[field]"] = flt[0]
+                params[prefix + "[value]"] = "" if flt[1] is None else str(flt[1])
+                params[prefix + "[condition_type]"] = condition
+        for s_idx, (field, direction) in enumerate(sort or ()):
+            params["searchCriteria[sortOrders][%d][field]" % s_idx] = field
+            params["searchCriteria[sortOrders][%d][direction]" % s_idx] = (direction or "ASC").upper()
+        if page_size is not None:
+            params["searchCriteria[pageSize]"] = int(page_size)
+        if current_page is not None:
+            params["searchCriteria[currentPage]"] = int(current_page)
+        if fields:
+            params["fields"] = fields
+        if not params:
+            params["searchCriteria"] = ""
+        return params
+
+    def iter_search(self, endpoint, *, filters=None, sort=DEFAULT_SORT, page_size=DEFAULT_PAGE_SIZE,
+                    fields=None, id_key="entity_id", stats=None, include_all_scope=True):
+        """Yield every item of a Magento search endpoint, fetching page by page.
+
+        ``endpoint`` is a path (``/rest/V1/orders``) or a callable ``prefix -> path``
+        (store-code prefix fallback, as the product endpoints use).
+
+        Stops on an empty page, a short page, once ``total_count`` items were
+        yielded, or when Magento echoes a page already seen: for a ``currentPage``
+        past the end Magento returns the last page again, so a page whose ids
+        (``id_key``) were all yielded already ends the listing. An item is never
+        yielded twice. ``stats`` (a dict), when given, receives ``pages``,
+        ``items`` and ``total_count``.
+        """
+        page_size = self.clamp_page_size(page_size)
+        if stats is None:
+            stats = {}
+        stats.setdefault("pages", 0)
+        stats.setdefault("items", 0)
+        stats.setdefault("total_count", None)
+        seen = set()
+        yielded = 0
+        current_page = 1
+        while current_page <= self.MAX_PAGES:
+            params = self.build_search_params(
+                filters=filters, sort=sort, page_size=page_size, current_page=current_page, fields=fields,
+            )
+            if callable(endpoint):
+                response = self._request_with_prefix_fallback(
+                    "get", endpoint, include_all_scope=include_all_scope, params=params,
+                )
+            else:
+                response = self._get(endpoint, params=params)
+            if isinstance(response, list):
+                items = response
+            elif isinstance(response, dict):
+                items = response.get("items") or []
+                try:
+                    if response.get("total_count") is not None:
+                        stats["total_count"] = int(response["total_count"])
+                except (TypeError, ValueError):
+                    pass
+            else:
+                items = []
+            stats["pages"] += 1
+            if not items:
+                break
+            fresh = []
+            for item in items:
+                key = item.get(id_key) if isinstance(item, dict) else None
+                key = repr(item) if key is None else str(key)
+                if key in seen:
+                    continue
+                seen.add(key)
+                fresh.append(item)
+            if not fresh:
+                break  # Magento echoed the last page for a page past the end.
+            for item in fresh:
+                yielded += 1
+                stats["items"] = yielded
+                yield item
+            if stats["total_count"] is not None and yielded >= stats["total_count"]:
+                break
+            if len(items) < page_size:
+                break
+            current_page += 1
+
+    def _search_list(self, endpoint, *, updated_from=None, filters=None, page_size=None, lazy=False,
+                     stats=None, limit=None, sort=DEFAULT_SORT, id_key="entity_id"):
+        """Shared body of the ``get_<entity>s`` list getters.
+
+        ``updated_from`` (naive UTC datetime or ``YYYY-MM-DD HH:MM:SS``) adds an
+        ``updated_at gteq`` filter. ``lazy=True`` returns a generator (pages are
+        fetched while it is consumed), otherwise a list. ``limit`` caps the items.
+        """
+        filters = list(filters or ())
+        if updated_from:
+            if isinstance(updated_from, datetime):
+                updated_from = updated_from.strftime("%Y-%m-%d %H:%M:%S")
+            filters.append(("updated_at", str(updated_from), "gteq"))
+        page_size = self.clamp_page_size(page_size)
+        if limit:
+            page_size = min(page_size, max(1, int(limit)))
+        iterator = self.iter_search(
+            endpoint, filters=filters, sort=sort, page_size=page_size, id_key=id_key, stats=stats,
+        )
+        if limit:
+            iterator = islice(iterator, max(1, int(limit)))
+        return iterator if lazy else list(iterator)
+
     def add_order_comment(self, order_id, comment="", status=None, notify=False):
         """Add a status-history comment to a Magento order (optionally changing its status).
 
@@ -393,16 +582,14 @@ class MagentoAPI:
     def get_websites(self):
         return self._get("/rest/V1/store/websites")
 
-    def get_products(self):
-        response = self._request_with_prefix_fallback(
-            "get",
+    def get_products(self, updated_from=None, *, page_size=None, lazy=False, stats=None, limit=None,
+                     filters=None):
+        """Products (search result rows), paged; see ``_search_list``."""
+        return self._search_list(
             lambda prefix: f"{prefix}/products",
-            include_all_scope=True,
-            params={"searchCriteria": ""},
+            updated_from=updated_from, filters=filters, page_size=page_size, lazy=lazy,
+            stats=stats, limit=limit, id_key=self.ID_KEYS["product"],
         )
-        if isinstance(response, dict):
-            return response.get("items", [])
-        return []
 
     def _search_products(self, params):
         response = self._request_with_prefix_fallback(
@@ -439,11 +626,13 @@ class MagentoAPI:
                 return items[0]
         return {}
 
-    def get_attribute_sets(self):
-        return self._get(
+    def get_attribute_sets(self, *, page_size=None):
+        return self._search_list(
             "/rest/V1/products/attribute-sets/sets/list",
-            params={"searchCriteria": ""},
-        ).get("items", [])
+            page_size=page_size,
+            sort=(("attribute_set_id", "ASC"),),
+            id_key=self.ID_KEYS["attribute_set"],
+        )
 
     def create_attribute_set(self, name, skeleton_id=4):
         payload = {
@@ -464,8 +653,22 @@ class MagentoAPI:
         }
         return self._put(f"/rest/V1/products/attribute-sets/{attribute_set_id}", payload)
 
-    def get_orders(self):
-        return self._get("/rest/V1/orders", params={"searchCriteria": ""}).get("items", [])
+    def get_orders(self, updated_from=None, *, page_size=None, lazy=False, stats=None, limit=None,
+                   filters=None):
+        """Orders, paged and sorted by updated_at then entity_id; see ``_search_list``."""
+        return self._search_list(
+            "/rest/V1/orders",
+            updated_from=updated_from, filters=filters, page_size=page_size, lazy=lazy,
+            stats=stats, limit=limit, id_key=self.ID_KEYS["order"],
+        )
+
+    def _get_order_documents(self, endpoint, kind, order_id=None, page_size=None):
+        """Invoices / credit memos / shipments, optionally of one order, paged."""
+        filters = [("order_id", str(order_id), "eq")] if order_id else None
+        return self._search_list(
+            endpoint, filters=filters, page_size=page_size,
+            sort=(("entity_id", "ASC"),), id_key=self.ID_KEYS[kind],
+        )
 
     def get_order(self, order_id):
         return self._get(f"/rest/V1/orders/{order_id}")
@@ -483,44 +686,20 @@ class MagentoAPI:
                 return transactions
         return []
 
-    def get_invoices(self, order_id=None):
-        if order_id:
-            params = {
-                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
-                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
-                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
-            }
-        else:
-            params = {"searchCriteria": ""}
-        return self._get("/rest/V1/invoices", params=params).get("items", [])
+    def get_invoices(self, order_id=None, *, page_size=None):
+        return self._get_order_documents("/rest/V1/invoices", "invoice", order_id, page_size)
 
     def get_invoice(self, invoice_id):
         return self._get(f"/rest/V1/invoices/{invoice_id}")
 
-    def get_credit_memos(self, order_id=None):
-        if order_id:
-            params = {
-                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
-                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
-                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
-            }
-        else:
-            params = {"searchCriteria": ""}
-        return self._get("/rest/V1/creditmemos", params=params).get("items", [])
+    def get_credit_memos(self, order_id=None, *, page_size=None):
+        return self._get_order_documents("/rest/V1/creditmemos", "creditmemo", order_id, page_size)
 
     def get_credit_memo(self, credit_memo_id):
         return self._get(f"/rest/V1/creditmemo/{credit_memo_id}")
 
-    def get_shipments(self, order_id=None):
-        if order_id:
-            params = {
-                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
-                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
-                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
-            }
-        else:
-            params = {"searchCriteria": ""}
-        return self._get("/rest/V1/shipments", params=params).get("items", [])
+    def get_shipments(self, order_id=None, *, page_size=None):
+        return self._get_order_documents("/rest/V1/shipments", "shipment", order_id, page_size)
 
     def get_shipment(self, shipment_id):
         return self._get(f"/rest/V1/shipment/{shipment_id}")
@@ -632,8 +811,14 @@ class MagentoAPI:
             include_all_scope=True,
         )
 
-    def get_customers(self):
-        return self._get("/rest/V1/customers/search", params={"searchCriteria": ""}).get("items", [])
+    def get_customers(self, updated_from=None, *, page_size=None, lazy=False, stats=None, limit=None,
+                      filters=None):
+        """Customers, paged and sorted by updated_at then entity_id; see ``_search_list``."""
+        return self._search_list(
+            "/rest/V1/customers/search",
+            updated_from=updated_from, filters=filters, page_size=page_size, lazy=lazy,
+            stats=stats, limit=limit, id_key=self.ID_KEYS["customer"],
+        )
 
     def get_customer(self, customer_id):
         return self._get(f"/rest/V1/customers/{customer_id}")

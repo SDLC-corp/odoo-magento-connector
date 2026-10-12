@@ -34,6 +34,63 @@ def _short_reason(exc, limit=300):
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def _magento_datetime(value):
+    """Magento timestamp (UTC ``YYYY-MM-DD HH:MM:SS``) -> naive UTC datetime, or None."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo is None else value.astimezone(pytz.utc).replace(
+            tzinfo=None)
+    text = str(value).strip().replace("T", " ")
+    try:
+        return datetime.strptime(text[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        try:
+            return datetime.strptime(text[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
+
+
+class _WatermarkTracker:
+    """Where an incremental run may safely move an entity's ``updated_at`` watermark.
+
+    Gap-free rule: the next run fetches ``updated_at >= watermark - overlap``.
+
+    * Nothing failed: the watermark advances to the newest ``updated_at`` among the
+      records processed successfully (skipped records count as processed).
+    * Something failed: it advances at most to the oldest failed ``updated_at``
+      minus one second, so every failed record is fetched again next run and is
+      never skipped, even when newer records succeeded.
+    * A failed record without a usable ``updated_at`` holds the watermark where it
+      was. A listing cut short by a fetch error is still safe: results are sorted
+      by ``updated_at`` ascending, so every record not yet seen is at least as new
+      as the last one processed and ``gteq`` fetches it next run.
+    """
+
+    def __init__(self, before):
+        self.before = before
+        self.max_ok = None
+        self.min_failed = None
+        self.unknown_failure = False
+
+    def record(self, updated_at, ok):
+        ts = _magento_datetime(updated_at)
+        if ok:
+            if ts and (self.max_ok is None or ts > self.max_ok):
+                self.max_ok = ts
+        elif ts is None:
+            self.unknown_failure = True
+        elif self.min_failed is None or ts < self.min_failed:
+            self.min_failed = ts
+
+    def target(self):
+        if self.unknown_failure:
+            return self.before
+        if self.min_failed is not None:
+            return self.min_failed - timedelta(seconds=1)
+        return self.max_ok or self.before
+
+
 class _SyncStats:
     """Counters of one sync run, returned by the ``sync_*`` methods as a dict."""
 
@@ -45,8 +102,15 @@ class _SyncStats:
         self.skipped = 0
         self.processed = 0
         self.inventory_updated = 0
+        self.pages_fetched = 0
+        self.records_seen = 0
         self.error_messages = []
         self.skip_messages = []
+        self.sync_notes = []
+        self.watermark_before = None
+        self.watermark_after = None
+        # Exception of the last record that failed in ``_sync_record`` (for re-raise).
+        self.last_exception = None
 
     def add(self, outcome):
         setattr(self, outcome, getattr(self, outcome) + 1)
@@ -73,10 +137,12 @@ class _SyncStats:
         )
 
     def merge(self, counts):
-        for key in ("created", "updated", "errors", "skipped", "processed", "inventory_updated"):
+        for key in ("created", "updated", "errors", "skipped", "processed", "inventory_updated",
+                    "pages_fetched", "records_seen"):
             setattr(self, key, getattr(self, key) + int((counts or {}).get(key) or 0))
         self.error_messages.extend((counts or {}).get("error_messages") or [])
         self.skip_messages.extend((counts or {}).get("skip_messages") or [])
+        self.sync_notes.extend((counts or {}).get("sync_notes") or [])
 
     def as_dict(self):
         return {
@@ -86,8 +152,13 @@ class _SyncStats:
             "skipped": self.skipped,
             "processed": self.processed,
             "inventory_updated": self.inventory_updated,
+            "pages_fetched": self.pages_fetched,
+            "records_seen": self.records_seen,
+            "watermark_before": self.watermark_before,
+            "watermark_after": self.watermark_after,
             "error_messages": list(self.error_messages),
             "skip_messages": list(self.skip_messages),
+            "sync_notes": list(self.sync_notes),
         }
 
 
@@ -278,6 +349,38 @@ class MagentoInstance(models.Model):
         "magento.product.map", "instance_id", string="Synced Products"
     )
 
+    # ---- Incremental sync (Phase 1.4) ----
+    # Watermarks are naive UTC, the format Magento uses for ``updated_at``.
+    orders_sync_watermark = fields.Datetime(
+        string="Orders Synced Up To",
+        copy=False,
+        help="Magento updated_at (UTC) up to which orders are known to be imported. The next sync "
+             "fetches orders updated since this time minus the overlap. Empty = full sync.",
+    )
+    products_sync_watermark = fields.Datetime(
+        string="Products Synced Up To",
+        copy=False,
+        help="Magento updated_at (UTC) up to which products are known to be imported. The next sync "
+             "fetches products updated since this time minus the overlap. Empty = full sync.",
+    )
+    customers_sync_watermark = fields.Datetime(
+        string="Customers Synced Up To",
+        copy=False,
+        help="Magento updated_at (UTC) up to which customers are known to be imported. The next sync "
+             "fetches customers updated since this time minus the overlap. Empty = full sync.",
+    )
+    incremental_overlap_minutes = fields.Integer(
+        string="Sync Overlap (minutes)",
+        default=10,
+        help="Incremental syncs re-read records updated this many minutes before the stored marker, "
+             "to absorb clock skew and records saved while the previous sync was paging.",
+    )
+    sync_page_size = fields.Integer(
+        string="Sync Page Size",
+        default=100,
+        help="Records requested per Magento API page (1-300; Magento refuses more than 300).",
+    )
+
     # ---- Shared contract fields (Phase 0); consumed by views, dashboard and record rules ----
     company_id = fields.Many2one(
         "res.company", required=True, index=True, default=lambda self: self.env.company
@@ -401,6 +504,20 @@ class MagentoInstance(models.Model):
             month_day = int(instance.auto_sync_month_day or 0)
             if month_day < 1 or month_day > 31:
                 raise ValidationError("Auto Sync Day of Month must be between 1 and 31.")
+
+    @api.constrains("sync_page_size")
+    def _check_sync_page_size(self):
+        for instance in self:
+            if not 1 <= int(instance.sync_page_size or 0) <= MagentoAPI.MAX_PAGE_SIZE:
+                raise ValidationError(
+                    "Sync Page Size must be between 1 and %s." % MagentoAPI.MAX_PAGE_SIZE
+                )
+
+    @api.constrains("incremental_overlap_minutes")
+    def _check_incremental_overlap_minutes(self):
+        for instance in self:
+            if int(instance.incremental_overlap_minutes or 0) < 0:
+                raise ValidationError("Sync Overlap cannot be negative.")
 
     @api.constrains(
         "auto_sync_enabled",
@@ -836,6 +953,9 @@ class MagentoInstance(models.Model):
         if "skipped" in report_model._fields:
             vals["skipped"] = skipped
         note_lines = [notes] if notes else []
+        # Paging and watermark summary of incremental fetches (pages, records seen,
+        # watermark before -> after).
+        note_lines.extend(counts.get("sync_notes") or [])
         if skipped:
             note_lines.append("Skipped: %s" % skipped)
             note_lines.extend("  - %s" % msg for msg in (counts.get("skip_messages") or [])[:_MAX_NOTE_LINES])
@@ -873,25 +993,66 @@ class MagentoInstance(models.Model):
         """Stamp ``last_sync_at``; bookkeeping, so allowed for Magento users too."""
         self.sudo().write({"last_sync_at": fields.Datetime.now()})
 
-    def _sync_record(self, stats, kind, magento_id, func):
+    def _sync_record(self, stats, kind, magento_id, func, *, entity=None, magento_ref=None, payload=None,
+                     record_box=None, notify=True):
         """Run ``func`` for one Magento record inside a savepoint.
 
         ``func`` returns ``"created"``, ``"updated"``, ``("skipped", reason)`` or None.
         A failure rolls back only this record, is logged at WARNING with the Magento
-        id and reason, and is counted in ``stats``.
+        id and reason, and is counted in ``stats`` (``stats.last_exception`` keeps it).
+
+        Then, unless ``notify`` is False, the error-center hook
+        ``_magento_on_record_result`` is told the result: ``entity`` (default: ``kind``
+        with ``_`` for spaces), ``magento_ref`` (default: ``magento_id``), the Magento
+        ``payload`` and the Odoo record (first element of ``record_box``, filled by
+        ``func``).
         """
         stats.processed += 1
+        stats.last_exception = None
+        entity = entity or kind.replace(" ", "_")
+        ref = magento_ref if magento_ref is not None else magento_id
         try:
             with self.env.cr.savepoint():
                 outcome = func()
         except Exception as exc:  # noqa: BLE001
             stats.error(kind, magento_id, exc, instance=self)
+            stats.last_exception = exc
+            if notify:
+                self._magento_notify_record_result(entity, ref, False, exc=exc, payload=payload)
             return False
         if isinstance(outcome, tuple) and outcome and outcome[0] == "skipped":
             stats.skip(kind, magento_id, outcome[1], instance=self)
         elif outcome in ("created", "updated"):
             stats.add(outcome)
+        if notify:
+            self._magento_notify_record_result(
+                entity, ref, True, payload=payload, record=record_box[0] if record_box else None,
+            )
         return True
+
+    def _magento_on_record_result(self, entity, magento_ref, ok, exc=None, payload=None, record=None):
+        """Hook called once per synced Magento record with its result. No-op here.
+
+        ``entity`` is one of ``order``, ``product``, ``customer``, ``category``,
+        ``attribute_set``; ``magento_ref`` is what ``_magento_resync_one`` accepts
+        (entity id; SKU for products), as a string. ``ok`` is False when the record
+        failed (``exc`` is the exception; for an order, also when one of its
+        follow-up steps failed). ``payload`` is the Magento JSON, ``record`` the Odoo
+        record when known. Override it (error center) to open/resolve issues.
+        """
+        return None
+
+    def _magento_notify_record_result(self, entity, magento_ref, ok, exc=None, payload=None, record=None):
+        """Call the hook in its own savepoint; a broken hook never breaks the sync."""
+        ref = str(magento_ref) if magento_ref is not None else None
+        try:
+            with self.env.cr.savepoint():
+                self._magento_on_record_result(entity, ref, ok, exc=exc, payload=payload, record=record)
+        except Exception as hook_exc:  # noqa: BLE001
+            _logger.warning(
+                "Magento sync (instance %s): result hook failed for %s %s: %s",
+                self.name, entity, ref, _short_reason(hook_exc),
+            )
 
     def _fetch_list(self, stats, kind, func):
         """Fetch the list of Magento records; a failure is reported, not raised."""
@@ -901,6 +1062,100 @@ class MagentoInstance(models.Model):
             stats.error(kind, None, exc, instance=self, reason=self._format_magento_request_error(exc, self))
             return None
         return result
+
+    def _iter_fetched(self, stats, kind, items):
+        """Iterate a (possibly lazily paged) listing, counting records seen.
+
+        A page that fails to load mid-listing is reported like a list-fetch error
+        and ends the iteration; the records already yielded stay processed.
+        """
+        iterator = iter(items or ())
+        while True:
+            try:
+                item = next(iterator)
+            except StopIteration:
+                return
+            except Exception as exc:  # noqa: BLE001
+                stats.error(kind, None, exc, instance=self, reason=self._format_magento_request_error(exc, self))
+                return
+            stats.records_seen += 1
+            yield item
+
+    # =====================
+    # INCREMENTAL SYNC (watermarks)
+    # =====================
+    _WATERMARK_FIELDS = {
+        "order": "orders_sync_watermark",
+        "product": "products_sync_watermark",
+        "customer": "customers_sync_watermark",
+    }
+
+    def _get_sync_page_size(self):
+        self.ensure_one()
+        return MagentoAPI.clamp_page_size(self.sync_page_size)
+
+    def _incremental_start(self, entity):
+        """``(tracker, updated_from)`` for an entity sync of this instance.
+
+        ``updated_from`` is ``watermark - overlap`` (naive UTC), or None for a full
+        sync: no watermark yet, or context ``magento_full_sync``. There is never a
+        creation-date cut-off: the filter is on ``updated_at`` only.
+        """
+        self.ensure_one()
+        before = self[self._WATERMARK_FIELDS[entity]] or None
+        updated_from = None
+        if before and not self.env.context.get("magento_full_sync"):
+            overlap = max(0, int(self.incremental_overlap_minutes or 0))
+            updated_from = before - timedelta(minutes=overlap)
+        return _WatermarkTracker(before), updated_from
+
+    def _incremental_save(self, entity, tracker):
+        """Store the gap-free watermark target of ``tracker`` (see ``_WatermarkTracker``)."""
+        self.ensure_one()
+        target = tracker.target()
+        field_name = self._WATERMARK_FIELDS[entity]
+        if target and target != self[field_name]:
+            # Bookkeeping, so allowed for Magento users (who may not write the instance).
+            self.sudo().write({field_name: target})
+        return target
+
+    def _incremental_commit_batch(self, entity, tracker, processed):
+        """Batch commit of a real cron run, checkpointing the watermark first so a
+        long initial sync that is interrupted resumes instead of starting over."""
+        if self._magento_can_commit():
+            self._incremental_save(entity, tracker)
+        self._magento_commit_batch(processed)
+
+    def _incremental_finish(self, stats, entity, tracker, updated_from, fetch_stats, records_seen):
+        """Save the watermark and add the paging/watermark line to the report notes."""
+        self.ensure_one()
+        after = self._incremental_save(entity, tracker)
+        to_str = fields.Datetime.to_string
+        stats.pages_fetched += int(fetch_stats.get("pages") or 0)
+        stats.watermark_before = to_str(tracker.before) if tracker.before else None
+        stats.watermark_after = to_str(after) if after else None
+        mode = "updated since %s" % to_str(updated_from) if updated_from else "full"
+        stats.sync_notes.append(
+            "%s [%s]: %s fetch; pages fetched: %s; records seen: %s; watermark %s -> %s" % (
+                entity.capitalize(), self.name, mode, int(fetch_stats.get("pages") or 0),
+                records_seen,
+                stats.watermark_before or "none", stats.watermark_after or "none",
+            )
+        )
+
+    def action_reset_watermarks(self):
+        """Clear the incremental-sync markers: the next sync re-reads everything."""
+        self.write({field_name: False for field_name in self._WATERMARK_FIELDS.values()})
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Magento Sync",
+                "message": "Sync markers reset. The next sync re-reads all orders, products and customers.",
+                "type": "success",
+                "sticky": False,
+            },
+        }
 
     def _flatten_categories(self, node, parent_id=None):
         items = []
@@ -1000,11 +1255,14 @@ class MagentoInstance(models.Model):
             if tree is None:
                 continue
             for index, item in enumerate(instance._flatten_categories(tree), start=1):
+                stats.records_seen += 1
                 if item.get("id") is None:
                     continue
+                box = []
                 instance._sync_record(
                     stats, "category", item["id"],
-                    lambda item=item: instance._sync_category_record(cat_model, item),
+                    lambda item=item, box=box: instance._sync_category_record(cat_model, item, box=box),
+                    entity="category", payload=item, record_box=box,
                 )
                 if index % _SYNC_BATCH_SIZE == 0:
                     instance._magento_commit_batch(_SYNC_BATCH_SIZE)
@@ -1012,8 +1270,9 @@ class MagentoInstance(models.Model):
             instance._magento_commit_batch(0)
         return stats.as_dict()
 
-    def _sync_category_record(self, cat_model, item):
+    def _sync_category_record(self, cat_model, item, box=None):
         self.ensure_one()
+        box = box if box is not None else []
         cat = cat_model.search([
             ("instance_id", "=", self.id),
             ("magento_id", "=", str(item["id"])),
@@ -1037,9 +1296,10 @@ class MagentoInstance(models.Model):
             vals.update(mapped_vals)
         if cat:
             cat.write(vals)
+            box.append(cat)
             return "updated"
         vals.update({"instance_id": self.id, "magento_id": str(item["id"])})
-        cat_model.create(vals)
+        box.append(cat_model.create(vals))
         return "created"
 
     def sync_attribute_sets(self):
@@ -1060,6 +1320,7 @@ class MagentoInstance(models.Model):
                 instance._sync_record(
                     stats, "attribute set", set_id,
                     lambda item=item, set_id=set_id: instance._sync_attribute_set_record(attr_model, item, set_id),
+                    entity="attribute_set", payload=item,
                 )
             instance._mark_synced()
             instance._magento_commit_batch(0)
@@ -1108,31 +1369,50 @@ class MagentoInstance(models.Model):
         supported_types = self._supported_product_types()
         for instance in self:
             api = MagentoAPI(instance)
-            products = instance._fetch_list(stats, "product", api.get_products)
+            tracker, updated_from = instance._incremental_start("product")
+            fetch_stats = {}
+            seen_start = stats.records_seen
+            products = instance._fetch_list(stats, "product", lambda: api.get_products(
+                updated_from, page_size=instance._get_sync_page_size(), lazy=True, stats=fetch_stats,
+            ))
             if products is None:
                 continue
-            for index, p in enumerate(products, start=1):
+            for index, p in enumerate(instance._iter_fetched(stats, "product", products), start=1):
                 sku = p.get("sku")
                 if not sku:
                     continue
-                instance._sync_record(
-                    stats, "product", p.get("id") or sku,
-                    lambda p=p: instance._sync_product_record(api, p, supported_types, stats),
-                )
+                ok = instance._sync_one_product(api, p, supported_types, stats)
+                tracker.record(p.get("updated_at"), ok)
                 if index % _SYNC_BATCH_SIZE == 0:
-                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+                    instance._incremental_commit_batch("product", tracker, _SYNC_BATCH_SIZE)
+            instance._incremental_finish(
+                stats, "product", tracker, updated_from, fetch_stats, stats.records_seen - seen_start,
+            )
             instance._mark_synced()
             instance._magento_commit_batch(0)
         return stats.as_dict()
 
-    def _sync_product_record(self, api, p, supported_types, stats):
+    def _sync_one_product(self, api, p, supported_types, stats, product_data=None):
+        """Import one product search row ``p`` (SKU is the resync reference)."""
         self.ensure_one()
+        sku = p.get("sku")
+        box = []
+        return self._sync_record(
+            stats, "product", p.get("id") or sku,
+            lambda: self._sync_product_record(api, p, supported_types, stats, product_data=product_data, box=box),
+            entity="product", magento_ref=sku, payload=p, record_box=box,
+        )
+
+    def _sync_product_record(self, api, p, supported_types, stats, product_data=None, box=None):
+        self.ensure_one()
+        box = box if box is not None else []
         sku = p.get("sku")
         type_id = p.get("type_id")
         if type_id and type_id not in supported_types:
             return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
 
-        product_data = api.get_product(sku) or {}
+        if product_data is None:
+            product_data = api.get_product(sku) or {}
         type_id = product_data.get("type_id") or type_id
         if type_id and type_id not in supported_types:
             return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
@@ -1199,6 +1479,7 @@ class MagentoInstance(models.Model):
                     sku, self.name, _short_reason(exc),
                 )
         mapping.with_context(skip_magento_sync=True).write(values)
+        box.append(mapping)
         stock_item = (product_data.get("extension_attributes") or {}).get("stock_item")
         if stock_item is not None:
             stats.inventory_updated += 1
@@ -1215,27 +1496,55 @@ class MagentoInstance(models.Model):
         stats = _SyncStats("order")
         for instance in self:
             api = MagentoAPI(instance)
-            orders = instance._fetch_list(stats, "order", api.get_orders)
+            tracker, updated_from = instance._incremental_start("order")
+            fetch_stats = {}
+            seen_start = stats.records_seen
+            orders = instance._fetch_list(stats, "order", lambda: api.get_orders(
+                updated_from, page_size=instance._get_sync_page_size(), lazy=True, stats=fetch_stats,
+            ))
             if orders is None:
                 continue
-            for index, data in enumerate(orders, start=1):
+            for index, data in enumerate(instance._iter_fetched(stats, "order", orders), start=1):
                 magento_id = data.get("entity_id") or data.get("id")
                 if not magento_id:
                     continue
-                order_box = []
-                ok = instance._sync_record(
-                    stats, "order", magento_id,
-                    lambda data=data, magento_id=magento_id, box=order_box: instance._sync_order_record(
-                        api, data, magento_id, box
-                    ),
-                )
-                if ok and order_box:
-                    instance._sync_order_followups(api, order_box[0], magento_id, stats)
+                ok = instance._sync_one_order(api, data, magento_id, stats)
+                tracker.record(data.get("updated_at"), ok)
                 if index % _SYNC_BATCH_SIZE == 0:
-                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+                    instance._incremental_commit_batch("order", tracker, _SYNC_BATCH_SIZE)
+            instance._incremental_finish(
+                stats, "order", tracker, updated_from, fetch_stats, stats.records_seen - seen_start,
+            )
             instance._mark_synced()
             instance._magento_commit_batch(0)
         return stats.as_dict()
+
+    def _sync_one_order(self, api, data, magento_id, stats):
+        """Import one Magento order, then its follow-up steps; returns True if the
+        order itself was imported.
+
+        The result hook is called once, after the follow-ups: ``ok`` only when the
+        order and every follow-up step succeeded. Follow-up failures do not hold
+        the watermark back (the order is imported; the error center offers a
+        single-record resync), only an order import failure does.
+        """
+        self.ensure_one()
+        order_box = []
+        ok = self._sync_record(
+            stats, "order", magento_id,
+            lambda: self._sync_order_record(api, data, magento_id, order_box),
+            entity="order", payload=data, notify=False,
+        )
+        exc = None if ok else stats.last_exception
+        if ok and order_box:
+            failures = self._sync_order_followups(api, order_box[0], magento_id, stats)
+            if failures:
+                exc = failures[0][1]
+        self._magento_notify_record_result(
+            "order", magento_id, exc is None, exc=exc, payload=data,
+            record=order_box[0] if order_box else None,
+        )
+        return ok
 
     def _sync_order_record(self, api, data, magento_id, order_box):
         self.ensure_one()
@@ -1290,8 +1599,10 @@ class MagentoInstance(models.Model):
         Run after the order's own savepoint. The helpers raise on real failure; each step
         has its own savepoint, so a failure (e.g. Magento rejecting a shipment) is counted
         and logged but keeps the imported order and the other steps.
+        Returns the failures as a list of ``(step label, exception)``.
         """
         self.ensure_one()
+        failures = []
         steps = []
         if order.magento_invoice_state in ("partial", "invoiced"):
             steps.append(("invoice sync", lambda: order._magento_sync_invoices(api)))
@@ -1306,6 +1617,8 @@ class MagentoInstance(models.Model):
                     step()
             except Exception as exc:  # noqa: BLE001
                 stats.error("order", magento_id, exc, instance=self, step=label)
+                failures.append((label, exc))
+        return failures
 
     def action_sync_orders(self):
         self.ensure_one()
@@ -1321,22 +1634,38 @@ class MagentoInstance(models.Model):
         )
         for instance in self:
             api = MagentoAPI(instance)
-            customers = instance._fetch_list(stats, "customer", api.get_customers)
+            tracker, updated_from = instance._incremental_start("customer")
+            fetch_stats = {}
+            seen_start = stats.records_seen
+            customers = instance._fetch_list(stats, "customer", lambda: api.get_customers(
+                updated_from, page_size=instance._get_sync_page_size(), lazy=True, stats=fetch_stats,
+            ))
             if customers is None:
                 continue
-            for index, data in enumerate(customers, start=1):
-                instance._sync_record(
-                    stats, "customer", data.get("id") or data.get("email"),
-                    lambda data=data: instance._sync_customer_record(customer_model, data),
-                )
+            for index, data in enumerate(instance._iter_fetched(stats, "customer", customers), start=1):
+                ok = instance._sync_one_customer(customer_model, data, stats)
+                tracker.record(data.get("updated_at"), ok)
                 if index % _SYNC_BATCH_SIZE == 0:
-                    instance._magento_commit_batch(_SYNC_BATCH_SIZE)
+                    instance._incremental_commit_batch("customer", tracker, _SYNC_BATCH_SIZE)
+            instance._incremental_finish(
+                stats, "customer", tracker, updated_from, fetch_stats, stats.records_seen - seen_start,
+            )
             instance._mark_synced()
             instance._magento_commit_batch(0)
         return stats.as_dict()
 
-    def _sync_customer_record(self, customer_model, data):
+    def _sync_one_customer(self, customer_model, data, stats):
         self.ensure_one()
+        box = []
+        return self._sync_record(
+            stats, "customer", data.get("id") or data.get("email"),
+            lambda: self._sync_customer_record(customer_model, data, box=box),
+            entity="customer", payload=data, record_box=box,
+        )
+
+    def _sync_customer_record(self, customer_model, data, box=None):
+        self.ensure_one()
+        box = box if box is not None else []
         magento_id = str(data.get("id") or "")
         email = data.get("email") or ""
         customer = customer_model.browse()
@@ -1353,10 +1682,81 @@ class MagentoInstance(models.Model):
         values = customer_model._extract_magento_values(data, self.id)
         if customer:
             customer.write(values)
+            box.append(customer)
             return "updated"
         # List form: works whether or not magento.customer.create is model_create_multi.
-        customer_model.create([values])
+        box.append(customer_model.create([values]))
         return "created"
+
+    # =====================
+    # SINGLE-RECORD RESYNC (error center contract)
+    # =====================
+    _RESYNC_ENTITIES = ("order", "product", "customer", "category")
+
+    def _magento_resync_one(self, entity, magento_ref):
+        """Fetch one record from Magento and import it through the normal per-record path.
+
+        ``entity`` is ``order``, ``product``, ``customer`` or ``category``;
+        ``magento_ref`` is the Magento entity id (the SKU for products). Returns
+        the same counts dict as the ``sync_*`` methods. Raises when the fetch or the
+        record import fails (the original exception, after the result hook and
+        the stats saw it) so a job queue can classify it. For an order, a failed
+        follow-up step (invoice, shipment...) is counted in ``errors`` and reported
+        to the hook but not raised: the order itself is imported and kept.
+        Watermarks are not touched.
+        """
+        self.ensure_one()
+        if entity not in self._RESYNC_ENTITIES:
+            raise UserError("Cannot resync Magento entity '%s'." % entity)
+        ref = str(magento_ref or "").strip()
+        if not ref:
+            raise UserError("A Magento reference is required to resync a %s." % entity)
+        stats = _SyncStats(entity)
+        api = MagentoAPI(self)
+        fetchers = {
+            "order": api.get_order,
+            "product": api.get_product,
+            "customer": api.get_customer,
+            "category": api.get_category,
+        }
+        try:
+            data = fetchers[entity](ref)
+            if not isinstance(data, dict) or not data:
+                raise UserError("Magento returned no %s for reference %s." % (entity, ref))
+        except Exception as exc:
+            stats.error(entity, ref, exc, instance=self, reason=self._format_magento_request_error(exc, self))
+            self._magento_notify_record_result(entity, ref, False, exc=exc)
+            raise
+        stats.records_seen += 1
+
+        if entity == "order":
+            ok = self._sync_one_order(api, data, data.get("entity_id") or ref, stats)
+        elif entity == "product":
+            data.setdefault("sku", ref)
+            ok = self._sync_one_product(api, data, self._supported_product_types(), stats, product_data=data)
+        elif entity == "customer":
+            customer_model = self.env["magento.customer"].with_context(
+                skip_magento_sync=True, active_test=False
+            )
+            ok = self._sync_one_customer(customer_model, data, stats)
+        else:
+            cat_model = self.env["magento.category"].with_context(skip_magento_sync=True)
+            item = {
+                "id": data.get("id") or ref,
+                "name": data.get("name") or "Category %s" % ref,
+                "parent_id": data.get("parent_id") or None,
+            }
+            box = []
+            ok = self._sync_record(
+                stats, "category", item["id"],
+                lambda: self._sync_category_record(cat_model, item, box=box),
+                entity="category", payload=data, record_box=box,
+            )
+        if not ok:
+            raise stats.last_exception or UserError(
+                "Magento %s %s could not be imported." % (entity, ref)
+            )
+        return stats.as_dict()
 
     def action_sync_customers(self):
         self.ensure_one()
