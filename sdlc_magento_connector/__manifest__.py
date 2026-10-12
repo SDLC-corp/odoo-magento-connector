@@ -29,6 +29,7 @@
         'data/magento_stock_data.xml',
         'views/magento_order_p2_views.xml',
         'views/magento_catalog_p2_views.xml',
+        'wizard/magento_setup_wizard_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

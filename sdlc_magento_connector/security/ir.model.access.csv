@@ -51,3 +51,8 @@ access_magento_product_attribute_option_user,magento.product.attribute.option us
 access_magento_product_attribute_option_manager,magento.product.attribute.option manager,model_magento_product_attribute_option,group_magento_manager,1,1,1,1
 access_magento_product_link_user,magento.product.link user,model_magento_product_link,group_magento_user,1,1,1,1
 access_magento_product_link_manager,magento.product.link manager,model_magento_product_link,group_magento_manager,1,1,1,1
+access_magento_setup_wizard_manager,magento.setup.wizard manager,model_magento_setup_wizard,group_magento_manager,1,1,1,1
+access_magento_setup_wizard_store_manager,magento.setup.wizard.store manager,model_magento_setup_wizard_store,group_magento_manager,1,1,1,1
+access_magento_setup_wizard_mapping_manager,magento.setup.wizard.mapping manager,model_magento_setup_wizard_mapping,group_magento_manager,1,1,1,1
+access_magento_setup_wizard_check_manager,magento.setup.wizard.check manager,model_magento_setup_wizard_check,group_magento_manager,1,1,1,1
+access_magento_setup_wizard_issue_manager,magento.setup.wizard.issue manager,model_magento_setup_wizard_issue,group_magento_manager,1,1,1,1
