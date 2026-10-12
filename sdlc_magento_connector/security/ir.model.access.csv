@@ -23,3 +23,9 @@ access_magento_job_user,magento.job user,model_magento_job,group_magento_user,1,
 access_magento_job_manager,magento.job manager,model_magento_job,group_magento_manager,1,1,1,1
 access_magento_sync_issue_user,magento.sync.issue user,model_magento_sync_issue,group_magento_user,1,1,0,0
 access_magento_sync_issue_manager,magento.sync.issue manager,model_magento_sync_issue,group_magento_manager,1,1,1,1
+access_magento_reconciliation_user,magento.reconciliation user,model_magento_reconciliation,group_magento_user,1,1,1,0
+access_magento_reconciliation_manager,magento.reconciliation manager,model_magento_reconciliation,group_magento_manager,1,1,1,1
+access_magento_reconciliation_line_user,magento.reconciliation.line user,model_magento_reconciliation_line,group_magento_user,1,1,1,0
+access_magento_reconciliation_line_manager,magento.reconciliation.line manager,model_magento_reconciliation_line,group_magento_manager,1,1,1,1
+access_magento_reconciliation_order_user,magento.reconciliation.order user,model_magento_reconciliation_order,group_magento_user,1,1,1,0
+access_magento_reconciliation_order_manager,magento.reconciliation.order manager,model_magento_reconciliation_order,group_magento_manager,1,1,1,1

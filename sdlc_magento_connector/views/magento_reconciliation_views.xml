@@ -1,0 +1,401 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         Days (one line per day, store and currency): "Reconcile figures"
+         ============================================================ -->
+    <record id="view_magento_reconciliation_line_list" model="ir.ui.view">
+        <field name="name">magento.reconciliation.line.list</field>
+        <field name="model">magento.reconciliation.line</field>
+        <field name="arch" type="xml">
+            <list string="Reconciliation by Day" create="0" edit="0" delete="0"
+                  decoration-danger="status == 'missing'"
+                  decoration-warning="status == 'mismatch'">
+                <field name="reconciliation_id" optional="hide"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="day"/>
+                <field name="store_id" optional="show"/>
+                <field name="currency_id" optional="show"/>
+                <field name="magento_count" sum="Magento"/>
+                <field name="odoo_count" sum="Odoo"/>
+                <field name="canceled_count" sum="Canceled" optional="show"/>
+                <field name="magento_total" sum="Magento Total"/>
+                <field name="odoo_total" sum="Odoo Total"/>
+                <field name="difference" sum="Difference"/>
+                <field name="missing_count" sum="Missing"/>
+                <field name="mismatch_count" sum="Mismatch"/>
+                <field name="extra_count" sum="Not in Magento" optional="show"/>
+                <field name="missing_magento_ids" optional="hide"/>
+                <field name="mismatch_magento_ids" optional="hide"/>
+                <field name="extra_odoo_ids" optional="hide"/>
+                <field name="status" widget="badge"
+                       decoration-success="status == 'match'"
+                       decoration-danger="status == 'missing'"
+                       decoration-warning="status == 'mismatch'"/>
+                <button name="action_view_findings" type="object" icon="fa-search"
+                        title="Orders behind this line" invisible="status == 'match'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_line_search" model="ir.ui.view">
+        <field name="name">magento.reconciliation.line.search</field>
+        <field name="model">magento.reconciliation.line</field>
+        <field name="arch" type="xml">
+            <search string="Reconciliation by Day">
+                <field name="instance_id"/>
+                <field name="currency_id"/>
+                <field name="missing_magento_ids"/>
+                <filter name="gaps" string="With Gaps" domain="[('status', '!=', 'match')]"/>
+                <filter name="missing" string="Missing" domain="[('status', '=', 'missing')]"/>
+                <filter name="mismatch" string="Mismatch" domain="[('status', '=', 'mismatch')]"/>
+                <separator/>
+                <filter name="day" string="Day" date="day"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_currency" string="Currency" context="{'group_by': 'currency_id'}"/>
+                    <filter name="group_store" string="Store" context="{'group_by': 'store_id'}"/>
+                    <filter name="group_day" string="Day" context="{'group_by': 'day:day'}"/>
+                    <filter name="group_status" string="Status" context="{'group_by': 'status'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Findings: one row per missing, mismatched or extra order
+         ============================================================ -->
+    <record id="view_magento_reconciliation_order_list" model="ir.ui.view">
+        <field name="name">magento.reconciliation.order.list</field>
+        <field name="model">magento.reconciliation.order</field>
+        <field name="arch" type="xml">
+            <list string="Reconciliation Findings" create="0" edit="0" delete="0"
+                  decoration-danger="kind == 'missing'"
+                  decoration-warning="kind == 'mismatch'"
+                  decoration-muted="canceled">
+                <header>
+                    <button name="action_reimport" type="object" string="Re-import" class="btn-primary"/>
+                </header>
+                <field name="kind" widget="badge"
+                       decoration-danger="kind == 'missing'"
+                       decoration-warning="kind == 'mismatch'"
+                       decoration-info="kind == 'extra'"/>
+                <field name="increment_id"/>
+                <field name="magento_order_id"/>
+                <field name="magento_created_at"/>
+                <field name="store_id" optional="hide"/>
+                <field name="magento_status" optional="show"/>
+                <field name="canceled" optional="hide"/>
+                <field name="currency_id" column_invisible="True"/>
+                <field name="magento_total" sum="Magento Total"/>
+                <field name="odoo_total" sum="Odoo Total"/>
+                <field name="difference" sum="Difference"/>
+                <field name="sale_order_id"/>
+                <field name="job_state" widget="badge" optional="show"
+                       decoration-info="job_state in ('pending', 'started')"
+                       decoration-success="job_state == 'done'"
+                       decoration-danger="job_state == 'failed'"/>
+                <field name="instance_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_order_form" model="ir.ui.view">
+        <field name="name">magento.reconciliation.order.form</field>
+        <field name="model">magento.reconciliation.order</field>
+        <field name="arch" type="xml">
+            <form string="Reconciliation Finding" create="0" edit="0" delete="0">
+                <header>
+                    <button name="action_reimport" type="object" string="Re-import" class="btn-primary"
+                            invisible="kind == 'extra'"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_order" type="object" class="oe_stat_button"
+                                icon="fa-external-link" invisible="not sale_order_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Odoo Order</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="increment_id" string="Magento order"/>
+                        <h1><field name="increment_id" placeholder="Magento order #"/></h1>
+                    </div>
+                    <group>
+                        <group string="Magento">
+                            <field name="kind" widget="badge"
+                                   decoration-danger="kind == 'missing'"
+                                   decoration-warning="kind == 'mismatch'"
+                                   decoration-info="kind == 'extra'"/>
+                            <field name="magento_order_id"/>
+                            <field name="magento_created_at"/>
+                            <field name="store_id"/>
+                            <field name="magento_status"/>
+                            <field name="canceled"/>
+                        </group>
+                        <group string="Totals">
+                            <field name="currency_id" invisible="1"/>
+                            <field name="magento_total"/>
+                            <field name="odoo_total"/>
+                            <field name="difference"/>
+                            <field name="sale_order_id"/>
+                            <field name="job_id" invisible="not job_id"/>
+                            <field name="job_state" invisible="not job_id"/>
+                            <field name="reconciliation_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_order_search" model="ir.ui.view">
+        <field name="name">magento.reconciliation.order.search</field>
+        <field name="model">magento.reconciliation.order</field>
+        <field name="arch" type="xml">
+            <search string="Reconciliation Findings">
+                <field name="increment_id"/>
+                <field name="magento_order_id"/>
+                <field name="sale_order_id"/>
+                <filter name="missing" string="Missing in Odoo" domain="[('kind', '=', 'missing')]"/>
+                <filter name="mismatch" string="Total Mismatch" domain="[('kind', '=', 'mismatch')]"/>
+                <filter name="extra" string="Not in Magento" domain="[('kind', '=', 'extra')]"/>
+                <group>
+                    <filter name="group_kind" string="Finding" context="{'group_by': 'kind'}"/>
+                    <filter name="group_currency" string="Currency" context="{'group_by': 'currency_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Runs
+         ============================================================ -->
+    <record id="view_magento_reconciliation_list" model="ir.ui.view">
+        <field name="name">magento.reconciliation.list</field>
+        <field name="model">magento.reconciliation</field>
+        <field name="arch" type="xml">
+            <list string="Reconciliation"
+                  decoration-danger="state == 'failed' or missing_count &gt; 0"
+                  decoration-warning="state == 'done' and missing_count == 0 and (mismatch_count &gt; 0 or extra_count &gt; 0)">
+                <field name="instance_id"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="magento_count" sum="Magento"/>
+                <field name="odoo_count" sum="Odoo"/>
+                <field name="missing_count" sum="Missing"/>
+                <field name="mismatch_count" sum="Mismatch"/>
+                <field name="extra_count" sum="Not in Magento" optional="show"/>
+                <field name="trigger" optional="hide"/>
+                <field name="date_run" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'running'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'failed'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_search" model="ir.ui.view">
+        <field name="name">magento.reconciliation.search</field>
+        <field name="model">magento.reconciliation</field>
+        <field name="arch" type="xml">
+            <search string="Reconciliation">
+                <field name="instance_id"/>
+                <filter name="gaps" string="With Gaps"
+                        domain="['|', '|', ('missing_count', '&gt;', 0), ('mismatch_count', '&gt;', 0), ('extra_count', '&gt;', 0)]"/>
+                <filter name="failed" string="Failed" domain="[('state', '=', 'failed')]"/>
+                <filter name="scheduled" string="Scheduled" domain="[('trigger', '=', 'cron')]"/>
+                <separator/>
+                <filter name="date_to" string="Period" date="date_to"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_form" model="ir.ui.view">
+        <field name="name">magento.reconciliation.form</field>
+        <field name="model">magento.reconciliation</field>
+        <field name="arch" type="xml">
+            <form string="Reconciliation">
+                <header>
+                    <button name="action_run" type="object" string="Run" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_run" type="object" string="Run Again"
+                            invisible="state not in ('done', 'failed')"/>
+                    <button name="action_run_in_background" type="object" string="Run in Background"
+                            invisible="state == 'running'"/>
+                    <button name="action_reimport_missing" type="object" string="Re-import Missing"
+                            class="btn-primary" invisible="missing_count == 0 or state != 'done'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,running,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_missing" type="object"
+                                class="oe_stat_button text-danger" icon="fa-exclamation-circle"
+                                invisible="missing_count == 0">
+                            <field name="missing_count" widget="statinfo" string="Missing Orders"/>
+                        </button>
+                        <button name="action_view_missing" type="object"
+                                class="oe_stat_button" icon="fa-check-circle"
+                                invisible="missing_count &gt; 0 or state != 'done'">
+                            <field name="missing_count" widget="statinfo" string="Missing Orders"/>
+                        </button>
+                        <button name="action_view_mismatch_orders" type="object"
+                                class="oe_stat_button text-warning" icon="fa-balance-scale"
+                                invisible="mismatch_count == 0">
+                            <field name="mismatch_count" widget="statinfo" string="Total Mismatches"/>
+                        </button>
+                        <button name="action_view_extra_orders" type="object"
+                                class="oe_stat_button text-warning" icon="fa-question-circle"
+                                invisible="extra_count == 0">
+                            <field name="extra_count" widget="statinfo" string="Not in Magento"/>
+                        </button>
+                        <button name="action_view_lines" type="object"
+                                class="oe_stat_button" icon="fa-money"
+                                invisible="line_count == 0">
+                            <field name="line_count" widget="statinfo" string="By Currency"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" string="Reconciliation"/>
+                        <h1><field name="name" readonly="1" placeholder="Instance and period"/></h1>
+                    </div>
+                    <div role="alert" class="alert alert-danger" invisible="state != 'failed'">
+                        <field name="note" nolabel="1" readonly="1"/>
+                    </div>
+                    <div role="status" class="alert alert-warning"
+                         invisible="state != 'done' or issue_count == 0">
+                        <field name="note" nolabel="1" readonly="1"/>
+                    </div>
+                    <div role="status" class="alert alert-success"
+                         invisible="state != 'done' or issue_count != 0">
+                        Every Magento order of the period is in Odoo with the same total.
+                    </div>
+                    <div role="status" class="alert alert-info" invisible="state != 'running'">
+                        <field name="note" nolabel="1" readonly="1"/>
+                    </div>
+                    <group>
+                        <group string="Period">
+                            <field name="instance_id" readonly="state == 'running'"
+                                   options="{'no_create': True}"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="date_from" string="Created (UTC)" widget="daterange"
+                                   options="{'end_date_field': 'date_to'}"
+                                   readonly="state == 'running'"/>
+                            <field name="date_to" invisible="1"/>
+                            <field name="include_canceled" readonly="state == 'running'"/>
+                        </group>
+                        <group string="Orders">
+                            <field name="magento_count"/>
+                            <field name="odoo_count"/>
+                            <field name="matched_count"/>
+                            <field name="canceled_count"/>
+                            <field name="date_run" invisible="not date_run"/>
+                            <field name="trigger"/>
+                            <field name="job_id" invisible="not job_id"/>
+                            <field name="issue_count" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Days" name="days">
+                            <field name="line_ids" readonly="1">
+                                <list decoration-danger="status == 'missing'"
+                                      decoration-warning="status == 'mismatch'">
+                                    <field name="day"/>
+                                    <field name="store_id" optional="show"/>
+                                    <field name="currency_id" optional="show"/>
+                                    <field name="magento_count" sum="Magento"/>
+                                    <field name="odoo_count" sum="Odoo"/>
+                                    <field name="canceled_count" sum="Canceled" optional="hide"/>
+                                    <field name="magento_total" sum="Magento Total"/>
+                                    <field name="odoo_total" sum="Odoo Total"/>
+                                    <field name="difference" sum="Difference"/>
+                                    <field name="missing_count" sum="Missing"/>
+                                    <field name="mismatch_count" sum="Mismatch"/>
+                                    <field name="extra_count" sum="Not in Magento" optional="show"/>
+                                    <field name="missing_magento_ids" optional="show"/>
+                                    <field name="extra_odoo_ids" optional="hide"/>
+                                    <field name="status" widget="badge"
+                                           decoration-success="status == 'match'"
+                                           decoration-danger="status == 'missing'"
+                                           decoration-warning="status == 'mismatch'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Findings" name="findings" invisible="issue_count == 0">
+                            <field name="finding_ids" readonly="1">
+                                <list decoration-danger="kind == 'missing'"
+                                      decoration-warning="kind == 'mismatch'"
+                                      decoration-muted="canceled">
+                                    <field name="kind" widget="badge"
+                                           decoration-danger="kind == 'missing'"
+                                           decoration-warning="kind == 'mismatch'"
+                                           decoration-info="kind == 'extra'"/>
+                                    <field name="increment_id"/>
+                                    <field name="magento_order_id"/>
+                                    <field name="magento_created_at"/>
+                                    <field name="magento_status" optional="show"/>
+                                    <field name="canceled" column_invisible="True"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="magento_total"/>
+                                    <field name="odoo_total"/>
+                                    <field name="difference"/>
+                                    <field name="sale_order_id"/>
+                                    <field name="job_state" widget="badge" optional="show"
+                                           decoration-info="job_state in ('pending', 'started')"
+                                           decoration-success="job_state == 'done'"
+                                           decoration-danger="job_state == 'failed'"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_reconciliation" model="ir.actions.act_window">
+        <field name="name">Reconciliation</field>
+        <field name="res_model">magento.reconciliation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_reconciliation_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Reconcile Magento and Odoo orders</p>
+            <p>Pick an instance and a period: every Magento order created in it is compared with
+               Odoo, day by day, per store and currency. Orders missing in Odoo can be re-imported
+               in one click, and total differences are listed order by order.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_reconciliation" name="Reconciliation" parent="menu_magento_reports"
+              action="action_magento_reconciliation" sequence="3"/>
+
+    <!-- Instance form: nightly reconciliation settings on the "Alerts & Logs" page. -->
+    <record id="view_magento_instance_form_reconciliation" model="ir.ui.view">
+        <field name="name">magento.instance.form.reconciliation</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form_ops"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='alerts_logs']" position="inside">
+                <group>
+                    <group string="Order Reconciliation" name="reconciliation">
+                        <field name="reconcile_daily"/>
+                        <field name="reconcile_lookback_days" invisible="not reconcile_daily"/>
+                        <div class="text-muted small" colspan="2">
+                            Each night, Magento and Odoo orders of the last days are compared.
+                            Orders missing in Odoo open an Error Center issue, ready to retry.
+                            Requires the "Magento: Reconcile Orders (daily)" scheduled action.
+                        </div>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

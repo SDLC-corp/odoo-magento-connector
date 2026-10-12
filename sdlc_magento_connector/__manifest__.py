@@ -20,6 +20,8 @@
         'views/magento_job_views.xml',
         'views/magento_sync_issue_views.xml',
         'data/magento_job_data.xml',
+        'views/magento_reconciliation_views.xml',
+        'data/magento_reconciliation_data.xml',
     ],
     'assets': {
         'web.assets_backend': [
