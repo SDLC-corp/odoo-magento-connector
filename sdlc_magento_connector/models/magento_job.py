@@ -25,8 +25,10 @@ _logger = logging.getLogger(__name__)
 # Backoff: eta = now + min(2**attempts * BASE, MAX)
 _BACKOFF_BASE_SECONDS = 30
 _BACKOFF_MAX_SECONDS = 3600
-# A job "started" for longer than this is considered interrupted and requeued.
-_STALE_AFTER = timedelta(hours=1)
+# A job "started" for longer than this is a candidate for requeueing. Only one whose row
+# is not locked (no live worker holds it, see ``_run_job``) is actually requeued, so a
+# long-running job is never touched; sync jobs are page sized and run well under this.
+_STALE_AFTER = timedelta(minutes=10)
 # Jobs considered per lock query; only one of them is run per loop.
 _LOCK_WINDOW = 20
 _JOB_RUNNER_CRON = "sdlc_magento_connector.ir_cron_magento_job_runner"
@@ -458,15 +460,47 @@ class MagentoJob(models.Model):
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
+    def _lock_unlocked_ids(self):
+        """Lock the rows of ``self`` that no other transaction holds; return their ids.
+
+        A running job keeps its row locked for its whole execution (``_run_job``), so a
+        "started" job whose row can be locked here has no live worker any more.
+        """
+        if not self.ids:
+            return set()
+        self.flush_recordset()
+        self.env.cr.execute(SQL(
+            "SELECT id FROM magento_job WHERE id IN %s FOR UPDATE SKIP LOCKED", tuple(self.ids),
+        ))
+        return {row[0] for row in self.env.cr.fetchall()}
+
     def action_retry(self):
+        """Requeue failed, cancelled and pending jobs, and "started" jobs left behind by a
+        dead worker (manager only). A started job that is really running (its row is
+        locked by the worker) cannot be retried."""
         now = fields.Datetime.now()
-        for job in self.filtered(lambda j: j.state in ("failed", "cancelled", "pending")):
+        started = self.filtered(lambda j: j.state == "started")
+        if started:
+            if not self.env.user.has_group("sdlc_magento_connector.group_magento_manager"):
+                raise AccessError(_("Only Magento administrators can retry a started job."))
+            free = started.sudo()._lock_unlocked_ids()
+            running = started.filtered(lambda j: j.id not in free)
+            if running:
+                raise UserError(_(
+                    "These jobs are running right now and cannot be retried: %s. "
+                    "Wait for them to finish; a job whose worker died can be retried.",
+                    ", ".join(running.mapped("display_name")),
+                ))
+        for job in self.filtered(lambda j: j.state in ("failed", "cancelled", "pending", "started")):
             if job.identity_key and job.state != "pending":
                 other = job.sudo()._find_active(job.identity_key)
                 if other and other != job:
                     continue  # an equivalent job is already queued
-            job.write({"state": "pending", "eta": now, "attempts": 0, "date_done": False,
-                       "date_started": False})
+            vals = {"state": "pending", "eta": now, "attempts": 0, "date_done": False,
+                    "date_started": False}
+            if job.state == "started":
+                vals["last_error"] = "Job was interrupted; requeued manually."
+            job.write(vals)
         self._trigger_runner()
         return True
 

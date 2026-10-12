@@ -79,7 +79,7 @@
                             invisible="state not in ('pending', 'failed')"
                             groups="sdlc_magento_connector.group_magento_manager"/>
                     <button name="action_retry" type="object" string="Retry"
-                            invisible="state not in ('failed', 'cancelled')"
+                            invisible="state not in ('failed', 'cancelled', 'started')"
                             groups="sdlc_magento_connector.group_magento_manager"/>
                     <button name="action_cancel" type="object" string="Cancel"
                             invisible="state not in ('pending', 'failed')"

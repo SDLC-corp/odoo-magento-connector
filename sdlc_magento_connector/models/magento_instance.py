@@ -1,5 +1,6 @@
 import calendar
 import logging
+import time
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 
@@ -25,7 +26,9 @@ _MAX_NOTE_LINES = 50
 
 # Queued syncs (roadmap 1.1): entity key -> (sync method, label, report sync_type, priority).
 # The entity key names the job channel ``magento.<instance id>.<entity>`` and the identity
-# key ``sync-<instance id>-<entity>``. Order = run order of "Sync All" and scheduled syncs.
+# key ``sync-<instance id>-<entity>`` (the first job of a run; the next pages of a paged
+# run use ``sync-<instance id>-<entity>-p<page>-r<report id>``). Order = run order of
+# "Sync All" and scheduled syncs.
 _SYNC_JOB_SPECS = {
     "categories": ("sync_categories", "Category", "category", 8),
     "attribute_sets": ("sync_attribute_sets", "Attribute set", None, 8),
@@ -41,6 +44,19 @@ _SCOPE_ENTITIES = (
     ("order", "orders"),
     ("customer", "customers"),
 )
+# Queued syncs of these entity keys run ONE page per job (``_magento_run_sync_page``), so
+# a big catalogue never becomes one cron transaction longer than the cron time limit.
+# Entity key -> (record kind, MagentoAPI list getter). Categories and attribute sets are
+# small trees and stay single-job.
+_PAGED_SYNC_ENTITIES = {
+    "products": ("product", "get_products"),
+    "orders": ("order", "get_orders"),
+    "customers": ("customer", "get_customers"),
+}
+# A page job stops importing after this many seconds and leaves the rest of its page to
+# the continuation job (the keyset cursor makes a partial page resumable), so a single
+# job stays well under ``limit_time_real_cron`` (120 s by default) even on a slow Magento.
+_SYNC_PAGE_TIME_BUDGET = 60
 
 
 def _short_reason(exc, limit=300):
@@ -108,6 +124,24 @@ class _WatermarkTracker:
         if self.min_failed is not None:
             return self.min_failed - timedelta(seconds=1)
         return self.max_ok or self.before
+
+    def state(self):
+        """JSON-serialisable state, carried by the jobs of a paged sync run."""
+        to_str = fields.Datetime.to_string
+        return {
+            "max_ok": to_str(self.max_ok) if self.max_ok else None,
+            "min_failed": to_str(self.min_failed) if self.min_failed else None,
+            "unknown_failure": bool(self.unknown_failure),
+        }
+
+    @classmethod
+    def from_state(cls, before, state):
+        tracker = cls(before)
+        state = state or {}
+        tracker.max_ok = _magento_datetime(state.get("max_ok"))
+        tracker.min_failed = _magento_datetime(state.get("min_failed"))
+        tracker.unknown_failure = bool(state.get("unknown_failure"))
+        return tracker
 
 
 class _SyncStats:
@@ -409,7 +443,14 @@ class MagentoInstance(models.Model):
     sync_page_size = fields.Integer(
         string="Sync Page Size",
         default=100,
-        help="Records requested per Magento API page (1-300; Magento refuses more than 300).",
+        help="Records requested per Magento API page (1-300; Magento refuses more than 300). "
+             "A queued order or customer sync runs one page per job.",
+    )
+    product_sync_page_size = fields.Integer(
+        string="Product Sync Page Size",
+        default=50,
+        help="Products imported per job by a queued product sync (1-300). Each product also "
+             "fetches its details and image, so keep a page well under the cron time limit.",
     )
 
     # ---- Shared contract fields (Phase 0); consumed by views, dashboard and record rules ----
@@ -552,12 +593,16 @@ class MagentoInstance(models.Model):
             if month_day < 1 or month_day > 31:
                 raise ValidationError("Auto Sync Day of Month must be between 1 and 31.")
 
-    @api.constrains("sync_page_size")
+    @api.constrains("sync_page_size", "product_sync_page_size")
     def _check_sync_page_size(self):
         for instance in self:
             if not 1 <= int(instance.sync_page_size or 0) <= MagentoAPI.MAX_PAGE_SIZE:
                 raise ValidationError(
                     "Sync Page Size must be between 1 and %s." % MagentoAPI.MAX_PAGE_SIZE
+                )
+            if not 1 <= int(instance.product_sync_page_size or 0) <= MagentoAPI.MAX_PAGE_SIZE:
+                raise ValidationError(
+                    "Product Sync Page Size must be between 1 and %s." % MagentoAPI.MAX_PAGE_SIZE
                 )
 
     @api.constrains("incremental_overlap_minutes")
@@ -999,8 +1044,10 @@ class MagentoInstance(models.Model):
         queued = []
         for entity in entities:
             _method, label, _report_type, priority = _SYNC_JOB_SPECS[entity]
-            identity_key = "sync-%s-%s" % (self.id, entity)
-            existing = jobs.sudo()._find_active(identity_key)
+            identity_key = self._magento_sync_identity_key(entity)
+            # A paged run in progress (a continuation job ``<key>-p<page>-r<run>`` is
+            # pending or started) also counts as queued: no second run alongside it.
+            existing = jobs.sudo()._find_active(identity_key) or self._magento_active_sync_run(entity)
             kwargs = {}
             if source_action:
                 kwargs["source_action"] = source_action
@@ -1009,13 +1056,30 @@ class MagentoInstance(models.Model):
             job = existing or jobs.enqueue(
                 self, "_magento_run_sync_job", args=(entity,), kwargs=kwargs,
                 instance=self,
-                channel="magento.%s.%s" % (self.id, entity),
+                channel=self._magento_sync_channel(entity),
                 priority=priority,
                 identity_key=identity_key,
                 description="Magento %s sync (%s)" % (label.lower(), self.name),
             )
             queued.append((entity, job, not existing))
         return queued
+
+    def _magento_sync_identity_key(self, entity):
+        return "sync-%s-%s" % (self.id, entity)
+
+    def _magento_sync_channel(self, entity):
+        return "magento.%s.%s" % (self.id, entity)
+
+    def _magento_active_sync_run(self, entity):
+        """Pending or started continuation job of a paged ``entity`` sync run, if any."""
+        self.ensure_one()
+        jobs = self.env["magento.job"].sudo()
+        if entity not in _PAGED_SYNC_ENTITIES:
+            return jobs.browse()
+        return jobs.search([
+            ("identity_key", "=like", "%s-p%%" % self._magento_sync_identity_key(entity)),
+            ("state", "in", ("pending", "started")),
+        ], limit=1)
 
     def _magento_enqueue_scheduled_sync(self, source_action):
         """Queue the auto-sync scope of this instance; reports an empty scope as before."""
@@ -1051,18 +1115,23 @@ class MagentoInstance(models.Model):
             },
         }
 
-    def _magento_run_sync_job(self, entity, source_action=None, mode=None):
+    def _magento_run_sync_job(self, entity, source_action=None, mode=None, run=None):
         """Job body of a queued sync: run the entity sync and write its sync report.
 
         Runs without the cron context, so the sync engine never commits inside the job;
         per-record failures are counted in the report and the Error Center as usual.
         An exception (e.g. the instance cannot build its API client) fails or retries
         the job according to the queue's classification.
+
+        Products, orders and customers run one page per job (``_magento_run_sync_page``);
+        ``run`` is the state of the run, carried from one page job to the next.
         """
         self.ensure_one()
         method, label, report_type, _priority = _SYNC_JOB_SPECS[entity]
         if not self.active:
             return "%s sync skipped: instance %s is archived." % (label, self.name)
+        if entity in _PAGED_SYNC_ENTITIES:
+            return self._magento_run_sync_page(entity, run=run, source_action=source_action, mode=mode)
         start_time = fields.Datetime.now()
         counts = getattr(self, method)() or {}
         if report_type:
@@ -1076,6 +1145,253 @@ class MagentoInstance(models.Model):
             int(counts.get("skipped") or 0),
             int(counts.get("errors") or 0),
         )
+
+    # =====================
+    # PAGED QUEUED SYNCS (one page per job)
+    # =====================
+    # A queued product/order/customer sync is a *run* of page jobs. Each job imports at
+    # most one page, then queues the next page itself, so no job comes near the cron time
+    # limit and the runner commits after every page (a killed worker loses one page).
+    #
+    # Paging is keyset based, never offset based: offsets over a moving ``updated_at``
+    # window skip or repeat records between jobs. The window is fixed when the run starts:
+    #   updated_from (watermark - overlap) <= updated_at <= upper (run start time)
+    # and pages are sorted ``updated_at ASC, entity_id ASC``. Each page asks for the rows
+    # after the cursor, the ``(updated_at, entity_id)`` of the last row processed:
+    #   (updated_at, entity_id) > (T, ID)
+    #   == updated_at >= T  AND  (updated_at > T  OR  entity_id > ID)
+    # Magento searchCriteria ANDs filter groups and ORs the filters of one group, and both
+    # the flat (orders) and the EAV (products, customers) collection processors accept an
+    # OR over different fields in one group, so this is two filter groups: an exact keyset.
+    # Rows at or before the cursor are also skipped client side, as a guard against a
+    # server that ignores a filter. A record saved during the run gets an ``updated_at``
+    # past ``upper``: it is not fetched twice in this run, and the next run fetches it.
+    #
+    # Run state, carried in the ``run`` kwarg of every page job (JSON):
+    #   upper, updated_from, before   window and watermark of the run (naive UTC strings)
+    #   cursor                        [updated_at, entity_id] of the last row processed
+    #   page, pages                   page number of the job, pages fetched so far
+    #   stats, tracker                cumulative counters and ``_WatermarkTracker`` state
+    #   report_id                     the run's single sync report, updated by every page
+    # The watermark only moves when the whole run is finished.
+
+    def _get_sync_job_page_size(self, kind):
+        """Records per page job: ``product_sync_page_size`` for products (each product
+        also costs a detail and an image request), ``sync_page_size`` otherwise."""
+        self.ensure_one()
+        size = self.product_sync_page_size if kind == "product" else self.sync_page_size
+        return MagentoAPI.clamp_page_size(size)
+
+    @staticmethod
+    def _magento_cursor_key(kind, item):
+        """Keyset position ``(updated_at, entity_id)`` of a search row, or None."""
+        updated_at = _magento_datetime(item.get("updated_at"))
+        raw_id = item.get(MagentoAPI.ID_KEYS[kind])
+        if raw_id is None:
+            raw_id = item.get("entity_id", item.get("id"))
+        try:
+            record_id = int(raw_id)
+        except (TypeError, ValueError):
+            return None
+        return (updated_at, record_id) if updated_at else None
+
+    @staticmethod
+    def _magento_parse_cursor(cursor):
+        if not cursor:
+            return None
+        updated_at = _magento_datetime(cursor[0])
+        try:
+            record_id = int(cursor[1])
+        except (TypeError, ValueError, IndexError):
+            return None
+        return (updated_at, record_id) if updated_at else None
+
+    @staticmethod
+    def _magento_cursor_filters(run):
+        """searchCriteria filter groups of the next page of ``run`` (see above)."""
+        filters = [("updated_at", run["upper"], "lteq")]
+        cursor = run.get("cursor")
+        if cursor:
+            updated_at, record_id = cursor
+            filters.append(("updated_at", updated_at, "gteq"))
+            filters.append([("updated_at", updated_at, "gt"), ("entity_id", str(record_id), "gt")])
+        elif run.get("updated_from"):
+            filters.append(("updated_at", run["updated_from"], "gteq"))
+        return filters
+
+    def _magento_sync_run_start(self, kind):
+        """State of a new paged run (see above)."""
+        self.ensure_one()
+        tracker, updated_from = self._incremental_start(kind)
+        to_str = fields.Datetime.to_string
+        return {
+            "upper": to_str(fields.Datetime.now()),
+            "updated_from": to_str(updated_from) if updated_from else None,
+            "before": to_str(tracker.before) if tracker.before else None,
+            "cursor": None,
+            "page": 1,
+            "pages": 0,
+            "stats": {},
+            "tracker": {},
+            "report_id": False,
+        }
+
+    def _magento_page_item_importer(self, kind, api, stats):
+        """``row -> ok`` importing one search row exactly like the direct ``sync_*``
+        loops; None when the row is ignored (product without SKU, order without id)."""
+        self.ensure_one()
+        if kind == "product":
+            supported_types = self._supported_product_types()
+
+            def _import(p):
+                if not p.get("sku"):
+                    return None
+                return self._sync_one_product(api, p, supported_types, stats)
+        elif kind == "order":
+            def _import(data):
+                magento_id = data.get("entity_id") or data.get("id")
+                if not magento_id:
+                    return None
+                return self._sync_one_order(api, data, magento_id, stats)
+        else:
+            customer_model = self.env["magento.customer"].with_context(
+                skip_magento_sync=True, active_test=False
+            )
+
+            def _import(data):
+                return self._sync_one_customer(customer_model, data, stats)
+        return _import
+
+    @staticmethod
+    def _magento_run_counts(counts):
+        """Counters carried to the next page job (messages capped like the report)."""
+        kept = {
+            key: value for key, value in counts.items()
+            if key not in ("watermark_before", "watermark_after", "sync_notes")
+        }
+        for key in ("error_messages", "skip_messages"):
+            kept[key] = list(kept.get(key) or [])[:_MAX_NOTE_LINES]
+        return kept
+
+    def _magento_save_run_report(self, report_type, run, counts, finished, source_action=None, mode=None):
+        """Create the run's sync report on its first page, update it on the next ones."""
+        self.ensure_one()
+        notes = None
+        if not finished:
+            notes = "Running: %s page(s) done so far; the next page is queued." % run["pages"]
+        vals = self._prepare_sync_report_vals(
+            report_type, counts, fields.Datetime.to_datetime(run["upper"]), fields.Datetime.now(),
+            source_action=source_action, notes=notes, mode=mode,
+        )
+        reports = self.env["magento.sync.report"].sudo()
+        report = reports.browse(run.get("report_id") or ()).exists()
+        if report:
+            report.write(vals)
+        else:
+            report = reports.create(vals)
+        return report
+
+    def _magento_enqueue_sync_page(self, entity, run, source_action=None, mode=None):
+        """Queue the next page job of a run: same channel and priority as the current
+        job. Its identity key ``sync-<id>-<entity>-p<page>-r<report>`` is unique to the
+        run, so neither the first job's key nor another run can swallow it."""
+        self.ensure_one()
+        _method, label, _report_type, priority = _SYNC_JOB_SPECS[entity]
+        channel = self._magento_sync_channel(entity)
+        jobs = self.env["magento.job"]
+        current = jobs.sudo().browse(self.env.context.get("magento_job_id") or ()).exists()
+        if current and current.channel == channel:
+            priority = current.priority
+        kwargs = {"run": run}
+        if source_action:
+            kwargs["source_action"] = source_action
+        if mode:
+            kwargs["mode"] = mode
+        return jobs.enqueue(
+            self, "_magento_run_sync_job", args=(entity,), kwargs=kwargs,
+            instance=self, channel=channel, priority=priority,
+            max_attempts=current.max_attempts if current else 5,
+            identity_key="%s-p%s-r%s" % (
+                self._magento_sync_identity_key(entity), run["page"], run["report_id"]),
+            description="Magento %s sync (%s), page %s" % (label.lower(), self.name, run["page"]),
+        )
+
+    def _magento_run_sync_page(self, entity, run=None, source_action=None, mode=None):
+        """Import one page of a queued ``entity`` sync run; queue the next page if any.
+
+        Without ``run`` a new run starts (window, watermark and report). The run ends
+        on a short page, an empty page, a page that does not move the cursor, or a
+        listing error (counted, as in the direct sync). Only then is the watermark
+        saved, with the usual gap-free rule over the whole run. A page stops early
+        after ``_SYNC_PAGE_TIME_BUDGET`` seconds; the next job resumes at the cursor.
+        """
+        self.ensure_one()
+        kind, getter = _PAGED_SYNC_ENTITIES[entity]
+        _method, label, report_type, _priority = _SYNC_JOB_SPECS[entity]
+        run = dict(run) if run else self._magento_sync_run_start(kind)
+        to_dt = fields.Datetime.to_datetime
+        stats = _SyncStats(kind)
+        stats.merge(run.get("stats"))
+        tracker = _WatermarkTracker.from_state(to_dt(run.get("before")), run.get("tracker"))
+        start_cursor = self._magento_parse_cursor(run.get("cursor"))
+        cursor = start_cursor
+        api = MagentoAPI(self)
+        page_size = self._get_sync_job_page_size(kind)
+        filters = self._magento_cursor_filters(run)
+        items = self._fetch_list(stats, kind, lambda: getattr(api, getter)(
+            None, filters=filters, page_size=page_size, limit=page_size,
+        ))
+        import_item = self._magento_page_item_importer(kind, api, stats)
+        deadline = time.monotonic() + _SYNC_PAGE_TIME_BUDGET
+        out_of_time = False
+        for item in items or ():
+            if not isinstance(item, dict):
+                continue
+            key = self._magento_cursor_key(kind, item)
+            if key and start_cursor and key <= start_cursor:
+                continue  # processed by an earlier page of this run
+            stats.records_seen += 1
+            ok = import_item(item)
+            if ok is not None:
+                tracker.record(item.get("updated_at"), ok)
+            if key and (cursor is None or key > cursor):
+                cursor = key
+            if time.monotonic() >= deadline:
+                out_of_time = True
+                break
+        run["pages"] = int(run.get("pages") or 0) + 1
+        finished = (
+            items is None
+            or cursor == start_cursor
+            or (not out_of_time and len(items) < page_size)
+        )
+        if finished:
+            self._incremental_finish(
+                stats, kind, tracker, to_dt(run.get("updated_from")), {"pages": run["pages"]},
+                stats.records_seen,
+            )
+            self._mark_synced()
+        counts = stats.as_dict()
+        report = self._magento_save_run_report(
+            report_type, run, counts, finished, source_action=source_action, mode=mode,
+        )
+        summary = "%s sync: %s synced, %s skipped, %s errors" % (
+            label,
+            int(counts.get("created") or 0) + int(counts.get("updated") or 0),
+            int(counts.get("skipped") or 0),
+            int(counts.get("errors") or 0),
+        )
+        if finished:
+            return summary
+        run.update({
+            "cursor": [fields.Datetime.to_string(cursor[0]), cursor[1]],
+            "page": int(run.get("page") or 1) + 1,
+            "stats": self._magento_run_counts(counts),
+            "tracker": tracker.state(),
+            "report_id": report.id,
+        })
+        job = self._magento_enqueue_sync_page(entity, run, source_action=source_action, mode=mode)
+        return "%s so far; page %s done, next page in job %s" % (summary, run["page"] - 1, job.id)
 
     # =====================
     # SYNC BOOKKEEPING
@@ -1094,6 +1410,15 @@ class MagentoInstance(models.Model):
         ``total_records`` = records seen; ``success`` = created + updated;
         ``errors`` = record failures plus failed sub-steps and fetch errors.
         """
+        vals = self._prepare_sync_report_vals(
+            sync_type, counts, start_time, end_time, source_action=source_action, notes=notes,
+            per_type_counts=per_type_counts, mode=mode,
+        )
+        return self.env["magento.sync.report"].sudo().create(vals)
+
+    def _prepare_sync_report_vals(self, sync_type, counts, start_time, end_time, *, source_action=None,
+                                  notes=None, per_type_counts=None, mode=None):
+        """Values of a ``magento.sync.report`` (see ``_create_sync_report``)."""
         self.ensure_one()
         counts = counts or {}
         created = int(counts.get("created") or 0)
@@ -1132,7 +1457,7 @@ class MagentoInstance(models.Model):
             note_lines.append("Errors: %s" % errors)
             note_lines.extend("  - %s" % msg for msg in (counts.get("error_messages") or [])[:_MAX_NOTE_LINES])
         vals["notes"] = "\n".join(note_lines) or False
-        return report_model.create(vals)
+        return vals
 
     def _sync_notification(self, label, counts):
         counts = counts or {}
@@ -1901,6 +2226,13 @@ class MagentoInstance(models.Model):
         self.ensure_one()
         if str(magento_ref or "") == self._LIST_REF and entity in self._LIST_RESYNC_METHODS:
             # A failed listing (auth, outage) is retried by running that sync again.
+            paged = {"product": "products", "order": "orders", "customer": "customers"}.get(entity)
+            if paged and self.env.context.get("magento_job_id"):
+                # Inside a queued job a whole listing would be one unbounded job: start
+                # (or join) a paged run instead; its first page resolves the issue.
+                (_entity, job, created), = self._magento_enqueue_sync([paged])
+                return "%s sync %s (job %s)" % (
+                    entity.capitalize(), "queued" if created else "already queued", job.id)
             return getattr(self, self._LIST_RESYNC_METHODS[entity])()
         if entity not in self._RESYNC_ENTITIES:
             raise UserError("Cannot resync Magento entity '%s'." % entity)
