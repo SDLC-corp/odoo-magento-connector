@@ -216,32 +216,25 @@ class StockPicking(models.Model):
             )
             return False
 
-        api = MagentoAPI(order.magento_instance_id.sudo())
         payload = {"items": items, "notify": False}
         tracks = self._magento_prepare_shipment_tracks()
         if tracks:
             payload["tracks"] = tracks
-        try:
-            result = api.create_shipment(order.magento_order_id, payload)
-        except requests.exceptions.RequestException as exc:
-            order._magento_raise_http_error(exc)
-
-        shipment_id = None
-        if isinstance(result, dict):
-            shipment_id = result.get("entity_id") or result.get("id")
-        else:
-            shipment_id = result
-
+        # Idempotent: links an existing matching Magento shipment instead of posting twice.
+        shipment_id, shipment_data = order._magento_push_document("shipment", self, payload)
         if not shipment_id:
             return False
 
         increment_id = ""
-        try:
-            shipment_data = api.get_shipment(shipment_id)
-            if isinstance(shipment_data, dict):
-                increment_id = shipment_data.get("increment_id") or ""
-        except requests.exceptions.RequestException as exc:
-            _logger.warning("Magento shipment %s could not be read back: %s", shipment_id, exc)
+        if shipment_data:
+            increment_id = shipment_data.get("increment_id") or ""
+        else:
+            try:
+                shipment_data = MagentoAPI(order.magento_instance_id.sudo()).get_shipment(shipment_id)
+                if isinstance(shipment_data, dict):
+                    increment_id = shipment_data.get("increment_id") or ""
+            except requests.exceptions.RequestException as exc:
+                _logger.warning("Magento shipment %s could not be read back: %s", shipment_id, exc)
 
         self.write({
             "magento_shipment_id": str(shipment_id),
