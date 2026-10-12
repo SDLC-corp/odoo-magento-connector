@@ -225,6 +225,7 @@
                                 <group>
                                     <group string="Incremental Sync">
                                         <field name="sync_page_size"/>
+                                        <field name="product_sync_page_size"/>
                                         <field name="incremental_overlap_minutes"/>
                                     </group>
                                     <group string="Sync Markers"
