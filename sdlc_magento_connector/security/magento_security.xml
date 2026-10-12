@@ -111,4 +111,10 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_bulk_operation_company" model="ir.rule">
+        <field name="name">Magento bulk operation: multi-company</field>
+        <field name="model_id" ref="model_magento_bulk_operation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

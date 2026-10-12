@@ -228,54 +228,123 @@ class MagentoFieldMapping(models.Model):
         """Explicit button: apply these mappings to every existing record of the
         instance and push the mapped values to Magento.
 
-        Saving a mapping never does this on its own. Each record is pushed
-        independently; failures are logged and counted, not raised.
+        Saving a mapping never does this on its own. The payloads of all records
+        of one instance and mapping type are built first, then sent together through
+        the bulk API (``magento.bulk.operation._submit``): one async bulk request
+        per chunk when the instance uses the async bulk API, otherwise one
+        synchronous request per record. A record whose payload cannot be built, or
+        that Magento rejects, is counted and recorded in the error center; it never
+        stops the batch.
         """
-        pushed = 0
-        failed = 0
+        # mapping type -> (HTTP method, bulk route, bulk operation, error-center entity)
+        bulk_routes = {
+            "product": ("put", "products/bySku", "product_update", "product"),
+            "customer": ("put", "customers/byCustomerId", "other", "customer"),
+            "category": ("put", "categories/byId", "other", "category"),
+        }
+
+        def _bulk_payload_for(mapping_type, row):
+            """Request body of one record for the bulk update, or None to skip it.
+
+            Products send only the mapped fields plus the SKU (Magento reads it from the
+            body); customers and categories send their full update payload with their id.
+            """
+            if mapping_type == "product":
+                if not row.sku or not row.instance_id or row.type_id in ("configurable", "bundle", "grouped"):
+                    return None
+                payload = row._build_mapped_payload_only()
+                if not payload.get("product"):
+                    return None
+                payload["product"].setdefault("sku", row.sku)
+                return payload
+            if not row.magento_id:
+                return None
+            try:
+                magento_id = int(row.magento_id)
+            except (TypeError, ValueError):
+                raise UserError(_("Invalid Magento ID %s.", row.magento_id)) from None
+            if mapping_type == "customer":
+                payload = row._build_magento_payload(include_address=True)
+                payload["customer"]["id"] = magento_id
+            else:
+                payload = row._build_magento_payload(for_update=True)
+                payload["category"]["id"] = magento_id
+            return payload
+
+        issues = self.env["magento.sync.issue"]
+        counts = {"pushed": 0, "queued": 0, "failed": 0, "skipped": 0, "operations": 0}
+
+        groups = {}
         for rec in self.filtered(
             lambda r: r.active and r.instance_id and r.mapping_type and r.odoo_field and r.magento_field_id
         ):
-            model_name = rec._mapping_model_name(rec.mapping_type)
-            if not model_name:
-                continue
-            Model = self.env[model_name]
-            domain = [("instance_id", "=", rec.instance_id.id)] if "instance_id" in Model._fields else []
+            if rec.mapping_type in bulk_routes and rec._mapping_model_name(rec.mapping_type):
+                key = (rec.instance_id.id, rec.mapping_type)
+                groups[key] = groups.get(key, self.browse()) | rec
+
+        for (instance_id, mapping_type), mappings in groups.items():
+            instance = self.env["magento.instance"].browse(instance_id)
+            method, route, operation, entity = bulk_routes[mapping_type]
+            Model = self.env[self._mapping_model_name(mapping_type)]
+            domain = [("instance_id", "=", instance_id)] if "instance_id" in Model._fields else []
+            entries = []
             for row in Model.search(domain):
+                ref = row.sku if mapping_type == "product" else row.magento_id
                 try:
                     with self.env.cr.savepoint():
-                        self._apply_local_mapped_value(rec, row)
-                        if rec.mapping_type == "product":
-                            if not row.sku or row.type_id in ("configurable", "bundle", "grouped"):
-                                continue
-                            row.with_context(skip_odoo_sync=True).action_update_magento_mapped_fields()
-                        elif rec.mapping_type == "customer":
-                            if not row.magento_id:
-                                continue
-                            row.action_update_magento_customer()
-                        elif rec.mapping_type == "category":
-                            if not row.magento_id:
-                                continue
-                            row.action_update_magento_category()
-                    pushed += 1
+                        for mapping in mappings:
+                            self._apply_local_mapped_value(mapping, row)
+                        payload = _bulk_payload_for(mapping_type, row)
                 except Exception as exc:  # noqa: BLE001 - one bad record must not stop the batch
-                    failed += 1
+                    counts["failed"] += 1
                     _logger.warning(
-                        "Failed applying mapping id=%s on %s record id=%s: %s",
-                        rec.id,
-                        rec.mapping_type,
-                        row.id,
-                        exc,
+                        "Failed applying %s mappings on record id=%s: %s", mapping_type, row.id, exc,
                     )
+                    if ref:
+                        issues._record_failure(instance, entity, ref, exc, record=row)
+                    continue
+                if not payload:
+                    counts["skipped"] += 1
+                    continue
+                entries.append({
+                    "payload": payload, "entity": entity, "ref": ref,
+                    "res_model": row._name, "res_id": row.id,
+                })
+            if not entries:
+                continue
+            ops = self.env["magento.bulk.operation"]._submit(
+                instance, operation, method, route, entries,
+                description=_("Apply %s mapping", mapping_type),
+            )
+            counts["operations"] += len(ops)
+            for op in ops:
+                counts["failed"] += op.failed_count + op.retriable_count + op.rejected_count
+                if op.transport == "async":
+                    counts["queued"] += op.open_count + op.complete_count
+                else:
+                    counts["pushed"] += op.complete_count
+
+        if counts["queued"]:
+            message = _(
+                "Queued: %(queued)s in %(operations)s bulk operation(s), Pushed: %(pushed)s, "
+                "Failed: %(failed)s, Skipped: %(skipped)s. Magento processes queued items in the "
+                "background; results appear in Logs > Bulk Operations and the Error Center.",
+                **counts,
+            )
+        else:
+            message = _(
+                "Pushed: %(pushed)s, Failed: %(failed)s, Skipped: %(skipped)s "
+                "(failures are listed in the Error Center)",
+                **counts,
+            )
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
                 "title": _("Mapping applied"),
-                "message": _("Pushed: %(pushed)s, Failed: %(failed)s (see server log for failures)")
-                % {"pushed": pushed, "failed": failed},
-                "type": "warning" if failed else "success",
-                "sticky": bool(failed),
+                "message": message,
+                "type": "warning" if counts["failed"] else "success",
+                "sticky": bool(counts["failed"]),
             },
         }
 
