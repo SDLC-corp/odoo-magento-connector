@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_magento_bulk_operation_list" model="ir.ui.view">
+        <field name="name">magento.bulk.operation.list</field>
+        <field name="model">magento.bulk.operation</field>
+        <field name="arch" type="xml">
+            <list string="Bulk Operations" create="0" edit="0" import="0"
+                  decoration-muted="state == 'done'">
+                <header>
+                    <button name="action_poll_now" type="object" string="Check Status"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                </header>
+                <field name="create_date" string="Submitted"/>
+                <field name="name"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="operation" optional="show"/>
+                <field name="transport" widget="badge" optional="show"
+                       decoration-info="transport == 'async'"/>
+                <field name="bulk_uuid" optional="hide"/>
+                <field name="item_count" sum="Items"/>
+                <field name="complete_count" sum="Complete" optional="show"/>
+                <field name="open_count" sum="Open" optional="show"/>
+                <field name="retriable_count" sum="Retriable" optional="show"/>
+                <field name="failed_count" sum="Failed" optional="show"/>
+                <field name="rejected_count" sum="Rejected" optional="hide"/>
+                <field name="poll_attempts" optional="hide"/>
+                <field name="last_polled" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'accepted'"
+                       decoration-success="state == 'done'"
+                       decoration-warning="state == 'partial'"
+                       decoration-danger="state in ('failed', 'rejected')"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_bulk_operation_search" model="ir.ui.view">
+        <field name="name">magento.bulk.operation.search</field>
+        <field name="model">magento.bulk.operation</field>
+        <field name="arch" type="xml">
+            <search string="Bulk Operations">
+                <field name="name"/>
+                <field name="bulk_uuid"/>
+                <field name="instance_id"/>
+                <field name="items_json" string="SKU / Reference"/>
+                <filter name="accepted" string="In Progress" domain="[('state', '=', 'accepted')]"/>
+                <filter name="problems" string="With Failures"
+                        domain="[('state', 'in', ('partial', 'failed', 'rejected'))]"/>
+                <filter name="done" string="Done" domain="[('state', '=', 'done')]"/>
+                <separator/>
+                <filter name="async" string="Async Bulk" domain="[('transport', '=', 'async')]"/>
+                <filter name="sync" string="Synchronous" domain="[('transport', '=', 'sync')]"/>
+                <separator/>
+                <filter name="stock" string="Stock" domain="[('operation', '=', 'stock_update')]"/>
+                <filter name="product" string="Products" domain="[('operation', '=', 'product_update')]"/>
+                <separator/>
+                <filter name="create_date" string="Submitted" date="create_date"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_operation" string="Operation" context="{'group_by': 'operation'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_bulk_operation_form" model="ir.ui.view">
+        <field name="name">magento.bulk.operation.form</field>
+        <field name="model">magento.bulk.operation</field>
+        <field name="arch" type="xml">
+            <form string="Bulk Operation" create="0" edit="0">
+                <header>
+                    <button name="action_poll_now" type="object" string="Check Status" class="btn-primary"
+                            invisible="state != 'accepted' or transport != 'async'"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <field name="state" widget="statusbar" statusbar_visible="accepted,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_issues" type="object" class="oe_stat_button"
+                                icon="fa-exclamation-circle"
+                                invisible="not failed_count and not retriable_count and not rejected_count and state != 'failed'">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Error Center</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="alert alert-danger" role="alert"
+                         invisible="state not in ('failed', 'rejected') or not message">
+                        <field name="message" nolabel="1" readonly="1" class="d-block"/>
+                    </div>
+                    <div class="alert alert-info" role="status"
+                         invisible="state != 'accepted'">
+                        Magento queued these items. Their result is checked every two minutes
+                        (<field name="poll_attempts" nolabel="1" readonly="1" class="d-inline"/> checks so far).
+                        <field name="message" nolabel="1" readonly="1" class="d-block mt-1"
+                               invisible="not message"/>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Request">
+                            <field name="instance_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="operation"/>
+                            <field name="transport"/>
+                            <field name="method"/>
+                            <field name="route"/>
+                            <field name="bulk_uuid" invisible="not bulk_uuid"/>
+                        </group>
+                        <group string="Items">
+                            <field name="item_count"/>
+                            <field name="complete_count" decoration-success="complete_count &gt; 0"/>
+                            <field name="open_count" decoration-info="open_count &gt; 0"/>
+                            <field name="retriable_count" decoration-warning="retriable_count &gt; 0"/>
+                            <field name="failed_count" decoration-danger="failed_count &gt; 0"/>
+                            <field name="rejected_count" decoration-danger="rejected_count &gt; 0"/>
+                        </group>
+                        <group string="Progress">
+                            <field name="create_date" string="Submitted"/>
+                            <field name="last_polled"/>
+                            <field name="poll_attempts"/>
+                            <field name="date_done"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Items" name="items">
+                            <field name="items_pretty" nolabel="1" readonly="1"
+                                   class="font-monospace text-break"/>
+                        </page>
+                        <page string="Magento Result" name="result" invisible="not result_json">
+                            <field name="result_pretty" nolabel="1" readonly="1"
+                                   class="font-monospace text-break"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_bulk_operation" model="ir.actions.act_window">
+        <field name="name">Bulk Operations</field>
+        <field name="res_model">magento.bulk.operation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_bulk_operation_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No bulk operations yet</p>
+            <p>Mass writes to Magento (stock pushes, "Apply to Existing" on field mappings) are
+               sent in chunks. Each chunk is listed here with the result of every item; failed
+               items also appear in the Error Center.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_bulk_operation" name="Bulk Operations" parent="menu_magento_reports"
+              action="action_magento_bulk_operation" sequence="7"/>
+
+    <!-- Instance form: stock push and bulk transport settings on the Catalog tab. -->
+    <record id="view_magento_instance_form_bulk" model="ir.ui.view">
+        <field name="name">magento.instance.form.bulk</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_bulk_operations" type="object"
+                        class="oe_stat_button" icon="fa-cloud-upload"
+                        invisible="bulk_operation_count == 0">
+                    <field name="bulk_operation_count" widget="statinfo" string="Bulk Ops"/>
+                </button>
+            </div>
+            <page name="catalog" position="inside">
+                <group name="stock_bulk" string="Stock &amp; Bulk">
+                    <group>
+                        <field name="use_async_bulk"/>
+                        <field name="bulk_chunk_size"/>
+                    </group>
+                    <group>
+                        <field name="stock_push_mode"/>
+                        <field name="stock_location_id" options="{'no_create': True}"/>
+                        <field name="msi_source_code" invisible="stock_push_mode != 'msi'"
+                               required="stock_push_mode == 'msi'"/>
+                    </group>
+                </group>
+                <button name="action_push_stock_bulk" type="object" string="Push Stock Now"
+                        class="btn-secondary" icon="fa-cubes"
+                        groups="sdlc_magento_connector.group_magento_manager"
+                        confirm="Queue a push of the free quantity of every mapped simple product to Magento?"/>
+            </page>
+        </field>
+    </record>
+
+</odoo>

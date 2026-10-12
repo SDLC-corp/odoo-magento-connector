@@ -23,3 +23,5 @@ access_magento_job_user,magento.job user,model_magento_job,group_magento_user,1,
 access_magento_job_manager,magento.job manager,model_magento_job,group_magento_manager,1,1,1,1
 access_magento_sync_issue_user,magento.sync.issue user,model_magento_sync_issue,group_magento_user,1,1,0,0
 access_magento_sync_issue_manager,magento.sync.issue manager,model_magento_sync_issue,group_magento_manager,1,1,1,1
+access_magento_bulk_operation_user,magento.bulk.operation user,model_magento_bulk_operation,group_magento_user,1,0,0,0
+access_magento_bulk_operation_manager,magento.bulk.operation manager,model_magento_bulk_operation,group_magento_manager,1,1,1,1

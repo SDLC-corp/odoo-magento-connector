@@ -10,3 +10,4 @@ from . import test_oauth
 from . import test_queue
 from . import test_error_center
 from . import test_error_center_wiring
+from . import test_bulk

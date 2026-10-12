@@ -886,3 +886,247 @@ class MagentoAPI:
     def get_country(self, country_code):
         safe_code = quote(str(country_code or "").strip(), safe="")
         return self._get(f"/rest/V1/directory/countries/{safe_code}")
+
+    # ------------------------------------------------------------------
+    # Bulk / async transport (roadmap 1.9)
+    # ------------------------------------------------------------------
+    # Magento bulk operation statuses (GET /V1/bulk/:uuid/detailed-status).
+    BULK_STATUS_COMPLETE = 1
+    BULK_STATUS_RETRIABLY_FAILED = 2
+    BULK_STATUS_FAILED = 3
+    BULK_STATUS_OPEN = 4
+    BULK_STATUS_REJECTED = 5
+    # ``webapi/validation/complex_array_limit`` defaults to 20 when input limits are on.
+    DEFAULT_BULK_CHUNK_SIZE = 20
+    MAX_BULK_CHUNK_SIZE = 500
+    BULK_METHODS = frozenset({"post", "put"})
+    # Route parameter (``byXxx`` segment, lower-camel name) -> keys holding its value in a
+    # request body, looked up at the top level, then one level down (``product.sku``).
+    _BULK_ROUTE_PARAM_KEYS = {
+        "sku": ("sku",),
+        "productSku": ("productSku", "sku"),
+        "itemId": ("itemId", "item_id"),
+        "customerId": ("customerId", "id"),
+        "categoryId": ("categoryId", "id"),
+        "id": ("id",),
+    }
+
+    def _bulk_chunk_size(self):
+        try:
+            size = int(getattr(self.instance, "bulk_chunk_size", 0) or self.DEFAULT_BULK_CHUNK_SIZE)
+        except (TypeError, ValueError):
+            size = self.DEFAULT_BULK_CHUNK_SIZE
+        return max(1, min(size, self.MAX_BULK_CHUNK_SIZE))
+
+    @staticmethod
+    def _bulk_route(route):
+        """``products/bySku`` from ``/V1/products/bySku``, ``V1/products/bySku`` or ``products/bySku``."""
+        route = str(route or "").strip().strip("/")
+        if route.startswith("V1/"):
+            route = route[3:]
+        if not route:
+            raise ValueError("A Magento bulk route is required.")
+        return route
+
+    def _bulk_endpoint(self, route, store_code=None):
+        """PaaS / on-premise bulk path: ``/rest/<store|all>/async/bulk/V1/<route>``.
+
+        (Adobe Commerce as a Cloud Service uses ``/<tenant>/V1/async/bulk/<route>``
+        instead; not supported yet.)
+        """
+        store = str(store_code or "").strip() or "all"
+        return f"/rest/{quote(store, safe='')}/async/bulk/V1/{self._bulk_route(route)}"
+
+    @staticmethod
+    def format_magento_message(message, parameters=None):
+        """Substitute Magento's ``%1``/``%name`` placeholders with ``parameters``."""
+        text = str(message or "")
+        if isinstance(parameters, (list, tuple)):
+            # Highest index first so %1 does not eat the start of %10.
+            for idx in range(len(parameters), 0, -1):
+                text = text.replace(f"%{idx}", str(parameters[idx - 1]))
+        elif isinstance(parameters, dict):
+            for key in sorted(parameters, key=lambda k: -len(str(k))):
+                text = text.replace(f"%{key}", str(parameters[key]))
+        return text
+
+    @classmethod
+    def bulk_error_message(cls, exc, limit=1000):
+        """One-line message for a failed request, ``HTTP <status>: <Magento message>``."""
+        response = getattr(exc, "response", None)
+        if response is not None:
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            if isinstance(data, dict) and data.get("message"):
+                detail = cls.format_magento_message(data["message"], data.get("parameters"))
+            else:
+                detail = (getattr(response, "text", "") or "").strip() or type(exc).__name__
+            text = f"HTTP {response.status_code}: {detail}"
+        else:
+            text = f"{type(exc).__name__}: {exc}"
+        text = " ".join(text.split())
+        return text if len(text) <= limit else text[:limit] + "..."
+
+    @classmethod
+    def bulk_status_for_exception(cls, exc):
+        """Bulk status a failed synchronous request maps to: 2 when retrying may
+        succeed (connection errors, timeouts, HTTP 429/5xx), 3 otherwise."""
+        if isinstance(exc, requests.exceptions.SSLError):
+            return cls.BULK_STATUS_FAILED
+        if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+            return cls.BULK_STATUS_RETRIABLY_FAILED
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status is not None and (status == 429 or status >= 500):
+            return cls.BULK_STATUS_RETRIABLY_FAILED
+        return cls.BULK_STATUS_FAILED
+
+    @staticmethod
+    def _bulk_aborts_batch(exc):
+        """After this error, sending the remaining items is pointless: credentials
+        rejected (401/403) or Magento unreachable."""
+        if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+            return True
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        return status in (401, 403)
+
+    def _bulk_route_value(self, item, name):
+        keys = self._BULK_ROUTE_PARAM_KEYS.get(name, (name,))
+        if not isinstance(item, dict):
+            return None
+        for key in keys:
+            if item.get(key) not in (None, ""):
+                return item[key]
+        for value in item.values():
+            if isinstance(value, dict):
+                for key in keys:
+                    if value.get(key) not in (None, ""):
+                        return value[key]
+        return None
+
+    def _bulk_sync_path(self, route, item):
+        """Synchronous path of one bulk item: ``products/bySku`` + ``{"product": {"sku": "A B"}}``
+        -> ``products/A%20B``. Raises ValueError when a route parameter has no value."""
+        segments = []
+        for segment in self._bulk_route(route).split("/"):
+            if len(segment) > 2 and segment.startswith("by") and segment[2].isupper():
+                name = segment[2].lower() + segment[3:]
+                value = self._bulk_route_value(item, name)
+                if value in (None, ""):
+                    raise ValueError(f"Bulk item has no value for route parameter '{name}'.")
+                segment = quote(str(value).strip(), safe="")
+            segments.append(segment)
+        return "/".join(segments)
+
+    def _bulk_sync_item(self, method, route, item, store_code=None):
+        path = self._bulk_sync_path(route, item)
+        if store_code:
+            store = quote(str(store_code).strip(), safe="")
+            return self._json(self._request(method, f"/rest/{store}/V1/{path}", payload=item))
+        return self._request_with_prefix_fallback(
+            method, lambda prefix: f"{prefix}/{path}", include_all_scope=True, payload=item,
+        )
+
+    def _bulk_sync_chunk(self, method, route, chunk, store_code, state):
+        """Synchronous fallback: send the items of one chunk one by one through the
+        normal endpoint and report them like Magento's bulk status (1 / 2 / 3)."""
+        request_items = []
+        for idx, item in enumerate(chunk):
+            abort = state.get("abort")
+            if abort is not None:
+                request_items.append({
+                    "id": idx, "status": self.bulk_status_for_exception(abort),
+                    "result_message": self.bulk_error_message(abort), "error_code": None,
+                })
+                continue
+            try:
+                self._bulk_sync_item(method, route, item, store_code=store_code)
+            except requests.exceptions.RequestException as exc:
+                if self._bulk_aborts_batch(exc):
+                    state["abort"] = exc
+                request_items.append({
+                    "id": idx,
+                    "status": self.bulk_status_for_exception(exc),
+                    "result_message": self.bulk_error_message(exc),
+                    "error_code": getattr(getattr(exc, "response", None), "status_code", None),
+                })
+            except ValueError as exc:  # route parameter missing from the item
+                request_items.append({
+                    "id": idx, "status": self.BULK_STATUS_FAILED,
+                    "result_message": str(exc), "error_code": None,
+                })
+            else:
+                request_items.append({
+                    "id": idx, "status": self.BULK_STATUS_COMPLETE, "result_message": "", "error_code": None,
+                })
+        return {
+            "bulk_uuid": False,
+            "request_items": request_items,
+            "errors": any(r["status"] != self.BULK_STATUS_COMPLETE for r in request_items),
+            "items": chunk,
+            "sync": True,
+        }
+
+    def async_bulk(self, method, route, items, *, store_code=None):
+        """Send ``items`` (one request body each) to a Magento bulk endpoint.
+
+        ``route`` is the bulk route after ``V1/``, route parameters already rewritten
+        (``:sku`` -> ``bySku``), e.g. ``products/bySku`` or ``inventory/source-items``.
+        Items are sent in chunks of the instance's ``bulk_chunk_size`` (default 20) to
+        ``/rest/<store_code or 'all'>/async/bulk/V1/<route>``.
+
+        Returns one dict per chunk: ``bulk_uuid``, ``request_items`` (``id`` = index in
+        the chunk), ``errors``, plus ``items`` (the chunk) and ``sync``. A chunk Magento
+        refused has ``error`` (the exception) and no ``bulk_uuid``; after a 401/403 or a
+        connection failure the remaining chunks are not sent and carry the same error.
+        Acceptance only means Magento queued the work: poll ``get_bulk_detailed_status``.
+
+        When the instance's ``use_async_bulk`` is off, the items are sent one by one to
+        the synchronous endpoint instead (``products/bySku`` -> ``PUT /V1/products/<sku>``,
+        the value read from the item) and ``request_items`` carry the final bulk status
+        of each item (1 complete, 2 retriably failed, 3 failed) and ``result_message``.
+        """
+        method = (method or "post").lower()
+        if method not in self.BULK_METHODS:
+            raise ValueError(f"Unsupported Magento bulk method: {method.upper()} (POST or PUT only).")
+        route = self._bulk_route(route)
+        items = list(items or [])
+        size = self._bulk_chunk_size()
+        chunks = [items[i:i + size] for i in range(0, len(items), size)]
+        state = {"abort": None}
+        if not getattr(self.instance, "use_async_bulk", False):
+            return [self._bulk_sync_chunk(method, route, chunk, store_code, state) for chunk in chunks]
+
+        endpoint = self._bulk_endpoint(route, store_code)
+        results = []
+        for chunk in chunks:
+            if state["abort"] is not None:
+                results.append({"bulk_uuid": False, "request_items": [], "errors": True,
+                                "items": chunk, "sync": False, "error": state["abort"]})
+                continue
+            try:
+                response = self._json(self._request(method, endpoint, payload=chunk))
+            except requests.exceptions.RequestException as exc:
+                if self._bulk_aborts_batch(exc):
+                    state["abort"] = exc
+                results.append({"bulk_uuid": False, "request_items": [], "errors": True,
+                                "items": chunk, "sync": False, "error": exc})
+                continue
+            response = response if isinstance(response, dict) else {}
+            results.append({
+                "bulk_uuid": response.get("bulk_uuid") or False,
+                "request_items": response.get("request_items") or [],
+                "errors": bool(response.get("errors")),
+                "items": chunk,
+                "sync": False,
+            })
+        return results
+
+    def get_bulk_status(self, bulk_uuid):
+        """``GET /V1/bulk/:uuid/status``: ``operations_list`` with id, status, result_message."""
+        return self._get(f"/rest/V1/bulk/{quote(str(bulk_uuid or '').strip(), safe='')}/status")
+
+    def get_bulk_detailed_status(self, bulk_uuid):
+        """``GET /V1/bulk/:uuid/detailed-status``: adds serialized_data / result_serialized_data."""
+        return self._get(f"/rest/V1/bulk/{quote(str(bulk_uuid or '').strip(), safe='')}/detailed-status")

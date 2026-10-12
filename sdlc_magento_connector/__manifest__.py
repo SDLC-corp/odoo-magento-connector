@@ -20,6 +20,8 @@
         'views/magento_job_views.xml',
         'views/magento_sync_issue_views.xml',
         'data/magento_job_data.xml',
+        'views/magento_bulk_views.xml',
+        'data/magento_bulk_data.xml',
     ],
     'assets': {
         'web.assets_backend': [
