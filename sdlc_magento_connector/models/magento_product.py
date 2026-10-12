@@ -5,15 +5,18 @@ import re
 
 import requests
 
-from odoo import api, fields, models
+from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import SQL
 from odoo.tools.mimetypes import guess_mimetype
 
 from ..services.magento_api import MagentoAPI
+# Defines ``magento.job``, which this module extends: it must be loaded first.
+from . import magento_job  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 
-# Context keys that suppress the automatic (post-commit) push to Magento.
+# Context keys that suppress the automatic (queued) push to Magento.
 # ``magento_skip_push`` is the public key that import/sync code must pass;
 # ``skip_magento_sync`` is the historical key, still honoured.
 PUSH_SKIP_CONTEXT_KEYS = ("magento_skip_push", "skip_magento_sync")
@@ -55,63 +58,94 @@ def raise_magento_user_error(exc):
 
 
 def schedule_magento_push(records, flags=()):
-    """Queue ``records._magento_auto_push(flags)`` to run after the current
-    transaction commits, in its own cursor.
+    """Queue ``record._magento_auto_push(flags)`` as one ``magento.job`` per record.
 
-    Pushes are deduplicated per record within one transaction; ``flags`` of
-    repeated calls are merged. Nothing is queued when the context carries
-    ``magento_skip_push`` (or the legacy ``skip_magento_sync``). If the
-    transaction rolls back, Odoo discards the queue and nothing is pushed.
+    The job is created inside the current transaction: it commits with the edit and
+    a rollback discards it, so nothing is pushed for an edit that was not saved.
+    Deduplicated per record (identity key ``push-<model>-<id>``): a second edit
+    while the push is still waiting reuses that job and merges ``flags``. Nothing
+    is queued when the context carries ``magento_skip_push`` (or the legacy
+    ``skip_magento_sync``). Returns the jobs.
     """
+    jobs = records.env["magento.job"]
     if not records or magento_push_skipped(records.env):
-        return
-    ids = [rid for rid in records.ids if isinstance(rid, int)]
-    if not ids:
-        return
-    env = records.env
-    postcommit = env.cr.postcommit
-    key = f"sdlc_magento_connector.push.{records._name}"
-    entry = postcommit.data.get(key)
-    if entry is None:
-        entry = postcommit.data[key] = {
-            "uid": env.uid,
-            "su": env.su,
-            "context": dict(env.context),
-            "ids": {},
-        }
-        postcommit.add(functools.partial(_run_magento_push, env.registry, records._name, entry))
-    for rid in ids:
-        entry["ids"].setdefault(rid, set()).update(flags or ())
+        return jobs
+    for record in records:
+        if isinstance(record.id, int) and record.instance_id:
+            jobs |= record._magento_enqueue_push(flags)
+    return jobs
 
 
-def _run_magento_push(registry, model_name, entry):
-    pending = entry.get("ids") or {}
-    if not pending:
-        return
-    context = dict(entry["context"], magento_skip_push=True)
+def _run_push_jobs_now(registry, job_ids):
+    """Post-commit fast path (foreground mode): run the push jobs queued by the
+    transaction right away, in their own cursor. Whatever cannot run now (taken by the
+    runner, channel busy) or fails transiently stays in the queue."""
     try:
         with registry.cursor() as cr:
-            env = api.Environment(cr, entry["uid"], context, su=entry["su"])
-            for record in env[model_name].browse(list(pending)).exists():
-                try:
-                    with cr.savepoint():
-                        record._magento_auto_push(pending.get(record.id) or set())
-                except Exception as exc:  # noqa: BLE001 - must never break the caller
-                    message = magento_error_message(exc)
-                    _logger.warning(
-                        "Magento push failed for %s(%s): %s", model_name, record.id, message
-                    )
-                    record._magento_set_push_error(message)
-                else:
-                    if record.magento_last_error:
-                        record._magento_set_push_error(False)
-    except Exception:  # noqa: BLE001
-        _logger.warning("Magento post-commit push for %s could not run", model_name, exc_info=True)
+            env = api.Environment(cr, SUPERUSER_ID, {})
+            env["magento.job"]._magento_run_push_jobs_now(sorted(job_ids))
+    except Exception:  # noqa: BLE001 - must never break the caller
+        _logger.warning("Magento post-commit push could not run; the job queue will retry",
+                        exc_info=True)
+
+
+class MagentoJob(models.Model):
+    """Hooks of the job queue used by the automatic pushes (see ``schedule_magento_push``)."""
+    _inherit = "magento.job"
+
+    def _magento_run_push_jobs_now(self, job_ids):
+        """Run these pending jobs now, with the runner's locking rules: row lock (skip
+        if the runner holds it), one started job per channel, channel advisory lock."""
+        cr = self.env.cr
+        ran = self.browse()
+        for job_id in job_ids:
+            self.flush_model()
+            cr.execute(SQL(
+                "SELECT channel FROM magento_job WHERE id = %s AND state = 'pending' "
+                "FOR UPDATE SKIP LOCKED", job_id,
+            ))
+            row = cr.fetchone()
+            if not row:
+                continue
+            channel = row[0]
+            cr.execute(SQL(
+                "SELECT 1 FROM magento_job WHERE state = 'started' AND channel = %s LIMIT 1", channel,
+            ))
+            if cr.fetchone():
+                continue
+            cr.execute(SQL(
+                "SELECT pg_try_advisory_xact_lock(hashtext(%s))", "magento.job.channel:%s" % channel
+            ))
+            if not cr.fetchone()[0]:
+                continue
+            job = self.browse(job_id)
+            job._run_job()
+            ran |= job
+        return ran
+
+    def _handle_failure(self, exc, exc_info=None):
+        res = super()._handle_failure(exc, exc_info)
+        # The job's savepoint is rolled back by now: record the push failure on the
+        # record (and, when final, in the Error Center) outside of it.
+        if self.method_name == "_magento_auto_push" and self.model_name in self.env:
+            model = self.env[self.model_name]
+            if hasattr(type(model), "_magento_push_failed"):
+                for record in model.sudo().browse(self.res_ids or []).exists():
+                    try:
+                        with self.env.cr.savepoint():
+                            record._magento_push_failed(exc, final=self.state == "failed", job=self)
+                    except Exception as hook_exc:  # noqa: BLE001
+                        _logger.warning("Magento push failure of %s could not be recorded: %s",
+                                        record, hook_exc)
+        return res
 
 
 class MagentoPushErrorMixin(models.AbstractModel):
     _name = "magento.push.error.mixin"
     _description = "Magento automatic push error tracking"
+
+    # Error Center entity of the record's pushes.
+    _magento_push_entity = "other"
 
     magento_last_error = fields.Char(
         string="Last Magento Push Error",
@@ -136,8 +170,110 @@ class MagentoPushErrorMixin(models.AbstractModel):
     def _raise_magento_http_error(self, exc):
         raise_magento_user_error(exc)
 
-    def _magento_auto_push(self, flags):
+    # ------------------------------------------------------------------
+    # Automatic push through the job queue
+    # ------------------------------------------------------------------
+    def _magento_push_ref(self):
+        """Error Center reference of this record's pushes (Magento id, else ``odoo-<id>``)."""
+        self.ensure_one()
+        if "magento_id" in self._fields and self.magento_id:
+            return self.magento_id
+        return "odoo-%s" % self.id
+
+    def _magento_enqueue_push(self, flags=()):
+        """Queue (or reuse) the push job of this record; see ``schedule_magento_push``."""
+        self.ensure_one()
+        flags = set(flags or ())
+        Job = self.env["magento.job"].sudo()
+        key = "push-%s-%s" % (self._name, self.id)
+        next_key = key + "-next"
+        active = Job.search([
+            ("identity_key", "in", (key, next_key)), ("state", "in", ("pending", "started")),
+        ])
+        job = active.filtered(lambda j: j.state == "pending")[:1]
+        if job:
+            # Row lock: if the runner is just starting this job (it holds the lock),
+            # wait for it, so this edit never relies on a push that already read the
+            # record (REPEATABLE READ then raises a serialization error and the
+            # request is retried, finding the job started).
+            job.flush_recordset()
+            self.env.cr.execute(SQL("SELECT 1 FROM magento_job WHERE id = %s FOR NO KEY UPDATE", job.id))
+            current = set((job.args or [[]])[0] or [])
+            if not flags <= current:
+                job.write({"args": [sorted(current | flags)]})
+        else:
+            # The push of an earlier edit is running and may have read the record
+            # before this edit: queue a follow-up push under a second key.
+            started_keys = set(active.mapped("identity_key"))
+            instance = self.instance_id
+            job = self.env["magento.job"].enqueue(
+                self, "_magento_auto_push", args=(sorted(flags),),
+                instance=instance,
+                channel="magento.%s.push" % instance.id,
+                priority=5,
+                identity_key=next_key if key in started_keys else key,
+                description="Push %s %s to Magento" % (self._description, self.display_name),
+            )
+        self._magento_push_after_commit(job)
+        return job
+
+    def _magento_push_after_commit(self, job):
+        """Foreground mode (instance syncs not in background, or under tests): run the
+        job right after the commit, as the old post-commit push did. Otherwise the job
+        runner picks it up (it is triggered on enqueue)."""
+        env = self.env
+        if env.context.get("magento_job_id") or self.instance_id._magento_sync_in_background():
+            return
+        postcommit = env.cr.postcommit
+        key = "sdlc_magento_connector.push_jobs"
+        job_ids = postcommit.data.get(key)
+        if job_ids is None:
+            job_ids = postcommit.data[key] = set()
+            postcommit.add(functools.partial(_run_push_jobs_now, env.registry, job_ids))
+        job_ids.add(job.id)
+
+    def _magento_auto_push(self, flags=()):
+        """Job entry point of the automatic push: push, then clear the push error and
+        resolve the Error Center issue. Raises on failure so the queue retries
+        transient errors; ``magento.job._handle_failure`` records the failure."""
+        for record in self.with_context(magento_skip_push=True):
+            refs = {record._magento_push_ref()}
+            record._magento_push_now(set(flags or ()))
+            refs.add(record._magento_push_ref())
+            record._magento_push_succeeded(refs)
+        return True
+
+    def _magento_push_now(self, flags):
+        """Push this record to Magento. Raises on failure."""
         raise NotImplementedError
+
+    def _magento_push_succeeded(self, refs):
+        self.ensure_one()
+        if self.magento_last_error:
+            self._magento_set_push_error(False)
+        issues = self.env["magento.sync.issue"]
+        for ref in refs:
+            if ref:
+                issues._record_success(self.instance_id, self._magento_push_entity, ref)
+
+    def _magento_push_failed(self, exc, final=False, job=None):
+        """Called by the queue after a failed push (outside the job's savepoint).
+
+        Always stores ``magento_last_error``; a final failure (permanent, or out of
+        retries) also opens or updates the Error Center issue.
+        """
+        self.ensure_one()
+        message = magento_error_message(exc)
+        if final:
+            _logger.warning("Magento push failed for %s(%s): %s", self._name, self.id, message)
+        else:
+            _logger.info("Magento push failed for %s(%s), will retry: %s", self._name, self.id, message)
+        self._magento_set_push_error(message)
+        if final and self.instance_id:
+            self.env["magento.sync.issue"]._record_failure(
+                self.instance_id, self._magento_push_entity, self._magento_push_ref(), exc,
+                record=self, job=job,
+            )
 
 
 def _get_maps_for_products(products):
@@ -195,6 +331,7 @@ class MagentoProductMap(models.Model):
     _name = "magento.product.map"
     _inherit = ["magento.push.error.mixin"]
     _description = "Magento Product Mapping"
+    _magento_push_entity = "product"
 
     _uniq_instance_magento_id = models.UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
@@ -732,8 +869,12 @@ class MagentoProductMap(models.Model):
             "odoo_product_id": product.id,
         })
 
-    def _magento_auto_push(self, flags):
-        """Automatic (post-commit) push of this map to Magento. Raises on failure."""
+    def _magento_push_ref(self):
+        self.ensure_one()
+        return self.sku or super()._magento_push_ref()
+
+    def _magento_push_now(self, flags):
+        """Automatic (queued) push of this map to Magento. Raises on failure."""
         self.ensure_one()
         if not self.instance_id or not self.sku or self.type_id in UNSUPPORTED_EXPORT_TYPES:
             return
@@ -760,8 +901,8 @@ class MagentoProductMap(models.Model):
             for record in self:
                 if record.sku and not record.odoo_product_id:
                     record._ensure_odoo_product()
-        # Never call Magento inside the user's transaction: queue a push that
-        # runs after commit (see schedule_magento_push).
+        # Never call Magento inside the user's transaction: queue a push job
+        # (committed with this edit, see schedule_magento_push).
         self._schedule_magento_push(vals)
         if not self.env.context.get("skip_odoo_sync"):
             for record in self:

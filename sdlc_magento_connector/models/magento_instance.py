@@ -23,6 +23,25 @@ _IMPORTABLE_PRODUCT_TYPES = frozenset({"simple", "virtual", "downloadable"})
 # Error/skip lines kept in a sync report's notes.
 _MAX_NOTE_LINES = 50
 
+# Queued syncs (roadmap 1.1): entity key -> (sync method, label, report sync_type, priority).
+# The entity key names the job channel ``magento.<instance id>.<entity>`` and the identity
+# key ``sync-<instance id>-<entity>``. Order = run order of "Sync All" and scheduled syncs.
+_SYNC_JOB_SPECS = {
+    "categories": ("sync_categories", "Category", "category", 8),
+    "attribute_sets": ("sync_attribute_sets", "Attribute set", None, 8),
+    "products": ("sync_products", "Product", "product", 10),
+    "orders": ("sync_orders", "Order", "order", 12),
+    "customers": ("sync_customers", "Customer", "customer", 10),
+}
+_SYNC_ALL_ENTITIES = ("categories", "products", "orders", "customers")
+# Scheduled-sync scope key (``_get_auto_sync_scope``) -> queued entity key.
+_SCOPE_ENTITIES = (
+    ("category", "categories"),
+    ("product", "products"),
+    ("order", "orders"),
+    ("customer", "customers"),
+)
+
 
 def _short_reason(exc, limit=300):
     """One-line failure reason for logs/reports; never dumps payloads."""
@@ -375,6 +394,18 @@ class MagentoInstance(models.Model):
         help="Incremental syncs re-read records updated this many minutes before the stored marker, "
              "to absorb clock skew and records saved while the previous sync was paging.",
     )
+    run_syncs_in_background = fields.Boolean(
+        string="Run Syncs in Background",
+        default=True,
+        help="Sync buttons and scheduled syncs queue one job per entity (see Job Queue) instead of "
+             "running inside the request; pushes of Odoo edits are left to the job runner. "
+             "Untick to run syncs synchronously and push edits right after saving (the failed "
+             "pushes are still retried by the queue).",
+    )
+    pending_job_count = fields.Integer(
+        string="Queued Jobs", compute="_compute_pending_job_count",
+        help="Jobs of this instance waiting or running in the Job Queue.",
+    )
     sync_page_size = fields.Integer(
         string="Sync Page Size",
         default=100,
@@ -416,6 +447,22 @@ class MagentoInstance(models.Model):
         for rec in self:
             for key, per_instance in counts.items():
                 rec[key] = per_instance.get(rec.id, 0)
+
+    def _compute_pending_job_count(self):
+        rows = self.env["magento.job"]._read_group(
+            [("instance_id", "in", self.ids), ("state", "in", ("pending", "started"))],
+            ["instance_id"], ["__count"],
+        )
+        counts = {inst.id: n for inst, n in rows}
+        for rec in self:
+            rec.pending_job_count = counts.get(rec.id, 0)
+
+    def action_view_queued_jobs(self):
+        self.ensure_one()
+        action = self.env["ir.actions.act_window"]._for_xml_id("sdlc_magento_connector.action_magento_job")
+        action["domain"] = [("instance_id", "=", self.id), ("state", "in", ("pending", "started"))]
+        action["context"] = {}
+        return action
 
     def _action_open_related(self, model, field_name, name):
         self.ensure_one()
@@ -831,12 +878,16 @@ class MagentoInstance(models.Model):
             return {"errors": 1, "error_messages": ["%s sync aborted: %s" % (label, _short_reason(exc))]}
 
     def _run_scheduled_sync(self, source_action):
+        """Scheduled run: queue one job per entity in scope (background mode), or sync inline."""
         for instance in self.with_context(magento_cron=True):
             if not instance.active:
                 continue
             try:
                 with instance._magento_isolation():
-                    instance._sync_selected_auto_and_report(source_action=source_action)
+                    if instance._magento_sync_in_background():
+                        instance._magento_enqueue_scheduled_sync(source_action)
+                    else:
+                        instance._sync_selected_auto_and_report(source_action=source_action)
             except Exception:  # noqa: BLE001
                 _logger.exception("Magento scheduled sync failed for instance %s", instance.name)
             else:
@@ -884,11 +935,7 @@ class MagentoInstance(models.Model):
         self.ensure_one()
         scope = self._get_auto_sync_scope()
         if not any(scope.values()):
-            now_time = fields.Datetime.now()
-            self._create_sync_report(
-                "all", {"errors": 1}, now_time, now_time, source_action=source_action,
-                notes="Auto sync is enabled but no scope is selected.",
-            )
+            self._report_empty_auto_sync_scope(source_action)
             return False
 
         sync_steps = [
@@ -908,6 +955,128 @@ class MagentoInstance(models.Model):
             self._magento_commit_batch(0)
         return True
 
+    def _report_empty_auto_sync_scope(self, source_action):
+        self.ensure_one()
+        now_time = fields.Datetime.now()
+        return self._create_sync_report(
+            "all", {"errors": 1}, now_time, now_time, source_action=source_action,
+            notes="Auto sync is enabled but no scope is selected.",
+        )
+
+    # =====================
+    # QUEUED SYNCS (roadmap 1.1)
+    # =====================
+    def _magento_sync_in_background(self):
+        """Whether the sync buttons and scheduled syncs of these instances queue jobs.
+
+        * context ``magento_sync_now=True``: never (synchronous, for scripts and power users);
+        * inside a queued job (``magento_job_id``): never, the job *is* the background run;
+        * an instance with ``run_syncs_in_background`` off: never;
+        * context ``magento_sync_queue=True``: always (forces the queue, e.g. in tests);
+        * under the test runner (``odoo.modules.module.current_test``): never, so tests
+          that call ``action_sync_*`` / the crons keep getting a synchronous run;
+        * otherwise: always.
+        """
+        ctx = self.env.context
+        if ctx.get("magento_sync_now") or ctx.get("magento_job_id"):
+            return False
+        if not all(self.mapped("run_syncs_in_background")):
+            return False
+        if ctx.get("magento_sync_queue"):
+            return True
+        return not odoo_module.current_test
+
+    def _magento_enqueue_sync(self, entities, source_action=None, mode=None):
+        """Queue one sync job per entity key of ``_SYNC_JOB_SPECS``.
+
+        One channel per entity (``magento.<id>.<entity>``): an instance's orders run one
+        at a time while its products may run alongside. The identity key
+        ``sync-<id>-<entity>`` makes a second click (or a scheduled run) reuse the job
+        already waiting. Returns ``[(entity, job, created)]``.
+        """
+        self.ensure_one()
+        jobs = self.env["magento.job"]
+        queued = []
+        for entity in entities:
+            _method, label, _report_type, priority = _SYNC_JOB_SPECS[entity]
+            identity_key = "sync-%s-%s" % (self.id, entity)
+            existing = jobs.sudo()._find_active(identity_key)
+            kwargs = {}
+            if source_action:
+                kwargs["source_action"] = source_action
+            if mode:
+                kwargs["mode"] = mode
+            job = existing or jobs.enqueue(
+                self, "_magento_run_sync_job", args=(entity,), kwargs=kwargs,
+                instance=self,
+                channel="magento.%s.%s" % (self.id, entity),
+                priority=priority,
+                identity_key=identity_key,
+                description="Magento %s sync (%s)" % (label.lower(), self.name),
+            )
+            queued.append((entity, job, not existing))
+        return queued
+
+    def _magento_enqueue_scheduled_sync(self, source_action):
+        """Queue the auto-sync scope of this instance; reports an empty scope as before."""
+        self.ensure_one()
+        scope = self._get_auto_sync_scope()
+        if not any(scope.values()):
+            self._report_empty_auto_sync_scope(source_action)
+            return []
+        entities = [entity for key, entity in _SCOPE_ENTITIES if scope.get(key)]
+        return self._magento_enqueue_sync(entities, source_action=source_action, mode="cron")
+
+    def _magento_queue_notification(self, entities):
+        """Queue ``entities`` and tell the user where to follow them."""
+        self.ensure_one()
+        queued = self._magento_enqueue_sync(entities)
+        new = ", ".join(entity.replace("_", " ") for entity, _job, created in queued if created)
+        old = ", ".join(entity.replace("_", " ") for entity, _job, created in queued if not created)
+        if new:
+            message = "Queued: %s sync" % new
+            if old:
+                message += " (already queued: %s)" % old
+        else:
+            message = "Already queued: %s sync" % old
+        message += " — follow progress in Job Queue."
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Magento Sync",
+                "message": message,
+                "type": "info",
+                "sticky": False,
+            },
+        }
+
+    def _magento_run_sync_job(self, entity, source_action=None, mode=None):
+        """Job body of a queued sync: run the entity sync and write its sync report.
+
+        Runs without the cron context, so the sync engine never commits inside the job;
+        per-record failures are counted in the report and the Error Center as usual.
+        An exception (e.g. the instance cannot build its API client) fails or retries
+        the job according to the queue's classification.
+        """
+        self.ensure_one()
+        method, label, report_type, _priority = _SYNC_JOB_SPECS[entity]
+        if not self.active:
+            return "%s sync skipped: instance %s is archived." % (label, self.name)
+        start_time = fields.Datetime.now()
+        counts = getattr(self, method)() or {}
+        if report_type:
+            self._create_sync_report(
+                report_type, counts, start_time, fields.Datetime.now(),
+                source_action=source_action, mode=mode,
+            )
+        return "%s sync: %s synced, %s skipped, %s errors" % (
+            label,
+            int(counts.get("created") or 0) + int(counts.get("updated") or 0),
+            int(counts.get("skipped") or 0),
+            int(counts.get("errors") or 0),
+        )
+
     # =====================
     # SYNC BOOKKEEPING
     # =====================
@@ -919,7 +1088,7 @@ class MagentoInstance(models.Model):
     }
 
     def _create_sync_report(self, sync_type, counts, start_time, end_time, *, source_action=None,
-                            notes=None, per_type_counts=None):
+                            notes=None, per_type_counts=None, mode=None):
         """Write an honest ``magento.sync.report``: real error and skip counts.
 
         ``total_records`` = records seen; ``success`` = created + updated;
@@ -931,7 +1100,7 @@ class MagentoInstance(models.Model):
         updated = int(counts.get("updated") or 0)
         errors = int(counts.get("errors") or 0)
         skipped = int(counts.get("skipped") or 0)
-        is_cron = self._is_magento_cron()
+        is_cron = mode == "cron" if mode else self._is_magento_cron()
         vals = {
             "instance_id": self.id,
             "sync_type": sync_type,
@@ -1351,6 +1520,8 @@ class MagentoInstance(models.Model):
 
     def action_sync_categories(self):
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(["categories"])
         start_time = fields.Datetime.now()
         counts = self.sync_categories()
         self._create_sync_report("category", counts, start_time, fields.Datetime.now())
@@ -1358,6 +1529,8 @@ class MagentoInstance(models.Model):
 
     def action_sync_attribute_sets(self):
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(["attribute_sets"])
         counts = self.sync_attribute_sets()
         return self._sync_notification("Attribute set", counts)
 
@@ -1490,7 +1663,11 @@ class MagentoInstance(models.Model):
         return outcome
 
     def action_sync_products(self):
+        """Sync Products button: queued (default) or synchronous, see
+        ``_magento_sync_in_background``."""
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(["products"])
         start_time = fields.Datetime.now()
         counts = self.sync_products()
         self._create_sync_report("product", counts, start_time, fields.Datetime.now())
@@ -1626,6 +1803,8 @@ class MagentoInstance(models.Model):
 
     def action_sync_orders(self):
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(["orders"])
         start_time = fields.Datetime.now()
         counts = self.sync_orders()
         self._create_sync_report("order", counts, start_time, fields.Datetime.now())
@@ -1777,13 +1956,18 @@ class MagentoInstance(models.Model):
 
     def action_sync_customers(self):
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(["customers"])
         start_time = fields.Datetime.now()
         counts = self.sync_customers()
         self._create_sync_report("customer", counts, start_time, fields.Datetime.now())
         return self._sync_notification("Customer", counts)
 
     def sync_all_and_report(self):
+        """Sync All button: one queued job per entity (default), or one synchronous run."""
         self.ensure_one()
+        if self._magento_sync_in_background():
+            return self._magento_queue_notification(list(_SYNC_ALL_ENTITIES))
         start_time = fields.Datetime.now()
         per_type = {}
         for sync_type, method_name in (

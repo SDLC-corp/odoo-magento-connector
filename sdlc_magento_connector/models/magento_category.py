@@ -5,7 +5,7 @@ from odoo.exceptions import UserError
 
 from .magento_product import magento_push_skipped, schedule_magento_push
 
-# Fields whose change triggers the automatic (post-commit) push to Magento.
+# Fields whose change triggers the automatic (queued) push to Magento.
 _CATEGORY_SYNC_FIELDS = {"name", "is_active", "parent_id", "instance_id"}
 
 
@@ -13,6 +13,7 @@ class MagentoCategory(models.Model):
     _name = "magento.category"
     _inherit = ["magento.push.error.mixin"]
     _description = "Magento Category"
+    _magento_push_entity = "category"
 
     _uniq_instance_magento_id = models.UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
@@ -176,8 +177,8 @@ class MagentoCategory(models.Model):
             }
         }
 
-    def _magento_auto_push(self, flags):
-        """Automatic (post-commit) push to Magento. Raises on failure."""
+    def _magento_push_now(self, flags):
+        """Automatic (queued) push to Magento. Raises on failure."""
         self.ensure_one()
         if not self.instance_id:
             return
@@ -201,6 +202,6 @@ class MagentoCategory(models.Model):
         for inst in self.mapped("instance_id"):
             sync_fields |= self.env["magento.field.mapping"].sudo().mapped_source_fields("category", inst)
         if sync_fields.intersection(vals):
-            # Pushed after commit: Magento being slow or down never blocks the save.
+            # Pushed by a queued job: Magento being slow or down never blocks the save.
             schedule_magento_push(self.filtered("instance_id"))
         return res
