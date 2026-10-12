@@ -12,3 +12,4 @@ from . import test_error_center
 from . import test_error_center_wiring
 from . import test_queue_integration
 from . import test_bulk
+from . import test_dashboard_phase1

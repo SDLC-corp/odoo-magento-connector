@@ -18,6 +18,12 @@
               <span class="mg-conn__name" t-esc="inst.name"/>
               <span class="mg-conn__state" t-esc="inst.state_label"/>
               <span class="mg-conn__sync" t-att-title="lastSyncTitle(inst)" t-esc="lastSync(inst)"/>
+              <button t-if="inst.open_issues" type="button" class="mg-conn__issues"
+                      t-att-title="'Open the Error Center for ' + inst.name"
+                      t-on-click="() => this.open(inst.issues_drill)">
+                <i class="fa fa-exclamation-circle" aria-hidden="true"/>
+                <t t-esc="issuesLabel(inst)"/>
+              </button>
             </li>
           </ul>
           <p t-else="" class="mg-masthead__sub">Magento 2 orders, catalog and sync health</p>
@@ -168,7 +174,34 @@
             </ul>
           </section>
 
-          <div class="mg-flow" t-if="!data.orders_hidden">
+          <div class="mg-flow" t-if="!data.orders_hidden or !data.issues_hidden">
+            <section class="mg-panel" t-if="!data.issues_hidden">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Error center by entity</h2>
+                <p class="mg-panel__hint">Open issues</p>
+              </div>
+              <p t-if="!data.by_entity.length" class="mg-empty mg-empty--ok">
+                <i class="fa fa-check" aria-hidden="true"/> No open sync issues.
+              </p>
+              <ul t-else="" class="mg-bars">
+                <li t-foreach="data.by_entity" t-as="row" t-key="row.key"
+                    t-attf-class="mg-bars__row mg-bars__row--{{ row.tone }}" role="link" tabindex="0"
+                    t-att-title="entityDetail(row)"
+                    t-on-click="() => this.open(row.drill)"
+                    t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                  <span class="mg-bars__label">
+                    <t t-esc="row.label"/><small t-esc="entityTag(row)"/>
+                  </span>
+                  <span class="mg-bars__track">
+                    <span t-attf-class="mg-bars__fill mg-bars__fill--{{ row.tone }}"
+                          t-attf-style="width: {{ share(row.count, data.by_entity, 'count') }}%"/>
+                  </span>
+                  <span class="mg-num" t-esc="count(row.count)"/>
+                </li>
+              </ul>
+            </section>
+
+            <t t-if="!data.orders_hidden">
             <section class="mg-panel">
               <div class="mg-panel__head">
                 <h2 class="mg-panel__title">Order status</h2>
@@ -235,6 +268,7 @@
                 </li>
               </ul>
             </section>
+            </t>
           </div>
         </div>
       </t>
