@@ -195,4 +195,28 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_website_company" model="ir.rule">
+        <field name="name">Magento website: multi-company</field>
+        <field name="model_id" ref="model_magento_website"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_store_group_company" model="ir.rule">
+        <field name="name">Magento store: multi-company</field>
+        <field name="model_id" ref="model_magento_store_group"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_store_view_company" model="ir.rule">
+        <field name="name">Magento store view: multi-company</field>
+        <field name="model_id" ref="model_magento_store_view"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_media_company" model="ir.rule">
+        <field name="name">Magento product image: multi-company</field>
+        <field name="model_id" ref="model_magento_product_media"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

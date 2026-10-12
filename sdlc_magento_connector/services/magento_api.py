@@ -1130,3 +1130,41 @@ class MagentoAPI:
     def get_bulk_detailed_status(self, bulk_uuid):
         """``GET /V1/bulk/:uuid/detailed-status``: adds serialized_data / result_serialized_data."""
         return self._get(f"/rest/V1/bulk/{quote(str(bulk_uuid or '').strip(), safe='')}/detailed-status")
+
+    # ------------------------------------------------------------------
+    # Store hierarchy and store-view scope (roadmap 2.8)
+    # ------------------------------------------------------------------
+    def get_store_groups(self):
+        """``GET /V1/store/storeGroups``: id, website_id, root_category_id, default_store_id."""
+        return self._get("/rest/V1/store/storeGroups")
+
+    def get_store_views(self):
+        """``GET /V1/store/storeViews``: id, code, website_id, store_group_id, is_active."""
+        return self._get("/rest/V1/store/storeViews")
+
+    @staticmethod
+    def _store_scope_prefix(store_code):
+        """``/rest/<store_code>/V1``. Store-view reads and writes never fall back to another
+        scope: a write without a store code would change the default store view."""
+        code = str(store_code or "").strip()
+        if not code:
+            raise ValueError("A Magento store code is required for a store-view request.")
+        return f"/rest/{quote(code, safe='')}/V1"
+
+    def get_product_for_store(self, sku, store_code):
+        """``GET /rest/<store_code>/V1/products/<sku>``: the product's store-view values
+        (falling back to the default values where the view has none)."""
+        safe_sku = quote(str(sku or "").strip(), safe="")
+        return self._get(f"{self._store_scope_prefix(store_code)}/products/{safe_sku}")
+
+    def update_product_for_store(self, sku, store_code, payload):
+        """``PUT /rest/<store_code>/V1/products/<sku>``: store-view values (translations).
+        Send only the store-scoped fields to change."""
+        safe_sku = quote(str(sku or "").strip(), safe="")
+        return self._put(f"{self._store_scope_prefix(store_code)}/products/{safe_sku}", payload)
+
+    def delete_product_media(self, sku, entry_id):
+        """``DELETE /rest/all/V1/products/<sku>/media/<entry_id>``."""
+        safe_sku = quote(str(sku or "").strip(), safe="")
+        safe_id = quote(str(entry_id or "").strip(), safe="")
+        return self._json(self._request("delete", f"/rest/all/V1/products/{safe_sku}/media/{safe_id}"))

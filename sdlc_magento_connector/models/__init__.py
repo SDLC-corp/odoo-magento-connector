@@ -19,3 +19,5 @@ from . import magento_reconciliation
 from . import magento_stock
 from . import magento_order_mapping
 from . import magento_product_variant
+from . import magento_store
+from . import magento_product_i18n
