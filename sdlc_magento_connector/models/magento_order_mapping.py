@@ -459,10 +459,32 @@ class MagentoInstance(models.Model):
         country = company.account_fiscal_country_id or company.country_id
         if country:
             vals["country_id"] = country.id
-        group = company.account_sale_tax_id.tax_group_id
-        if group and (not group.company_id or group.company_id == company):
+        group = self._magento_tax_group(company, country, percent)
+        if group:
             vals["tax_group_id"] = group.id
         return Tax.with_company(company).create(vals)
+
+    @api.model
+    def _magento_tax_group(self, company, country, percent):
+        """The tax group "Tax <pct>%" of the company, created from the default sale
+        tax group (same accounts) so the order totals show the real rate."""
+        Group = self.env["account.tax.group"].sudo()
+        name = "Tax %s%%" % _format_percent(percent)
+        domain = [("company_id", "=", company.id), ("name", "=", name)]
+        if country:
+            domain.append(("country_id", "in", (country.id, False)))
+        group = Group.search(domain, limit=1)
+        if group:
+            return group
+        base = company.account_sale_tax_id.tax_group_id
+        if base and base.company_id and base.company_id != company:
+            base = Group.browse()
+        if base:
+            return base.copy({"name": name})
+        vals = {"name": name, "company_id": company.id}
+        if country:
+            vals["country_id"] = country.id
+        return Group.create(vals)
 
     def _magento_on_record_result(self, entity, magento_ref, ok, exc=None, payload=None, record=None):
         if not ok and isinstance(exc, MagentoUnmappedTax):

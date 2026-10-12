@@ -1072,10 +1072,28 @@ class ProductProduct(models.Model):
         return res
 
 
+_TRANSLATABLE_PRODUCT_FIELDS = frozenset({"name", "description", "description_sale"})
+
+
+def _is_default_language(product_map):
+    """True when the current context language is the instance's default (all-scope)
+    language. Text edited in another language is a translation: it must not be
+    mirrored into the map's default values (per-store translations are pushed
+    separately)."""
+    env = product_map.env
+    lang = env.context.get("lang") or env.lang or "en_US"
+    instance = product_map.instance_id
+    default = (instance._magento_default_lang_code()
+               if hasattr(instance, "_magento_default_lang_code") else "en_US") or "en_US"
+    return lang == default
+
+
 def _product_vals_to_map_vals(product_map, vals, skip=()):
     """Map values mirroring the product fields written in ``vals`` (minus ``skip``)."""
     product = product_map.odoo_product_id
     keys = set(vals) - set(skip)
+    if keys & _TRANSLATABLE_PRODUCT_FIELDS and not _is_default_language(product_map):
+        keys -= _TRANSLATABLE_PRODUCT_FIELDS
     map_vals = {}
     if "name" in keys:
         map_vals["name"] = product.name
