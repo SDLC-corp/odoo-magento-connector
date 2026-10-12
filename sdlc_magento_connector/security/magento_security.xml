@@ -135,4 +135,16 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_stock_source_map_company" model="ir.rule">
+        <field name="name">Magento MSI source mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_stock_source_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_stock_dirty_company" model="ir.rule">
+        <field name="name">Magento stock change: multi-company</field>
+        <field name="model_id" ref="model_magento_stock_dirty"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

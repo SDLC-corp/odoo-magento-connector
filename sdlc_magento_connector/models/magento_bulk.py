@@ -19,7 +19,7 @@ import logging
 from datetime import timedelta
 
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError, UserError, ValidationError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.modules import module as odoo_module
 
 from ..services.magento_api import MagentoAPI
@@ -51,15 +51,6 @@ _DEFAULT_MAX_POLLS = 30
 _MAX_POLLS_PARAM = "sdlc_magento_connector.bulk_max_polls"
 _MAX_JSON_CHARS = 200000
 _POLL_BATCH = 200
-
-# Stock push routes. MSI: SourceItemsSaveInterface::execute(sourceItems[]).
-# Legacy: PUT /V1/products/:productSku/stockItems/:itemId
-# (StockRegistryInterface::updateStockItemBySku); route parameters become ``byXxx``.
-_STOCK_ROUTES = {
-    "msi": ("post", "inventory/source-items"),
-    "legacy": ("put", "products/byProductSku/stockItems/byItemId"),
-}
-
 
 def _dumps(value):
     text = json.dumps(value, default=str, ensure_ascii=False)
@@ -439,8 +430,8 @@ class MagentoInstance(models.Model):
         "stock.location", string="Stock Location",
         default=lambda self: self._default_magento_stock_location(),
         domain="[('usage', '=', 'internal'), ('company_id', 'in', [company_id, False])]",
-        help="Odoo location whose free quantity (on hand minus reserved, children included) "
-             "is pushed to Magento. Empty: the stock location of the company's first warehouse.",
+        help="Odoo location whose quantity (children included) is pushed to Magento when no "
+             "Stock Locations are set. Empty: the stock location of the company's first warehouse.",
     )
     msi_source_code = fields.Char(string="MSI Source Code", default="default")
     bulk_operation_count = fields.Integer(compute="_compute_bulk_operation_count")
@@ -481,110 +472,11 @@ class MagentoInstance(models.Model):
         return action
 
     # ------------------------------------------------------------------
-    # Bulk stock push
+    # Bulk stock push: see magento_stock.py (roadmap 2.6)
     # ------------------------------------------------------------------
     def _magento_stock_location(self):
         self.ensure_one()
         return self.stock_location_id or self._default_magento_stock_location(self.company_id)
-
-    def _magento_stock_maps(self):
-        """Maps whose stock is pushed: simple products with a SKU and an Odoo product."""
-        self.ensure_one()
-        return self.env["magento.product.map"].sudo().search([
-            ("instance_id", "=", self.id),
-            ("sku", "!=", False),
-            ("sku", "!=", ""),
-            ("type_id", "=", "simple"),
-            ("odoo_product_id", "!=", False),
-        ], order="id")
-
-    def _magento_stock_quantities(self, maps):
-        """``{map id: free qty}`` at the instance's stock location; storable products only
-        (a consumable or service has no stock: pushing 0 would mark it out of stock)."""
-        self.ensure_one()
-        location = self._magento_stock_location()
-        if not location:
-            raise UserError(_("Set a stock location on Magento instance %s first.", self.name))
-        products = maps.odoo_product_id.with_company(self.company_id).with_context(location=location.id)
-        qty_by_product = {p.id: p.free_qty for p in products if p.is_storable}
-        return {
-            m.id: max(qty_by_product[m.odoo_product_id.id], 0.0)
-            for m in maps if m.odoo_product_id.id in qty_by_product
-        }
-
-    def _magento_stock_entry(self, product_map, qty):
-        """One bulk item. MSI: ``{"sourceItems": [{sku, source_code, quantity, status}]}``,
-        one source item per request so each Magento operation maps to one SKU.
-        Legacy: ``{"productSku", "itemId", "stockItem": {qty, is_in_stock}}``; Magento reads
-        the SKU and stock item from the body (``itemId`` is only used for the synchronous
-        URL; the stock item id stored at import, else 1)."""
-        self.ensure_one()
-        qty = float(qty or 0.0)
-        if self.stock_push_mode == "legacy":
-            payload = {
-                "productSku": product_map.sku,
-                "itemId": int(product_map.magento_stock_item_id or 1),
-                "stockItem": {"qty": qty, "is_in_stock": qty > 0},
-            }
-        else:
-            payload = {"sourceItems": [{
-                "sku": product_map.sku,
-                "source_code": self.msi_source_code or "default",
-                "quantity": qty,
-                "status": 1 if qty > 0 else 0,
-            }]}
-        return {
-            "payload": payload,
-            "entity": "stock",
-            "ref": product_map.sku,
-            "res_model": product_map._name,
-            "res_id": product_map.id,
-        }
-
-    def _magento_push_stock_bulk(self):
-        """Push the free quantity of every mapped simple product (job body)."""
-        self.ensure_one()
-        maps = self._magento_stock_maps()
-        quantities = self._magento_stock_quantities(maps)
-        entries = [self._magento_stock_entry(m, quantities[m.id]) for m in maps if m.id in quantities]
-        method, route = _STOCK_ROUTES[self.stock_push_mode or "msi"]
-        ops = self.env["magento.bulk.operation"]._submit(
-            self, "stock_update", method, route, entries,
-            description=_("Stock push"),
-        )
-        return {
-            "items": len(entries),
-            "operations": len(ops),
-            "complete": sum(ops.mapped("complete_count")),
-            "open": sum(ops.mapped("open_count")),
-            "failed": sum(ops.mapped(lambda o: o.failed_count + o.retriable_count + o.rejected_count)),
-        }
-
-    def action_push_stock_bulk(self):
-        """Queue the stock push (one pending job per instance)."""
-        self.ensure_one()
-        if not self.env.user.has_group("sdlc_magento_connector.group_magento_manager"):
-            raise AccessError(_("Only Magento administrators can push stock to Magento."))
-        if not self._magento_stock_location():
-            raise UserError(_("Set a stock location on Magento instance %s first.", self.name))
-        job = self.env["magento.job"].enqueue(
-            self, "_magento_push_stock_bulk",
-            instance=self,
-            channel="stock-%s" % self.id,
-            identity_key="stock-push-%s" % self.id,
-            description=_("Push stock to Magento (%s)", self.name),
-        )
-        return {
-            "type": "ir.actions.client",
-            "tag": "display_notification",
-            "params": {
-                "title": _("Stock push queued"),
-                "message": _("Job %(job)s will push the stock of %(name)s to Magento.",
-                             job=job.display_name, name=self.name),
-                "type": "info",
-                "sticky": False,
-            },
-        }
 
     # ------------------------------------------------------------------
     # Retention: finished bulk operations follow the instance's log retention.
