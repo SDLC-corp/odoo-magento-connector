@@ -559,3 +559,24 @@ class TestP2Catalog(MagentoTestCommon):
         result = self._sync([card])
         self.assertEqual(result["skipped"], 1)
         self.assertFalse(self._map("GIFT-50"))
+
+
+@tagged("post_install", "-at_install", "magento")
+class TestCompositeJobTimeBudget(MagentoTestCommon):
+    """A composite import job stops at its time budget and queues the remaining SKUs."""
+
+    def test_job_requeues_remaining_skus_after_budget(self):
+        Instance = type(self.instance)
+        seen = []
+        self.patch_api("get_product", side_effect=lambda api, sku, *a, **kw: {"sku": sku, "type_id": "simple"})
+        clock = iter([0.0, 1000.0, 1000.0])
+        with patch.object(Instance, "_sync_one_product", autospec=True,
+                          side_effect=lambda inst, api, row, *a, **kw: seen.append(row["sku"])), \
+                patch("odoo.addons.sdlc_magento_connector.models.magento_product_variant._clock",
+                      side_effect=lambda: next(clock)):
+            self.instance._magento_import_product_skus(["CFG-A", "CFG-B", "CFG-C"])
+        self.assertEqual(seen, ["CFG-A"], "only the SKU within the budget is processed")
+        job = self.env["magento.job"].search([("identity_key", "=", "sync-%s-composites-CFG-B" % self.instance.id)])
+        self.assertEqual(len(job), 1, "the remaining SKUs are queued as a follow-up job")
+        self.assertEqual(job.method_name, "_magento_import_product_skus")
+        self.assertEqual(job.args, [["CFG-B", "CFG-C"]])

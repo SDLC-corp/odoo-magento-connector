@@ -37,6 +37,7 @@ SKU that already is a variant of another template is left where it is.
 Contract for the order import: ``magento.product.map._magento_bundle_components()``.
 """
 import logging
+import time
 
 import requests
 
@@ -60,6 +61,10 @@ _NO_VARIANTS_CTX = dict(_IMPORT_CTX, create_product_product=False)
 _COMPOSITE_TYPES = ("configurable", "bundle", "grouped")
 # Composite SKUs imported per queued job by "Import Configurable / Bundle / Grouped".
 _COMPOSITE_JOB_CHUNK = 10
+# A composite job stops after this many seconds and queues the rest, so one job
+# stays well under Odoo's cron time limit (configurables can merge many variants).
+_COMPOSITE_JOB_TIME_BUDGET = 60
+_clock = time.monotonic  # module-level so tests can drive the budget
 
 # Single-column foreign keys to product_template (see _magento_template_is_referenced).
 _TEMPLATE_FK_SQL = """
@@ -1174,12 +1179,26 @@ class MagentoInstance(models.Model):
         return stats.as_dict()
 
     def _magento_import_product_skus(self, skus):
-        """Job body: import these SKUs through the normal per-record path."""
+        """Job body: import these SKUs through the normal per-record path.
+
+        Stops after ``_COMPOSITE_JOB_TIME_BUDGET`` seconds and queues the remaining
+        SKUs as a follow-up job on the same channel."""
         self.ensure_one()
         stats = _SyncStats("product")
         api = MagentoAPI(self)
         supported = self._supported_product_types()
-        for sku in skus or ():
+        skus = list(skus or ())
+        deadline = _clock() + _COMPOSITE_JOB_TIME_BUDGET
+        for index, sku in enumerate(skus):
+            if index and _clock() >= deadline:
+                rest = skus[index:]
+                self.env["magento.job"].enqueue(
+                    self, "_magento_import_product_skus", args=(rest,), instance=self,
+                    channel=self._magento_sync_channel("products"), priority=10,
+                    identity_key="sync-%s-composites-%s" % (self.id, rest[0]),
+                    description="Magento composite products (%s): %s" % (self.name, ", ".join(rest)),
+                )
+                break
             try:
                 data = api.get_product(sku)
             except Exception as exc:  # noqa: BLE001 - reported, the next SKU runs
