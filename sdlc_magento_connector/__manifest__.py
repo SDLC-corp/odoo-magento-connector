@@ -24,6 +24,7 @@
         'data/magento_bulk_data.xml',
         'views/magento_reconciliation_views.xml',
         'data/magento_reconciliation_data.xml',
+        'views/magento_customer_p2_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

@@ -31,3 +31,5 @@ access_magento_reconciliation_line_user,magento.reconciliation.line user,model_m
 access_magento_reconciliation_line_manager,magento.reconciliation.line manager,model_magento_reconciliation_line,group_magento_manager,1,1,1,1
 access_magento_reconciliation_order_user,magento.reconciliation.order user,model_magento_reconciliation_order,group_magento_user,1,1,1,0
 access_magento_reconciliation_order_manager,magento.reconciliation.order manager,model_magento_reconciliation_order,group_magento_manager,1,1,1,1
+access_magento_customer_group_user,magento.customer.group user,model_magento_customer_group,group_magento_user,1,0,0,0
+access_magento_customer_group_manager,magento.customer.group manager,model_magento_customer_group,group_magento_manager,1,1,1,1
