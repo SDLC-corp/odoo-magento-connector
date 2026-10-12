@@ -4,3 +4,5 @@ from . import test_order_import
 from . import test_push_decoupling
 from . import test_constraints
 from . import test_security_dashboard
+from . import test_queue
+from . import test_error_center

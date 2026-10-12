@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- noupdate: an administrator's interval/activation survives upgrades. -->
+    <data noupdate="1">
+        <!-- Runs queued Magento jobs; idle (no Magento calls) when the queue is empty. -->
+        <record id="ir_cron_magento_job_runner" model="ir.cron">
+            <field name="name">Magento: Run Job Queue</field>
+            <field name="model_id" ref="model_magento_job"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_run_jobs(limit=50)</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">minutes</field>
+            <field name="priority">5</field>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- Bounded logs: deletes old jobs, closed issues and sync reports per instance retention. -->
+        <record id="ir_cron_magento_cleanup_logs" model="ir.cron">
+            <field name="name">Magento: Clean Up Logs</field>
+            <field name="model_id" ref="model_magento_instance"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_cleanup_logs()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>

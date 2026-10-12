@@ -98,4 +98,17 @@
         <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
     </record>
 
+    <!-- Jobs not bound to an instance (company_id empty) stay visible. -->
+    <record id="rule_magento_job_company" model="ir.rule">
+        <field name="name">Magento job: multi-company</field>
+        <field name="model_id" ref="model_magento_job"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_sync_issue_company" model="ir.rule">
+        <field name="name">Magento sync issue: multi-company</field>
+        <field name="model_id" ref="model_magento_sync_issue"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

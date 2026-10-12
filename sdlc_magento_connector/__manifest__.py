@@ -16,6 +16,9 @@
         'views/magento_instance_views.xml',
         'views/account_move_form_magento.xml',
         'data/cron.xml',
+        'views/magento_job_views.xml',
+        'views/magento_sync_issue_views.xml',
+        'data/magento_job_data.xml',
     ],
     'assets': {
         'web.assets_backend': [
