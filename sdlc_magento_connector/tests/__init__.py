@@ -9,3 +9,4 @@ from . import test_incremental_sync
 from . import test_oauth
 from . import test_queue
 from . import test_error_center
+from . import test_error_center_wiring

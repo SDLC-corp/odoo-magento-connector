@@ -193,3 +193,24 @@ class MagentoInstance(models.Model):
             _logger.info("Magento log cleanup: deleted %(jobs)s jobs, %(issues)s issues, "
                          "%(reports)s sync reports", totals)
         return totals
+
+    # ------------------------------------------------------------------
+    # Error-center wiring: the sync engine reports every record's result
+    # ------------------------------------------------------------------
+    def _magento_on_record_result(self, entity, magento_ref, ok, exc=None, payload=None, record=None):
+        res = super()._magento_on_record_result(
+            entity, magento_ref, ok, exc=exc, payload=payload, record=record,
+        )
+        if not magento_ref:
+            return res
+        issues = self.env["magento.sync.issue"]
+        known = {key for key, _label in issues._fields["entity"]._description_selection(self.env)}
+        entity = entity if entity in known else "other"
+        if ok:
+            issues._record_success(self, entity, magento_ref)
+        else:
+            issues._record_failure(
+                self, entity, magento_ref, exc or _("Magento sync failed."),
+                payload=payload, record=record,
+            )
+        return res

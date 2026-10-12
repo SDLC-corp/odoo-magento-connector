@@ -1056,11 +1056,14 @@ class MagentoInstance(models.Model):
 
     def _fetch_list(self, stats, kind, func):
         """Fetch the list of Magento records; a failure is reported, not raised."""
+        entity = kind.replace(" ", "_")
         try:
             result = func()
         except Exception as exc:  # noqa: BLE001
             stats.error(kind, None, exc, instance=self, reason=self._format_magento_request_error(exc, self))
+            self._magento_notify_record_result(entity, self._LIST_REF, False, exc=exc)
             return None
+        self._magento_notify_record_result(entity, self._LIST_REF, True)
         return result
 
     def _iter_fetched(self, stats, kind, items):
@@ -1077,6 +1080,7 @@ class MagentoInstance(models.Model):
                 return
             except Exception as exc:  # noqa: BLE001
                 stats.error(kind, None, exc, instance=self, reason=self._format_magento_request_error(exc, self))
+                self._magento_notify_record_result(kind.replace(" ", "_"), self._LIST_REF, False, exc=exc)
                 return
             stats.records_seen += 1
             yield item
@@ -1693,6 +1697,16 @@ class MagentoInstance(models.Model):
     # =====================
     _RESYNC_ENTITIES = ("order", "product", "customer", "category")
 
+    # Error-center reference for a failure to fetch a whole listing.
+    _LIST_REF = "list"
+    _LIST_RESYNC_METHODS = {
+        "order": "sync_orders",
+        "product": "sync_products",
+        "customer": "sync_customers",
+        "category": "sync_categories",
+        "attribute_set": "sync_attribute_sets",
+    }
+
     def _magento_resync_one(self, entity, magento_ref):
         """Fetch one record from Magento and import it through the normal per-record path.
 
@@ -1706,6 +1720,9 @@ class MagentoInstance(models.Model):
         Watermarks are not touched.
         """
         self.ensure_one()
+        if str(magento_ref or "") == self._LIST_REF and entity in self._LIST_RESYNC_METHODS:
+            # A failed listing (auth, outage) is retried by running that sync again.
+            return getattr(self, self._LIST_RESYNC_METHODS[entity])()
         if entity not in self._RESYNC_ENTITIES:
             raise UserError("Cannot resync Magento entity '%s'." % entity)
         ref = str(magento_ref or "").strip()

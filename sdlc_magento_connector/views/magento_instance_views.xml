@@ -222,6 +222,22 @@
                                         string="Apply Schedule" class="btn-secondary"
                                         invisible="not auto_sync_enabled"
                                         groups="sdlc_magento_connector.group_magento_manager"/>
+                                <group>
+                                    <group string="Incremental Sync">
+                                        <field name="sync_page_size"/>
+                                        <field name="incremental_overlap_minutes"/>
+                                    </group>
+                                    <group string="Sync Markers"
+                                           help="Each sync only fetches records Magento changed since its marker.">
+                                        <field name="orders_sync_watermark" readonly="1"/>
+                                        <field name="products_sync_watermark" readonly="1"/>
+                                        <field name="customers_sync_watermark" readonly="1"/>
+                                    </group>
+                                </group>
+                                <button name="action_reset_watermarks" type="object"
+                                        string="Reset Sync Markers" class="btn-secondary"
+                                        groups="sdlc_magento_connector.group_magento_manager"
+                                        confirm="The next sync will re-read all orders, products and customers from Magento. Continue?"/>
                             </page>
                         </notebook>
                     </sheet>
