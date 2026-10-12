@@ -33,3 +33,7 @@ access_magento_reconciliation_order_user,magento.reconciliation.order user,model
 access_magento_reconciliation_order_manager,magento.reconciliation.order manager,model_magento_reconciliation_order,group_magento_manager,1,1,1,1
 access_magento_customer_group_user,magento.customer.group user,model_magento_customer_group,group_magento_user,1,0,0,0
 access_magento_customer_group_manager,magento.customer.group manager,model_magento_customer_group,group_magento_manager,1,1,1,1
+access_magento_stock_source_map_user,magento.stock.source.map user,model_magento_stock_source_map,group_magento_user,1,0,0,0
+access_magento_stock_source_map_manager,magento.stock.source.map manager,model_magento_stock_source_map,group_magento_manager,1,1,1,1
+access_magento_stock_dirty_user,magento.stock.dirty user,model_magento_stock_dirty,group_magento_user,1,0,0,0
+access_magento_stock_dirty_manager,magento.stock.dirty manager,model_magento_stock_dirty,group_magento_manager,1,1,1,1
