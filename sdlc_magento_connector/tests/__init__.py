@@ -15,3 +15,4 @@ from . import test_bulk
 from . import test_dashboard_phase1
 from . import test_reconciliation
 from . import test_paged_sync
+from . import test_p2_customers

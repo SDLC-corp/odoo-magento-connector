@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         Customer groups: Configuration > Customer Groups
+         ============================================================ -->
+    <record id="view_magento_customer_group_list" model="ir.ui.view">
+        <field name="name">magento.customer.group.list</field>
+        <field name="model">magento.customer.group</field>
+        <field name="arch" type="xml">
+            <list string="Magento Customer Groups" create="0" import="0"
+                  decoration-muted="not from_magento">
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="magento_group_id" string="Magento ID"/>
+                <field name="name"/>
+                <field name="tax_class_name" optional="show"/>
+                <field name="category_id" options="{'no_create': True}" optional="show"/>
+                <field name="pricelist_id" options="{'no_create': True}" optional="show"/>
+                <field name="partner_count" string="Contacts" optional="show"/>
+                <field name="from_magento" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_customer_group_form" model="ir.ui.view">
+        <field name="name">magento.customer.group.form</field>
+        <field name="model">magento.customer.group</field>
+        <field name="arch" type="xml">
+            <form string="Magento Customer Group" create="0">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_partners" type="object"
+                                class="oe_stat_button" icon="fa-users">
+                            <field name="partner_count" widget="statinfo" string="Contacts"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Magento">
+                            <field name="instance_id" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="magento_group_id" readonly="1"/>
+                            <field name="tax_class_name" readonly="1"/>
+                            <field name="from_magento"/>
+                        </group>
+                        <group string="Odoo">
+                            <field name="category_id" options="{'no_create': True}"/>
+                            <field name="pricelist_id" options="{'no_create': True}"
+                                   groups="product.group_product_pricelist"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_customer_group_search" model="ir.ui.view">
+        <field name="name">magento.customer.group.search</field>
+        <field name="model">magento.customer.group</field>
+        <field name="arch" type="xml">
+            <search string="Magento Customer Groups">
+                <field name="name"/>
+                <field name="instance_id"/>
+                <filter name="with_pricelist" string="With pricelist" domain="[('pricelist_id', '!=', False)]"/>
+                <filter name="default_name" string="Name not read from Magento"
+                        domain="[('from_magento', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_customer_group" model="ir.actions.act_window">
+        <field name="name">Customer Groups</field>
+        <field name="res_model">magento.customer.group</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_customer_group_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No customer groups yet</p>
+            <p>Groups are read from Magento by the customer sync, or with <b>Sync Customer Groups</b>
+               on an instance. Map a group to a pricelist to apply it to its customers' contacts.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_customer_groups" name="Customer Groups"
+              parent="sdlc_magento_connector.menu_magento_configuration"
+              action="action_magento_customer_group" sequence="15"/>
+
+    <!-- ============================================================
+         magento.customer: link to the Odoo contact
+         ============================================================ -->
+    <record id="view_magento_customer_list_p2" model="ir.ui.view">
+        <field name="name">magento.customer.list.p2</field>
+        <field name="model">magento.customer</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_customer_list"/>
+        <field name="arch" type="xml">
+            <field name="email" position="after">
+                <field name="partner_id" string="Contact" optional="show"/>
+                <field name="customer_group_id" optional="hide"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_magento_customer_search_p2" model="ir.ui.view">
+        <field name="name">magento.customer.search.p2</field>
+        <field name="model">magento.customer</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_customer_search"/>
+        <field name="arch" type="xml">
+            <field name="instance_id" position="after">
+                <field name="partner_id"/>
+                <field name="customer_group_id"/>
+            </field>
+            <filter name="push_error" position="after">
+                <filter name="no_contact" string="Not linked to a contact" domain="[('partner_id', '=', False)]"/>
+            </filter>
+            <filter name="group_country" position="after">
+                <filter name="group_customer_group" string="Customer Group"
+                        context="{'group_by': 'customer_group_id'}"/>
+            </filter>
+        </field>
+    </record>
+
+    <record id="view_magento_customer_form_p2" model="ir.ui.view">
+        <field name="name">magento.customer.form.p2</field>
+        <field name="model">magento.customer</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_customer_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('oe_title')]" position="before">
+                <div class="oe_button_box" name="button_box">
+                    <button name="action_open_partner" type="object" class="oe_stat_button"
+                            icon="fa-address-card" invisible="not partner_id">
+                        <div class="o_stat_info">
+                            <span class="o_stat_text">Contact</span>
+                        </div>
+                    </button>
+                </div>
+            </xpath>
+            <field name="magento_id" position="after">
+                <field name="partner_id" readonly="1"/>
+                <field name="customer_group_id" readonly="1"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         res.partner: Magento tab (only on contacts linked to Magento)
+         ============================================================ -->
+    <record id="view_partner_form_magento" model="ir.ui.view">
+        <field name="name">res.partner.form.magento</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Magento" name="magento"
+                      groups="sdlc_magento_connector.group_magento_user"
+                      invisible="not magento_instance_id and not magento_address_id and not magento_customer_ids">
+                    <div class="alert alert-warning" role="alert" invisible="not magento_vat_invalid">
+                        <strong>Magento sent an invalid VAT number.</strong>
+                        It was not copied to the Tax ID:
+                        <field name="magento_vat_raw" readonly="1" class="oe_inline"/>
+                    </div>
+                    <group>
+                        <group string="Customer">
+                            <field name="magento_instance_id" readonly="1" invisible="not magento_instance_id"/>
+                            <field name="magento_customer_id" readonly="1" invisible="not magento_customer_id"/>
+                            <field name="magento_customer_group_id" readonly="1"
+                                   invisible="not magento_customer_group_id"/>
+                            <field name="magento_address_id" readonly="1" invisible="not magento_address_id"/>
+                            <field name="magento_vat_invalid" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="magento_customer_ids" readonly="1" invisible="not magento_customer_ids">
+                        <list>
+                            <field name="instance_id"/>
+                            <field name="magento_id"/>
+                            <field name="email"/>
+                            <field name="customer_group_id"/>
+                            <field name="magento_last_error" optional="hide"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_res_partner_filter_magento" model="ir.ui.view">
+        <field name="name">res.partner.search.magento</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_res_partner_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='inactive']" position="after">
+                <separator/>
+                <filter name="magento_customers" string="Magento customers"
+                        domain="[('magento_customer_id', '!=', False)]"/>
+                <filter name="magento_vat_invalid" string="Invalid Magento VAT"
+                        domain="[('magento_vat_invalid', '=', True)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Instance form: Customers options
+         ============================================================ -->
+    <record id="view_magento_instance_form_p2_customers" model="ir.ui.view">
+        <field name="name">magento.instance.form.p2.customers</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='catalog']" position="after">
+                <page string="Customers" name="customers">
+                    <group>
+                        <group string="Contacts">
+                            <field name="create_company_partners"/>
+                            <field name="push_partner_changes"/>
+                        </group>
+                        <group string="Customer Groups">
+                            <label for="customer_group_count" string="Groups"/>
+                            <div class="o_row">
+                                <field name="customer_group_count" class="oe_inline"/>
+                                <button name="action_view_customer_groups" type="object"
+                                        string="Open" class="btn-link" icon="fa-arrow-right"/>
+                            </div>
+                            <div colspan="2">
+                                <button name="action_sync_customer_groups" type="object"
+                                        string="Sync Customer Groups" class="btn-secondary"
+                                        groups="sdlc_magento_connector.group_magento_manager"/>
+                            </div>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

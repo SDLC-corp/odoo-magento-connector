@@ -2188,13 +2188,17 @@ class MagentoInstance(models.Model):
                 ("email", "=", email),
             ], limit=1)
         values = customer_model._extract_magento_values(data, self.id)
+        outcome = "updated"
         if customer:
             customer.write(values)
-            box.append(customer)
-            return "updated"
-        # List form: works whether or not magento.customer.create is model_create_multi.
-        box.append(customer_model.create([values]))
-        return "created"
+        else:
+            # List form: works whether or not magento.customer.create is model_create_multi.
+            customer = customer_model.create([values])
+            outcome = "created"
+        # Same contact as the order import: res.partner + address contacts + group/VAT.
+        customer._magento_sync_partner(data)
+        box.append(customer)
+        return outcome
 
     # =====================
     # SINGLE-RECORD RESYNC (error center contract)
