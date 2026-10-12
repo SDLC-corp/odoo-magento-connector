@@ -55,3 +55,11 @@ access_magento_price_rule_user,magento.price.rule user,model_magento_price_rule,
 access_magento_price_rule_manager,magento.price.rule manager,model_magento_price_rule,group_magento_manager,1,1,1,1
 access_magento_price_push_state_user,magento.price.push.state user,model_magento_price_push_state,group_magento_user,1,0,0,0
 access_magento_price_push_state_manager,magento.price.push.state manager,model_magento_price_push_state,group_magento_manager,1,1,1,1
+access_magento_website_user,magento.website user,model_magento_website,group_magento_user,1,0,0,0
+access_magento_website_manager,magento.website manager,model_magento_website,group_magento_manager,1,1,1,1
+access_magento_store_group_user,magento.store.group user,model_magento_store_group,group_magento_user,1,0,0,0
+access_magento_store_group_manager,magento.store.group manager,model_magento_store_group,group_magento_manager,1,1,1,1
+access_magento_store_view_user,magento.store.view user,model_magento_store_view,group_magento_user,1,0,0,0
+access_magento_store_view_manager,magento.store.view manager,model_magento_store_view,group_magento_manager,1,1,1,1
+access_magento_product_media_user,magento.product.media user,model_magento_product_media,group_magento_user,1,1,1,1
+access_magento_product_media_manager,magento.product.media manager,model_magento_product_media,group_magento_manager,1,1,1,1

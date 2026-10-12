@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 2 (2.8): websites and store views, per-store-view
+         translations and the full image gallery.
+         Standard views only (house style: odoo-trs-ui).
+         ============================================================ -->
+
+    <!-- Store views -->
+    <record id="view_magento_store_view_list" model="ir.ui.view">
+        <field name="name">magento.store.view.list</field>
+        <field name="model">magento.store.view</field>
+        <field name="arch" type="xml">
+            <list string="Store Views" editable="bottom" create="0" delete="0"
+                  decoration-muted="not magento_active or not active_for_sync">
+                <field name="name" readonly="1"/>
+                <field name="code"/>
+                <field name="website_id" readonly="1" optional="show"/>
+                <field name="group_id" readonly="1" optional="hide"/>
+                <field name="magento_id" optional="hide"/>
+                <field name="locale" optional="show"/>
+                <field name="lang_id" options="{'no_create': True}"/>
+                <field name="lang_installed" column_invisible="1"/>
+                <button name="action_magento_activate_lang" type="object" icon="fa-language"
+                        string="Install Language" title="Install this language in Odoo"
+                        invisible="not lang_id or lang_installed"
+                        groups="sdlc_magento_connector.group_magento_manager"/>
+                <field name="base_currency_id" optional="show"/>
+                <field name="display_currency_id" optional="hide"/>
+                <field name="base_url" optional="hide"/>
+                <field name="is_default" optional="show"/>
+                <field name="is_instance_default" optional="show"/>
+                <field name="magento_active" widget="boolean" optional="show"/>
+                <field name="active_for_sync" widget="boolean_toggle"/>
+                <field name="instance_id" optional="hide" readonly="1"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_store_view_search" model="ir.ui.view">
+        <field name="name">magento.store.view.search</field>
+        <field name="model">magento.store.view</field>
+        <field name="arch" type="xml">
+            <search string="Store Views">
+                <field name="name" filter_domain="['|', ('name', 'ilike', self), ('code', 'ilike', self)]"/>
+                <field name="website_id"/>
+                <field name="lang_id"/>
+                <field name="instance_id"/>
+                <filter name="to_sync" string="Synced" domain="[('active_for_sync', '=', True)]"/>
+                <filter name="lang_missing" string="Language not installed"
+                        domain="[('lang_id', '!=', False), ('lang_installed', '=', False)]"/>
+                <separator/>
+                <filter name="archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_website" string="Website" context="{'group_by': 'website_id'}"/>
+                    <filter name="group_lang" string="Language" context="{'group_by': 'lang_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_store_view" model="ir.actions.act_window">
+        <field name="name">Store Views</field>
+        <field name="res_model">magento.store.view</field>
+        <field name="view_mode">list</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No store view discovered yet</p>
+            <p>Open a Magento instance and click <b>Discover Stores</b> (Stores tab). Each store
+               view's locale is matched to an Odoo language; views whose language is installed
+               carry product translations.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_store_views" name="Store Views"
+              parent="sdlc_magento_connector.menu_magento_configuration"
+              action="action_magento_store_view" sequence="12"/>
+
+    <!-- Websites -->
+    <record id="view_magento_website_list" model="ir.ui.view">
+        <field name="name">magento.website.list</field>
+        <field name="model">magento.website</field>
+        <field name="arch" type="xml">
+            <list string="Websites" create="0" delete="0" edit="0">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="magento_id" optional="hide"/>
+                <field name="is_default"/>
+                <field name="default_group_id" optional="show"/>
+                <field name="base_currency_id" optional="show"/>
+                <field name="store_view_count" string="Store Views" class="o_field_integer"/>
+                <field name="instance_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Instance: Stores tab -->
+    <record id="view_magento_instance_form_stores_p2" model="ir.ui.view">
+        <field name="name">magento.instance.form.stores.p2</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <page name="catalog" position="after">
+                <page string="Stores" name="magento_stores">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <button name="action_magento_discover_stores" type="object"
+                                string="Discover Stores" class="btn-primary" icon="fa-sitemap"
+                                groups="sdlc_magento_connector.group_magento_manager"/>
+                        <span class="text-muted small" invisible="not magento_stores_discovered_at">
+                            Last discovered <field name="magento_stores_discovered_at" readonly="1"
+                                                   class="d-inline"/>
+                        </span>
+                        <span class="text-muted small" invisible="magento_stores_discovered_at">
+                            Reads the websites, stores and store views (locale, currencies) from Magento.
+                        </span>
+                    </div>
+                    <separator string="Websites"/>
+                    <field name="magento_website_ids" nolabel="1" readonly="1">
+                        <list string="Websites">
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="is_default"/>
+                            <field name="default_group_id" optional="show"/>
+                            <field name="base_currency_id" optional="show"/>
+                            <field name="store_view_count" string="Store Views" class="o_field_integer"/>
+                        </list>
+                    </field>
+                    <separator string="Store Views"/>
+                    <div class="text-muted small mb-2">
+                        The instance's store view holds the default values; every other synced view
+                        whose language is installed carries translations of product names,
+                        descriptions and meta fields, imported and exported per store code.
+                    </div>
+                    <field name="magento_store_view_ids" nolabel="1">
+                        <list string="Store Views" editable="bottom" create="0" delete="0"
+                              decoration-muted="not magento_active or not active_for_sync">
+                            <field name="name" readonly="1"/>
+                            <field name="code"/>
+                            <field name="website_id" readonly="1" optional="show"/>
+                            <field name="locale" optional="show"/>
+                            <field name="lang_id" options="{'no_create': True}"/>
+                            <field name="lang_installed" column_invisible="1"/>
+                            <button name="action_magento_activate_lang" type="object" icon="fa-language"
+                                    string="Install Language" title="Install this language in Odoo"
+                                    invisible="not lang_id or lang_installed"
+                                    groups="sdlc_magento_connector.group_magento_manager"/>
+                            <field name="base_currency_id" optional="show"/>
+                            <field name="display_currency_id" optional="hide"/>
+                            <field name="is_instance_default" optional="show"/>
+                            <field name="magento_active" widget="boolean" optional="show"/>
+                            <field name="active_for_sync" widget="boolean_toggle"/>
+                        </list>
+                    </field>
+                </page>
+            </page>
+        </field>
+    </record>
+
+    <!-- Gallery entries -->
+    <record id="view_magento_product_media_form" model="ir.ui.view">
+        <field name="name">magento.product.media.form</field>
+        <field name="model">magento.product.media</field>
+        <field name="arch" type="xml">
+            <form string="Magento Image">
+                <sheet>
+                    <field name="image" widget="image" class="oe_avatar" options="{'size': (128, 128)}"
+                           invisible="odoo_image_id"/>
+                    <field name="image_preview" widget="image" class="oe_avatar"
+                           options="{'size': (128, 128)}" invisible="not odoo_image_id"/>
+                    <div class="oe_title">
+                        <label for="label"/>
+                        <h1><field name="label" placeholder="e.g. Side view"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="position"/>
+                            <field name="disabled"/>
+                            <field name="roles"/>
+                            <field name="is_main"/>
+                        </group>
+                        <group>
+                            <field name="origin" widget="badge"/>
+                            <field name="created_by_connector"/>
+                            <field name="magento_entry_id"/>
+                            <field name="file"/>
+                            <field name="odoo_image_model" invisible="1"/>
+                            <field name="odoo_image_id" invisible="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Product binding: Images & Translations tab -->
+    <record id="view_magento_product_map_form_stores_p2" model="ir.ui.view">
+        <field name="name">magento.product.map.form.stores.p2</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Images &amp; Translations" name="magento_images_translations">
+                    <div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Images and translations">
+                        <button name="action_magento_pull_store_data" type="object"
+                                string="Pull Images &amp; Translations" class="btn-secondary"
+                                icon="fa-download" invisible="not magento_id"/>
+                        <button name="action_magento_push_store_data" type="object"
+                                string="Push Images &amp; Translations" class="btn-secondary"
+                                icon="fa-upload"
+                                invisible="not magento_id or type_id in ('configurable', 'bundle', 'grouped')"/>
+                    </div>
+                    <separator string="Gallery"/>
+                    <div class="text-muted small mb-2">
+                        The main image is the product image. Extra images are eCommerce product
+                        images when eCommerce is installed, otherwise they are kept here. Images
+                        added from Odoo are created in Magento; Magento's own images are updated,
+                        never deleted.
+                    </div>
+                    <field name="magento_media_ids" nolabel="1">
+                        <list string="Images" decoration-muted="disabled">
+                            <field name="image_preview" widget="image" options="{'size': [48, 48]}"
+                                   string="Image"/>
+                            <field name="position" class="o_field_integer"/>
+                            <field name="label"/>
+                            <field name="roles" optional="show"/>
+                            <field name="is_main" optional="show"/>
+                            <field name="disabled" optional="show"/>
+                            <field name="origin" widget="badge"
+                                   decoration-info="origin == 'odoo'"
+                                   decoration-muted="origin == 'magento'"/>
+                            <field name="created_by_connector" optional="hide"/>
+                            <field name="magento_entry_id" optional="hide"/>
+                        </list>
+                    </field>
+                    <separator string="Translations"/>
+                    <field name="magento_translation_html" nolabel="1" readonly="1"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
