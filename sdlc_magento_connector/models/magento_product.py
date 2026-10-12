@@ -24,6 +24,36 @@ PUSH_SKIP_CONTEXT_KEYS = ("magento_skip_push", "skip_magento_sync")
 # Product types Magento may return that the connector can read but not export yet.
 UNSUPPORTED_EXPORT_TYPES = ("configurable", "bundle", "grouped")
 
+# Fields of a product map that live on the Odoo *template*. A map bound to a variant of a
+# multi-variant template (a Magento configurable's child SKU) must not write them to its
+# product, nor receive them from the template: the template belongs to the configurable,
+# and each child SKU keeps its own Magento name and price.
+_TEMPLATE_LEVEL_MAP_FIELDS = {"name", "price", "description", "short_description"}
+_TEMPLATE_LEVEL_PRODUCT_FIELDS = {"name", "list_price", "description", "description_sale"}
+
+_URL_KEY_RE = re.compile(r"[^a-z0-9]+")
+
+
+def magento_url_key(name):
+    """The ``url_key`` Magento derives from a product name (lowercase, non
+    alphanumerics collapsed to ``-``)."""
+    return _URL_KEY_RE.sub("-", (name or "").strip().lower()).strip("-")
+
+
+def magento_variant_products(products):
+    """The products of ``products`` that are variants of a multi-variant template, or of
+    the template bound to a Magento configurable (see ``_TEMPLATE_LEVEL_MAP_FIELDS``)."""
+    if not products:
+        return products
+    templates = products.product_tmpl_id
+    bound = products.env["magento.product.map"].sudo().with_context(active_test=False).search([
+        ("odoo_template_id", "in", templates.ids), ("type_id", "=", "configurable"),
+    ]).odoo_template_id
+    return products.filtered(
+        lambda p: p.product_tmpl_id in bound
+        or len(p.product_tmpl_id.with_context(active_test=False).product_variant_ids) > 1
+    )
+
 _IMAGE_EXTENSIONS = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -418,16 +448,75 @@ class MagentoProductMap(models.Model):
         help="Media gallery entry of the image exported from Odoo.",
     )
     odoo_product_id = fields.Many2one("product.product")
+    odoo_template_id = fields.Many2one(
+        "product.template",
+        string="Odoo Template",
+        compute="_compute_odoo_template_id",
+        store=True,
+        readonly=False,
+        index=True,
+        ondelete="set null",
+        help="Template of the Odoo product. A configurable product binds the whole template "
+             "(its variants are the child SKUs, each with its own mapping), so it has a "
+             "template and no single product.",
+    )
+
+    @api.depends("odoo_product_id", "odoo_product_id.product_tmpl_id")
+    def _compute_odoo_template_id(self):
+        for record in self:
+            # Keep an explicitly bound template (configurable) when there is no product.
+            record.odoo_template_id = record.odoo_product_id.product_tmpl_id or record.odoo_template_id
 
     def _check_exportable(self):
         for record in self:
             if record.type_id in UNSUPPORTED_EXPORT_TYPES:
                 type_label = dict(record._fields["type_id"].selection).get(record.type_id)
+                if record.type_id == "configurable":
+                    hint = (
+                        "Odoo imports a configurable as a product template whose variants "
+                        "are its child SKUs: edit and push the child SKUs, and manage the "
+                        "configurable itself (options, children) in Magento."
+                    )
+                else:
+                    hint = "Manage this product in Magento directly."
                 raise UserError(
                     f"Exporting {type_label} products to Magento is not supported yet "
-                    f"(SKU: {record.sku or record.name or record.id}). "
-                    "Manage this product in Magento directly."
+                    f"(SKU: {record.sku or record.name or record.id}). {hint}"
                 )
+
+    def _magento_check_url_key(self, api, payload, creating=False):
+        """Refuse an export whose ``url_key`` already belongs to another Magento product.
+
+        Magento rejects a duplicate ``url_key`` with a generic "URL key for specified store
+        already exists". On create, the key Magento will derive from the name is checked;
+        on update only an explicit ``url_key`` (field mapping) is. A failed lookup never
+        blocks the export (Magento still enforces the rule).
+        """
+        self.ensure_one()
+        product = (payload or {}).get("product") or {}
+        url_key = None
+        for item in product.get("custom_attributes") or []:
+            if item.get("attribute_code") == "url_key" and item.get("value"):
+                url_key = str(item["value"]).strip()
+        if not url_key:
+            if not creating:
+                return
+            url_key = magento_url_key(product.get("name"))
+        if not url_key:
+            return
+        try:
+            rows = api.get_products(None, filters=[("url_key", url_key, "eq")], page_size=5, limit=5)
+        except (requests.exceptions.RequestException, UserError) as exc:
+            _logger.info("URL key check of %s skipped: %s", self.sku, magento_error_message(exc))
+            return
+        own_sku = product.get("sku") or self.sku
+        clash = [row.get("sku") for row in rows or [] if isinstance(row, dict) and row.get("sku") != own_sku]
+        if clash:
+            raise UserError(
+                f"The URL key '{url_key}' is already used by Magento product SKU {clash[0]}, "
+                f"so Magento would refuse SKU {own_sku}. Rename the product, or map a unique "
+                "'url_key' in the product field mapping, then export again."
+            )
 
     def _build_magento_payload(self):
         self.ensure_one()
@@ -496,7 +585,11 @@ class MagentoProductMap(models.Model):
         if category_links:
             payload["product"].setdefault("extension_attributes", {})
             payload["product"]["extension_attributes"]["category_links"] = category_links
-        if self.quantity or self.stock_status:
+        instance = self.instance_id
+        stock_push_on = "stock_push_enabled" in instance._fields and instance.stock_push_enabled
+        # With the automatic stock push on, it owns Magento's quantity: a product update
+        # never sends back the quantity last imported from Magento.
+        if (self.quantity or self.stock_status) and not stock_push_on:
             payload["product"].setdefault("extension_attributes", {})
             payload["product"]["extension_attributes"]["stock_item"] = {
                 "qty": float(self.quantity or 0.0),
@@ -717,6 +810,7 @@ class MagentoProductMap(models.Model):
         for record in self:
             api = record._magento_api()
             payload = record._build_magento_payload()
+            record._magento_check_url_key(api, payload, creating=True)
             try:
                 response = api.create_product(payload)
             except requests.exceptions.RequestException as exc:
@@ -741,6 +835,7 @@ class MagentoProductMap(models.Model):
                     raise UserError("Magento product not found for this SKU. Use 'Create in Magento' first.") from exc
                 record._raise_magento_http_error(exc)
             payload = record._build_magento_payload()
+            record._magento_check_url_key(api, payload)
             try:
                 response = api.update_product(record.sku, payload)
             except requests.exceptions.RequestException as exc:
@@ -855,9 +950,14 @@ class MagentoProductMap(models.Model):
             },
         }
 
+    def _magento_binds_template(self):
+        """A configurable binds a whole template (``odoo_template_id``), never one product."""
+        self.ensure_one()
+        return self.type_id == "configurable"
+
     def _ensure_odoo_product(self):
         self.ensure_one()
-        if self.odoo_product_id or not self.sku:
+        if self.odoo_product_id or not self.sku or self._magento_binds_template():
             return
         product = self.env["product.product"].search([("default_code", "=", self.sku)], limit=1)
         if not product:
@@ -880,6 +980,7 @@ class MagentoProductMap(models.Model):
             return
         api = self._magento_api()
         payload = self._build_magento_payload()
+        self._magento_check_url_key(api, payload)
         try:
             api.update_product(self.sku, payload)
         except requests.exceptions.RequestException as exc:
@@ -905,21 +1006,25 @@ class MagentoProductMap(models.Model):
         # (committed with this edit, see schedule_magento_push).
         self._schedule_magento_push(vals)
         if not self.env.context.get("skip_odoo_sync"):
-            for record in self:
-                if not record.odoo_product_id:
-                    continue
+            linked = self.filtered("odoo_product_id")
+            # Child SKU of a configurable: its name, price and descriptions stay on the
+            # map; the template's belong to the configurable.
+            variants = magento_variant_products(linked.odoo_product_id) if (
+                _TEMPLATE_LEVEL_MAP_FIELDS & set(vals)) else self.env["product.product"]
+            for record in linked:
+                is_variant = record.odoo_product_id in variants
                 odoo_vals = {}
-                if "name" in vals:
+                if "name" in vals and not is_variant:
                     odoo_vals["name"] = record.name
                 if "sku" in vals:
                     odoo_vals["default_code"] = record.sku
                 if "weight" in vals:
                     odoo_vals["weight"] = record.weight
-                if "price" in vals:
+                if "price" in vals and not is_variant:
                     odoo_vals["list_price"] = record.price
-                if "description" in vals:
+                if "description" in vals and not is_variant:
                     odoo_vals["description"] = record.description or ""
-                if "short_description" in vals:
+                if "short_description" in vals and not is_variant:
                     odoo_vals["description_sale"] = record.short_description or ""
                 if "image_1920" in vals:
                     odoo_vals["image_1920"] = record.image_1920
@@ -955,28 +1060,41 @@ class ProductProduct(models.Model):
         maps = _get_maps_for_products(self)
         if not maps:
             return res
+        variants = magento_variant_products(maps.odoo_product_id) if (
+            _TEMPLATE_LEVEL_PRODUCT_FIELDS & set(vals)) else self.env["product.product"]
         for record in maps:
-            map_vals = {}
-            if "name" in vals:
-                map_vals["name"] = record.odoo_product_id.name
-            if "default_code" in vals:
-                map_vals["sku"] = record.odoo_product_id.default_code
-            if "weight" in vals:
-                map_vals["weight"] = record.odoo_product_id.weight
-            if "active" in vals:
-                map_vals["enable_product"] = record.odoo_product_id.active
-                map_vals["status"] = "1" if record.odoo_product_id.active else "2"
-            if "list_price" in vals:
-                map_vals["price"] = record.odoo_product_id.lst_price
-            if "description" in vals:
-                map_vals["description"] = record.odoo_product_id.description or ""
-            if "description_sale" in vals:
-                map_vals["short_description"] = record.odoo_product_id.description_sale or ""
-            if "image_1920" in vals:
-                map_vals["image_1920"] = record.odoo_product_id.image_1920
+            # A variant's name, price and descriptions are its template's: they never
+            # overwrite the child SKU's own Magento values.
+            skip = _TEMPLATE_LEVEL_PRODUCT_FIELDS if record.odoo_product_id in variants else ()
+            map_vals = _product_vals_to_map_vals(record, vals, skip)
             if map_vals:
                 record.with_context(skip_odoo_sync=True).write(map_vals)
         return res
+
+
+def _product_vals_to_map_vals(product_map, vals, skip=()):
+    """Map values mirroring the product fields written in ``vals`` (minus ``skip``)."""
+    product = product_map.odoo_product_id
+    keys = set(vals) - set(skip)
+    map_vals = {}
+    if "name" in keys:
+        map_vals["name"] = product.name
+    if "default_code" in keys:
+        map_vals["sku"] = product.default_code
+    if "weight" in keys:
+        map_vals["weight"] = product.weight
+    if "active" in keys:
+        map_vals["enable_product"] = product.active
+        map_vals["status"] = "1" if product.active else "2"
+    if "list_price" in keys:
+        map_vals["price"] = product.lst_price
+    if "description" in keys:
+        map_vals["description"] = product.description or ""
+    if "description_sale" in keys:
+        map_vals["short_description"] = product.description_sale or ""
+    if "image_1920" in keys:
+        map_vals["image_1920"] = product.image_1920
+    return map_vals
 
 
 class ProductTemplate(models.Model):
@@ -1004,25 +1122,15 @@ class ProductTemplate(models.Model):
         maps = _get_maps_for_products(variants)
         if not maps:
             return res
+        multi = magento_variant_products(maps.odoo_product_id)
+        all_fields = {"name", "default_code", "weight", "active", "list_price", "description",
+                      "description_sale", "image_1920"}
         for record in maps:
-            map_vals = {}
-            if "name" in vals:
-                map_vals["name"] = record.odoo_product_id.name
-            if "default_code" in vals:
-                map_vals["sku"] = record.odoo_product_id.default_code
-            if "weight" in vals:
-                map_vals["weight"] = record.odoo_product_id.weight
-            if "active" in vals:
-                map_vals["enable_product"] = record.odoo_product_id.active
-                map_vals["status"] = "1" if record.odoo_product_id.active else "2"
-            if "list_price" in vals:
-                map_vals["price"] = record.odoo_product_id.lst_price
-            if "description" in vals:
-                map_vals["description"] = record.odoo_product_id.description or ""
-            if "description_sale" in vals:
-                map_vals["short_description"] = record.odoo_product_id.description_sale or ""
-            if "image_1920" in vals:
-                map_vals["image_1920"] = record.odoo_product_id.image_1920
+            # A multi-variant template (a Magento configurable) only carries its archive
+            # state to the child SKUs; the rest is template-level, or (default_code,
+            # weight, image) not written through to its variants at all.
+            skip = all_fields - {"active"} if record.odoo_product_id in multi else ()
+            map_vals = _product_vals_to_map_vals(record, vals, skip)
             if map_vals:
                 record.with_context(skip_odoo_sync=True).write(map_vals)
         return res

@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 2 catalog: configurable / bundle / grouped products,
+         variant and component lists, attribute mapping, category mirror.
+         Standard views only (house style: odoo-trs-ui).
+         ============================================================ -->
+
+    <!-- Variant / component lines (default list of the link model). -->
+    <record id="view_magento_product_link_list" model="ir.ui.view">
+        <field name="name">magento.product.link.list</field>
+        <field name="model">magento.product.link</field>
+        <field name="arch" type="xml">
+            <list string="Variants and Components" create="0" edit="0"
+                  decoration-muted="not child_map_id">
+                <field name="parent_map_id"/>
+                <field name="link_type" widget="badge"/>
+                <field name="option_title" optional="show"/>
+                <field name="child_sku"/>
+                <field name="child_map_id" optional="hide"/>
+                <field name="child_product_id" string="Odoo Product / Variant"/>
+                <field name="qty" optional="show"/>
+                <field name="is_default" optional="hide"/>
+                <field name="instance_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Product binding form: type badge, template link, variants / components. -->
+    <record id="view_magento_product_map_form_p2" model="ir.ui.view">
+        <field name="name">magento.product.map.form.p2</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('oe_title')]" position="inside">
+                <div class="d-flex flex-wrap gap-1" role="group" aria-label="Magento product type">
+                    <field name="type_id" widget="badge" readonly="1"
+                           decoration-info="type_id == 'configurable'"
+                           decoration-primary="type_id == 'bundle'"
+                           decoration-muted="type_id == 'grouped'"/>
+                    <span class="badge rounded-pill text-bg-light" invisible="magento_child_count == 0">
+                        <field name="magento_child_count" class="o_field_integer"/>
+                        <span invisible="type_id != 'configurable'"> variants</span>
+                        <span invisible="type_id == 'configurable'"> components</span>
+                    </span>
+                </div>
+            </xpath>
+            <field name="odoo_product_id" position="after">
+                <field name="odoo_template_id" readonly="1" invisible="not odoo_template_id"/>
+                <field name="odoo_categ_id" invisible="not odoo_template_id"/>
+            </field>
+            <xpath expr="//notebook" position="inside">
+                <page string="Variants / Components" name="magento_children"
+                      invisible="type_id not in ('configurable', 'bundle', 'grouped')">
+                    <div class="text-muted small mb-2" invisible="type_id != 'configurable'">
+                        Each child SKU of the configurable is a variant of the Odoo template and
+                        keeps its own Magento binding, so orders resolve by child SKU.
+                    </div>
+                    <div class="text-muted small mb-2" invisible="type_id != 'bundle'">
+                        Bundle options and their products. With Manufacturing installed, the
+                        default selection becomes a kit bill of materials.
+                    </div>
+                    <div class="text-muted small mb-2" invisible="type_id != 'grouped'">
+                        Products shown together by this grouped product. Magento sells the
+                        products, not the group.
+                    </div>
+                    <field name="child_link_ids" nolabel="1" readonly="1">
+                        <list string="Variants and Components" decoration-muted="not child_map_id">
+                            <field name="option_title" optional="show"
+                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="child_sku"/>
+                            <field name="child_map_id" optional="hide"/>
+                            <field name="child_product_id" string="Odoo Product / Variant"/>
+                            <field name="qty" optional="show"
+                                   column_invisible="parent.type_id == 'configurable'"/>
+                            <field name="is_default" optional="show"
+                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="option_required" optional="hide"
+                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="price" optional="hide"
+                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="position" optional="hide"/>
+                        </list>
+                    </field>
+                </page>
+                <page string="Part Of" name="magento_part_of" invisible="not parent_link_ids">
+                    <field name="parent_link_ids" nolabel="1" readonly="1">
+                        <list string="Part Of">
+                            <field name="parent_map_id" string="Configurable / Bundle / Grouped"/>
+                            <field name="link_type"/>
+                            <field name="option_title" optional="show"/>
+                            <field name="qty" optional="show"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product binding kanban: variant / component count next to the type badge. -->
+    <record id="view_magento_product_map_kanban_p2" model="ir.ui.view">
+        <field name="name">magento.product.map.kanban.p2</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='type_id']" position="replace">
+                <field name="type_id" widget="badge"
+                       decoration-info="type_id == 'configurable'"
+                       decoration-primary="type_id == 'bundle'"
+                       decoration-muted="type_id == 'grouped'"/>
+                <field name="magento_child_count" invisible="1"/>
+                <span t-if="record.magento_child_count.raw_value"
+                      class="badge rounded-pill text-bg-light">
+                    <t t-out="record.magento_child_count.raw_value"/>
+                    <t t-if="record.type_id.raw_value == 'configurable'"> variants</t>
+                    <t t-else=""> components</t>
+                </span>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product binding list: template and category columns. -->
+    <record id="view_magento_product_map_list_p2" model="ir.ui.view">
+        <field name="name">magento.product.map.list.p2</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_list"/>
+        <field name="arch" type="xml">
+            <field name="odoo_product_id" position="after">
+                <field name="odoo_template_id" optional="hide"/>
+                <field name="odoo_categ_id" optional="show"/>
+                <field name="magento_child_count" optional="hide" string="Variants / Components"/>
+            </field>
+            <field name="type_id" position="attributes">
+                <attribute name="widget">badge</attribute>
+                <attribute name="decoration-info">type_id == 'configurable'</attribute>
+                <attribute name="decoration-primary">type_id == 'bundle'</attribute>
+                <attribute name="decoration-muted">type_id == 'grouped'</attribute>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_magento_product_map_search_p2" model="ir.ui.view">
+        <field name="name">magento.product.map.search.p2</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_search"/>
+        <field name="arch" type="xml">
+            <field name="odoo_product_id" position="after">
+                <field name="odoo_template_id"/>
+            </field>
+            <filter name="enabled" position="before">
+                <filter name="type_configurable" string="Configurable" domain="[('type_id', '=', 'configurable')]"/>
+                <filter name="type_bundle" string="Bundle" domain="[('type_id', '=', 'bundle')]"/>
+                <filter name="type_grouped" string="Grouped" domain="[('type_id', '=', 'grouped')]"/>
+                <filter name="is_variant" string="Variant of a configurable"
+                        domain="[('parent_link_ids.link_type', '=', 'configurable')]"/>
+                <separator/>
+            </filter>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Categories: Magento -> Odoo category column
+         ============================================================ -->
+    <record id="view_magento_category_list_p2" model="ir.ui.view">
+        <field name="name">magento.category.list.p2</field>
+        <field name="model">magento.category</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_category_list"/>
+        <field name="arch" type="xml">
+            <field name="parent_id" position="after">
+                <field name="categ_id" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_magento_category_form_p2" model="ir.ui.view">
+        <field name="name">magento.category.form.p2</field>
+        <field name="model">magento.category</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_category_form"/>
+        <field name="arch" type="xml">
+            <field name="is_active" position="after">
+                <field name="categ_id"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_magento_category_search_p2" model="ir.ui.view">
+        <field name="name">magento.category.search.p2</field>
+        <field name="model">magento.category</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_category_search"/>
+        <field name="arch" type="xml">
+            <field name="parent_id" position="after">
+                <field name="categ_id"/>
+            </field>
+            <filter name="not_in_magento" position="before">
+                <filter name="no_odoo_category" string="No Odoo category" domain="[('categ_id', '=', False)]"/>
+            </filter>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Attribute and option mapping
+         ============================================================ -->
+    <record id="view_magento_product_attribute_list" model="ir.ui.view">
+        <field name="name">magento.product.attribute.list</field>
+        <field name="model">magento.product.attribute</field>
+        <field name="arch" type="xml">
+            <list string="Magento Attributes" create="0">
+                <field name="name"/>
+                <field name="attribute_code"/>
+                <field name="magento_attribute_id" optional="hide"/>
+                <field name="odoo_attribute_id"/>
+                <field name="option_count" class="o_field_integer"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_product_attribute_form" model="ir.ui.view">
+        <field name="name">magento.product.attribute.form</field>
+        <field name="model">magento.product.attribute</field>
+        <field name="arch" type="xml">
+            <form string="Magento Attribute" create="0">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="attribute_code"/>
+                            <field name="magento_attribute_id"/>
+                            <field name="odoo_attribute_id"/>
+                        </group>
+                        <group>
+                            <field name="instance_id" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Options" name="options">
+                            <field name="option_ids" nolabel="1">
+                                <list string="Options" editable="bottom" create="0">
+                                    <field name="label"/>
+                                    <field name="value" readonly="1"/>
+                                    <field name="odoo_value_id"
+                                           domain="[('attribute_id', '=', parent.odoo_attribute_id)]"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_product_attribute_search" model="ir.ui.view">
+        <field name="name">magento.product.attribute.search</field>
+        <field name="model">magento.product.attribute</field>
+        <field name="arch" type="xml">
+            <search string="Magento Attributes">
+                <field name="name" filter_domain="['|', ('name', 'ilike', self), ('attribute_code', 'ilike', self)]"/>
+                <field name="odoo_attribute_id"/>
+                <field name="instance_id"/>
+                <filter name="unmapped" string="No Odoo attribute" domain="[('odoo_attribute_id', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_product_attribute" model="ir.actions.act_window">
+        <field name="name">Attributes</field>
+        <field name="res_model">magento.product.attribute</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Magento attribute mapped yet</p>
+            <p>Attributes and their options are mapped when the first configurable product is
+               imported. Each Magento option becomes a value of an Odoo product attribute.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_product_attributes" name="Attributes" parent="menu_magento_data"
+              action="action_magento_product_attribute" sequence="45"/>
+
+    <!-- ============================================================
+         Instance form: catalog import settings (Catalog tab)
+         ============================================================ -->
+    <record id="view_magento_instance_form_catalog_p2" model="ir.ui.view">
+        <field name="name">magento.instance.form.catalog.p2</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <page name="catalog" position="inside">
+                <group name="catalog_import_p2">
+                    <group string="Categories">
+                        <field name="magento_mirror_categories"/>
+                        <field name="magento_categ_root_id" invisible="not magento_mirror_categories"/>
+                        <field name="magento_product_categ_policy"/>
+                        <field name="magento_public_categories" invisible="not magento_mirror_categories"/>
+                    </group>
+                    <group string="Configurable, Bundle and Grouped Products">
+                        <field name="import_products_storable"/>
+                        <field name="magento_bundle_kit_bom"/>
+                        <div class="text-muted small" colspan="2">
+                            Configurable products are imported as one product with variants (one per
+                            child SKU). Child SKUs already imported as separate products are merged
+                            into those variants.
+                        </div>
+                        <button name="action_import_composite_products" type="object"
+                                string="Import Configurable, Bundle and Grouped" class="btn-secondary"
+                                colspan="2"/>
+                    </group>
+                </group>
+            </page>
+        </field>
+    </record>
+</odoo>

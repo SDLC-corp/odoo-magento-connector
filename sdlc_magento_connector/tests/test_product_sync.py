@@ -65,21 +65,21 @@ class TestProductSync(MagentoTestCommon):
             "The sync report must count the failed product (errors >= 1)",
         )
 
-    def test_a1_configurable_bundle_grouped_are_skipped(self):
+    def test_a1_unsupported_types_are_skipped(self):
+        # Configurable, bundle and grouped are imported since Phase 2 (test_p2_catalog);
+        # other types (gift cards...) and a configurable without options are skipped.
         catalog = [
             build_product(10, "MH01", "Chaz Kangeroo Hoodie", type_id="configurable"),
-            build_product(11, "24-WG080", "Sprite Yoga Companion Kit", type_id="bundle"),
-            build_product(12, "24-WG085_Group", "Set of Sprite Yoga Straps", type_id="grouped"),
+            build_product(11, "GIFT-25", "Gift Card", type_id="giftcard"),
             build_product(13, "MH01-XS-Black", "Chaz Kangeroo Hoodie-XS-Black"),
         ]
         self._patch_catalog(catalog)
 
         result = self.instance.sync_products()  # must not crash
-        if isinstance(result, dict) and "skipped" in result:
-            self.assertGreaterEqual(result["skipped"], 3, "Unsupported types are counted as skipped")
+        self.assertEqual(result["skipped"], 2, "Unsupported products are counted as skipped")
 
-        for sku in ("MH01", "24-WG080", "24-WG085_Group"):
-            self.assertFalse(self._maps(sku), "%s (unsupported type) must be skipped" % sku)
+        for sku in ("MH01", "GIFT-25"):
+            self.assertFalse(self._maps(sku), "%s (unsupported) must be skipped" % sku)
             self.assertFalse(self._products(sku), "%s must not create an Odoo product" % sku)
         self.assertEqual(len(self._maps("MH01-XS-Black")), 1, "simple child product is imported")
 

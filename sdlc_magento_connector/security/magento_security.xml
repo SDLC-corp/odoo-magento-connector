@@ -177,4 +177,22 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_product_attribute_company" model="ir.rule">
+        <field name="name">Magento product attribute: multi-company</field>
+        <field name="model_id" ref="model_magento_product_attribute"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_attribute_option_company" model="ir.rule">
+        <field name="name">Magento product attribute option: multi-company</field>
+        <field name="model_id" ref="model_magento_product_attribute_option"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_link_company" model="ir.rule">
+        <field name="name">Magento product link: multi-company</field>
+        <field name="model_id" ref="model_magento_product_link"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>
