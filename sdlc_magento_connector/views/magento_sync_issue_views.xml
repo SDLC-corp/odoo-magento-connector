@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_magento_sync_issue_list" model="ir.ui.view">
+        <field name="name">magento.sync.issue.list</field>
+        <field name="model">magento.sync.issue</field>
+        <field name="arch" type="xml">
+            <list string="Error Center" create="0" import="0"
+                  decoration-muted="state != 'open'">
+                <header>
+                    <button name="action_retry" type="object" string="Retry" class="btn-primary"
+                            groups="sdlc_magento_connector.group_magento_user"/>
+                    <button name="action_resolve" type="object" string="Resolve"
+                            groups="sdlc_magento_connector.group_magento_user"/>
+                    <button name="action_ignore" type="object" string="Ignore"
+                            groups="sdlc_magento_connector.group_magento_user"/>
+                </header>
+                <field name="last_seen" string="Last Seen"/>
+                <field name="entity"/>
+                <field name="magento_ref"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="message"/>
+                <field name="severity" widget="badge"
+                       decoration-warning="severity == 'transient'"
+                       decoration-danger="severity == 'permanent'"/>
+                <field name="occurrences" string="Seen" optional="show"/>
+                <field name="first_seen" optional="hide"/>
+                <field name="record_ref" optional="show"/>
+                <field name="job_state" string="Retry" widget="badge" optional="show"
+                       decoration-info="job_state in ('pending', 'started')"
+                       decoration-success="job_state == 'done'"
+                       decoration-danger="job_state == 'failed'"/>
+                <field name="state" widget="badge"
+                       decoration-danger="state == 'open'"
+                       decoration-success="state == 'resolved'"
+                       decoration-muted="state == 'ignored'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_sync_issue_search" model="ir.ui.view">
+        <field name="name">magento.sync.issue.search</field>
+        <field name="model">magento.sync.issue</field>
+        <field name="arch" type="xml">
+            <search string="Error Center">
+                <field name="magento_ref"/>
+                <field name="message"/>
+                <field name="instance_id"/>
+                <field name="entity"/>
+                <filter name="open" string="Open" domain="[('state', '=', 'open')]"/>
+                <filter name="resolved" string="Resolved" domain="[('state', '=', 'resolved')]"/>
+                <filter name="ignored" string="Ignored" domain="[('state', '=', 'ignored')]"/>
+                <separator/>
+                <filter name="permanent" string="Permanent" domain="[('severity', '=', 'permanent')]"/>
+                <filter name="transient" string="Transient" domain="[('severity', '=', 'transient')]"/>
+                <filter name="auth" string="Authentication" domain="[('is_auth_error', '=', True)]"/>
+                <separator/>
+                <filter name="entity_order" string="Orders" domain="[('entity', '=', 'order')]"/>
+                <filter name="entity_product" string="Products" domain="[('entity', '=', 'product')]"/>
+                <filter name="entity_customer" string="Customers" domain="[('entity', '=', 'customer')]"/>
+                <filter name="entity_documents" string="Invoices, shipments, credit memos"
+                        domain="[('entity', 'in', ('invoice', 'shipment', 'creditmemo'))]"/>
+                <filter name="entity_stock" string="Stock" domain="[('entity', '=', 'stock')]"/>
+                <separator/>
+                <filter name="last_seen" string="Last Seen" date="last_seen"/>
+                <group>
+                    <filter name="group_entity" string="Entity" context="{'group_by': 'entity'}"/>
+                    <filter name="group_severity" string="Error Class" context="{'group_by': 'severity'}"/>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_sync_issue_form" model="ir.ui.view">
+        <field name="name">magento.sync.issue.form</field>
+        <field name="model">magento.sync.issue</field>
+        <field name="arch" type="xml">
+            <form string="Sync Issue" create="0">
+                <header>
+                    <button name="action_retry" type="object" string="Retry" class="btn-primary"
+                            invisible="state != 'open'"/>
+                    <button name="action_resolve" type="object" string="Resolve"
+                            invisible="state != 'open'"/>
+                    <button name="action_ignore" type="object" string="Ignore"
+                            invisible="state != 'open'"/>
+                    <button name="action_reopen" type="object" string="Reopen"
+                            invisible="state == 'open'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="open,resolved"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_record" type="object" class="oe_stat_button"
+                                icon="fa-external-link" invisible="not record_ref">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Odoo Record</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="display_label" string="Magento record"/>
+                        <h1><field name="display_label" readonly="1"/></h1>
+                    </div>
+                    <div role="alert" class="alert alert-danger"
+                         invisible="not message or severity != 'permanent'">
+                        <strong>Permanent error</strong> &#8212; will not succeed without a fix.
+                        <field name="message" nolabel="1" readonly="1" class="d-block mt-1"/>
+                    </div>
+                    <div role="status" class="alert alert-warning"
+                         invisible="not message or severity != 'transient'">
+                        <strong>Transient error</strong> &#8212; usually succeeds on retry.
+                        <field name="message" nolabel="1" readonly="1" class="d-block mt-1"/>
+                    </div>
+                    <group>
+                        <group string="Record">
+                            <field name="instance_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="entity"/>
+                            <field name="magento_ref"/>
+                            <field name="record_ref" invisible="not record_ref"/>
+                        </group>
+                        <group string="Tracking">
+                            <field name="severity" widget="badge"
+                                   decoration-warning="severity == 'transient'"
+                                   decoration-danger="severity == 'permanent'"/>
+                            <field name="is_auth_error" invisible="not is_auth_error"/>
+                            <field name="occurrences"/>
+                            <field name="first_seen"/>
+                            <field name="last_seen"/>
+                            <field name="job_id" invisible="not job_id"/>
+                            <field name="job_state" invisible="not job_id"/>
+                            <field name="resolved_by" invisible="state == 'open'"
+                                   placeholder="Automatic"/>
+                            <field name="resolved_date" invisible="state == 'open'"/>
+                            <field name="trace_key" groups="base.group_no_one"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Payload" name="payload">
+                            <field name="payload_pretty" nolabel="1" readonly="1"
+                                   class="font-monospace text-break"
+                                   placeholder="No payload stored for this issue."/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_sync_issue" model="ir.actions.act_window">
+        <field name="name">Error Center</field>
+        <field name="res_model">magento.sync.issue</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_sync_issue_search"/>
+        <field name="context">{'search_default_open': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No open sync issues</p>
+            <p>Every Magento record that fails to sync gets one row here, with the error, the
+               payload and a link to the Odoo record. It resolves itself on the next
+               successful sync; you can also retry, resolve or ignore issues in bulk.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_sync_issue" name="Error Center" parent="menu_magento_reports"
+              action="action_magento_sync_issue" sequence="1"/>
+
+    <!-- Instance form: alert and retention settings, error-center smart buttons. -->
+    <record id="view_magento_instance_form_ops" model="ir.ui.view">
+        <field name="name">magento.instance.form.ops</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_open_issues" type="object"
+                        class="oe_stat_button" icon="fa-check-circle"
+                        invisible="open_issue_count &gt; 0">
+                    <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
+                </button>
+                <button name="action_view_open_issues" type="object"
+                        class="oe_stat_button text-danger" icon="fa-exclamation-circle"
+                        invisible="open_issue_count == 0">
+                    <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
+                </button>
+                <button name="action_view_failed_jobs" type="object"
+                        class="oe_stat_button text-danger" icon="fa-tasks"
+                        invisible="failed_job_count == 0">
+                    <field name="failed_job_count" widget="statinfo" string="Failed Jobs"/>
+                </button>
+            </div>
+            <xpath expr="//notebook" position="inside">
+                <page string="Alerts &amp; Logs" name="alerts_logs">
+                    <group>
+                        <group string="Alerts">
+                            <field name="alert_on_permanent"/>
+                            <field name="alert_user_ids" widget="many2many_tags"
+                                   options="{'no_create': True}"/>
+                            <field name="last_alert_at" invisible="not last_alert_at"/>
+                        </group>
+                        <group string="Log Retention">
+                            <field name="log_retention_days"/>
+                            <div class="text-muted small" colspan="2">
+                                Done jobs, closed issues and sync reports are deleted daily after
+                                this period. Failed jobs are kept at least 90 days; open issues are
+                                never deleted.
+                            </div>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

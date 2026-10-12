@@ -19,3 +19,7 @@ access_magento_mapping_report_user,magento.mapping.report user,model_magento_map
 access_magento_mapping_report_manager,magento.mapping.report manager,model_magento_mapping_report,group_magento_manager,1,1,1,1
 access_magento_mapping_report_line_user,magento.mapping.report.line user,model_magento_mapping_report_line,group_magento_user,1,1,1,0
 access_magento_mapping_report_line_manager,magento.mapping.report.line manager,model_magento_mapping_report_line,group_magento_manager,1,1,1,1
+access_magento_job_user,magento.job user,model_magento_job,group_magento_user,1,0,0,0
+access_magento_job_manager,magento.job manager,model_magento_job,group_magento_manager,1,1,1,1
+access_magento_sync_issue_user,magento.sync.issue user,model_magento_sync_issue,group_magento_user,1,1,0,0
+access_magento_sync_issue_manager,magento.sync.issue manager,model_magento_sync_issue,group_magento_manager,1,1,1,1

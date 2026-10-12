@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_magento_job_list" model="ir.ui.view">
+        <field name="name">magento.job.list</field>
+        <field name="model">magento.job</field>
+        <field name="arch" type="xml">
+            <list string="Job Queue" create="0" import="0"
+                  decoration-danger="state == 'failed'"
+                  decoration-info="state == 'started'"
+                  decoration-muted="state in ('done', 'cancelled')">
+                <header>
+                    <button name="action_retry" type="object" string="Retry"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_cancel" type="object" string="Cancel"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                </header>
+                <field name="date_enqueued" string="Enqueued"/>
+                <field name="name"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="channel" optional="show"/>
+                <field name="method_name" optional="hide"/>
+                <field name="priority" optional="hide"/>
+                <field name="eta" optional="show"/>
+                <field name="attempts" optional="show"/>
+                <field name="max_attempts" optional="hide"/>
+                <field name="error_class" widget="badge" optional="show"
+                       decoration-warning="error_class == 'transient'"
+                       decoration-danger="error_class == 'permanent'"/>
+                <field name="last_error" optional="show"/>
+                <field name="date_done" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-info="state in ('pending', 'started')"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'failed'"
+                       decoration-muted="state == 'cancelled'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_job_search" model="ir.ui.view">
+        <field name="name">magento.job.search</field>
+        <field name="model">magento.job</field>
+        <field name="arch" type="xml">
+            <search string="Job Queue">
+                <field name="name"/>
+                <field name="instance_id"/>
+                <field name="channel"/>
+                <field name="method_name"/>
+                <field name="identity_key"/>
+                <field name="last_error"/>
+                <filter name="pending" string="Pending" domain="[('state', '=', 'pending')]"/>
+                <filter name="started" string="Started" domain="[('state', '=', 'started')]"/>
+                <filter name="failed" string="Failed" domain="[('state', '=', 'failed')]"/>
+                <filter name="done" string="Done" domain="[('state', '=', 'done')]"/>
+                <filter name="cancelled" string="Cancelled" domain="[('state', '=', 'cancelled')]"/>
+                <separator/>
+                <filter name="transient" string="Transient errors" domain="[('error_class', '=', 'transient')]"/>
+                <filter name="permanent" string="Permanent errors" domain="[('error_class', '=', 'permanent')]"/>
+                <separator/>
+                <filter name="date_enqueued" string="Enqueued" date="date_enqueued"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_channel" string="Channel" context="{'group_by': 'channel'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_job_form" model="ir.ui.view">
+        <field name="name">magento.job.form</field>
+        <field name="model">magento.job</field>
+        <field name="arch" type="xml">
+            <form string="Magento Job" create="0">
+                <header>
+                    <button name="action_run_now" type="object" string="Run Now" class="btn-primary"
+                            invisible="state not in ('pending', 'failed')"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_retry" type="object" string="Retry"
+                            invisible="state not in ('failed', 'cancelled')"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_cancel" type="object" string="Cancel"
+                            invisible="state not in ('pending', 'failed')"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_open_record" type="object" string="Open Record"
+                            invisible="not record_count"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending,started,done"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-danger" role="alert" invisible="state != 'failed'">
+                        <strong>Job failed</strong>
+                        (<field name="error_class" nolabel="1" readonly="1" class="d-inline"/>,
+                        attempt <field name="attempts" nolabel="1" readonly="1" class="d-inline"/>).
+                        <field name="last_error" nolabel="1" readonly="1" class="d-block mt-1"/>
+                    </div>
+                    <div class="alert alert-warning" role="status"
+                         invisible="state != 'pending' or not last_error">
+                        <strong>Retry scheduled</strong> after a transient error:
+                        <field name="last_error" nolabel="1" readonly="1" class="d-block mt-1"/>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Job">
+                            <field name="instance_id" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="channel" readonly="state != 'pending'"/>
+                            <field name="priority" readonly="state != 'pending'"/>
+                            <field name="identity_key" invisible="not identity_key"/>
+                            <field name="user_id"/>
+                        </group>
+                        <group string="Execution">
+                            <field name="eta" readonly="state != 'pending'"/>
+                            <field name="attempts"/>
+                            <field name="max_attempts" readonly="state != 'pending'"/>
+                            <field name="date_enqueued"/>
+                            <field name="date_started"/>
+                            <field name="date_done"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Call" name="call">
+                            <group>
+                                <field name="model_name"/>
+                                <field name="method_name"/>
+                                <field name="res_ids_display"/>
+                                <field name="record_count" invisible="1"/>
+                            </group>
+                            <field name="args_display" nolabel="1" readonly="1"
+                                   class="font-monospace text-break"/>
+                        </page>
+                        <page string="Result" name="result" invisible="not result">
+                            <field name="result" nolabel="1" readonly="1" class="font-monospace text-break"/>
+                        </page>
+                        <page string="Traceback" name="traceback" invisible="not exc_info"
+                              groups="sdlc_magento_connector.group_magento_manager">
+                            <field name="exc_info" nolabel="1" readonly="1" class="font-monospace text-break"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_job" model="ir.actions.act_window">
+        <field name="name">Job Queue</field>
+        <field name="res_model">magento.job</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_job_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No queued Magento jobs</p>
+            <p>Background work (syncs, retries, pushes) is queued here and run by the
+               "Magento: Run Job Queue" scheduled action, one job per channel at a time.
+               Transient failures are retried with backoff.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_job" name="Job Queue" parent="menu_magento_reports"
+              action="action_magento_job" sequence="5"/>
+
+</odoo>

@@ -11,3 +11,6 @@ from . import magento_sync_report
 from . import res_partner_inherit
 from . import magento_dashboard
 from . import magento_instance_auth
+from . import magento_job
+from . import magento_sync_issue
+from . import magento_instance_ops
