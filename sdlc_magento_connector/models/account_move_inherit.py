@@ -391,14 +391,12 @@ class AccountMove(models.Model):
                 _("No Magento order items found on this invoice. "
                   "Ensure Magento order lines exist before pushing the invoice.")
             )
-        api = MagentoAPI(instance.sudo())
+        invoice_id, _invoice_data = order._magento_push_document("invoice", self, payload)
+        if not invoice_id:
+            raise UserError(_("Magento did not return an invoice ID for order %s.") % order.name)
+        self.with_context(skip_magento_sync=True).write({"magento_invoice_id": invoice_id})
         try:
-            invoice_id = api.create_invoice(order.magento_order_id, payload)
-        except requests.exceptions.RequestException as exc:
-            order._magento_raise_http_error(exc)
-        self.magento_invoice_id = str(invoice_id)
-        try:
-            order._magento_refresh_from_magento(api, order.magento_order_id)
+            order._magento_refresh_from_magento(MagentoAPI(instance.sudo()), order.magento_order_id)
         except (UserError, requests.exceptions.RequestException) as exc:
             _logger.warning(
                 "Magento order %s refresh after invoice push failed: %s", order.name, exc
@@ -424,17 +422,20 @@ class AccountMove(models.Model):
                 _("No Magento order items found on this refund. "
                   "Ensure Magento order lines exist before pushing the credit memo.")
             )
-        api = MagentoAPI(instance.sudo())
-        try:
-            credit_memo_id = api.create_credit_memo(order.magento_order_id, payload)
-        except requests.exceptions.RequestException as exc:
-            order._magento_raise_http_error(exc)
-        self.magento_credit_memo_id = str(credit_memo_id)
-        try:
-            credit_data = api.get_credit_memo(credit_memo_id)
-        except requests.exceptions.RequestException as exc:
-            _logger.warning("Magento credit memo %s could not be read back: %s", credit_memo_id, exc)
-            credit_data = {}
+        credit_memo_id, credit_data = order._magento_push_document(
+            "credit_memo", self, payload, amount=self.amount_total, currency=self.currency_id
+        )
+        if not credit_memo_id:
+            raise UserError(_("Magento did not return a credit memo ID for order %s.") % order.name)
+        self.with_context(skip_magento_sync=True).write({"magento_credit_memo_id": credit_memo_id})
+        if not credit_data:
+            try:
+                credit_data = MagentoAPI(instance.sudo()).get_credit_memo(credit_memo_id)
+            except requests.exceptions.RequestException as exc:
+                _logger.warning(
+                    "Magento credit memo %s could not be read back: %s", credit_memo_id, exc
+                )
+                credit_data = {}
         if credit_data:
             if credit_data.get("created_at"):
                 self.magento_credit_memo_created_at = fields.Datetime.to_datetime(
@@ -451,7 +452,6 @@ class AccountMove(models.Model):
         self._compute_magento_credit_memo_display()
         self._compute_magento_refunded_amount()
         self._compute_magento_refund_state()
-
 
     def action_open_magento_credit_memo(self):
         self.ensure_one()

@@ -1,12 +1,13 @@
 import logging
 from collections import defaultdict
 
+import psycopg2
 import requests
 from markupsafe import Markup, escape
 
 from odoo import Command, api, fields, models, _
 from odoo.exceptions import UserError
-from odoo.tools import email_normalize, float_compare
+from odoo.tools import SQL, email_normalize, float_compare
 
 from ..services.magento_api import MagentoAPI
 
@@ -1156,6 +1157,247 @@ class SaleOrder(models.Model):
                 and not p.magento_shipment_id
             ):
                 picking._magento_create_shipment()
+
+    # -------------------------
+    # IDEMPOTENT DOCUMENT PUSH (invoice / shipment / credit memo)
+    # -------------------------
+    # POST /V1/order/{id}/invoice|ship|refund is not idempotent: a retry after a
+    # timeout can create a second document in Magento. Every push therefore
+    # (1) locks the Odoo document row, (2) looks for a matching, unlinked Magento
+    # document and links it instead of posting, (3) posts, and (4) on an ambiguous
+    # failure (timeout, connection error, 5xx) looks again once before raising.
+    def _magento_document_kinds(self):
+        return {
+            "invoice": {
+                "label": _("invoice"),
+                "model": "account.move",
+                "field": "magento_invoice_id",
+                "list": "get_invoices",
+                "read": "get_invoice",
+                "create": "create_invoice",
+                "qty_keys": ("qty", "qty_invoiced"),
+            },
+            "shipment": {
+                "label": _("shipment"),
+                "model": "stock.picking",
+                "field": "magento_shipment_id",
+                "list": "get_shipments",
+                "read": "get_shipment",
+                "create": "create_shipment",
+                "qty_keys": ("qty", "qty_shipped"),
+            },
+            "credit_memo": {
+                "label": _("credit memo"),
+                "model": "account.move",
+                "field": "magento_credit_memo_id",
+                "list": "get_credit_memos",
+                "read": "get_credit_memo",
+                "create": "create_credit_memo",
+                "qty_keys": ("qty", "qty_refunded"),
+            },
+        }
+
+    @api.model
+    def _magento_lock_push_row(self, record):
+        """``SELECT ... FOR UPDATE NOWAIT`` on the document row for the rest of the
+        transaction, so two concurrent pushes of the same document cannot both POST."""
+        record.ensure_one()
+        try:
+            with self.env.cr.savepoint(flush=False):
+                self.env.cr.execute(
+                    SQL(
+                        "SELECT id FROM %s WHERE id = %s FOR UPDATE NOWAIT",
+                        SQL.identifier(record._table),
+                        record.id,
+                    ),
+                    log_exceptions=False,
+                )
+        except psycopg2.errors.LockNotAvailable as exc:
+            raise UserError(
+                _("A Magento push for %s is already running. Try again in a moment.")
+                % record.display_name
+            ) from exc
+
+    @api.model
+    def _magento_is_ambiguous_push_error(self, exc):
+        """True when a POST may have been applied by Magento although it failed."""
+        if isinstance(exc, requests.exceptions.SSLError):
+            return False  # the TLS handshake failed: nothing was sent
+        if isinstance(exc, requests.exceptions.ConnectTimeout):
+            return False  # never connected
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            return True
+        if isinstance(exc, requests.exceptions.HTTPError):
+            response = exc.response
+            return response is None or response.status_code >= 500
+        return False
+
+    @api.model
+    def _magento_payload_item_qtys(self, items):
+        """{order item id (str): qty} of a push payload (``items`` list)."""
+        qtys = defaultdict(float)
+        for item in items or []:
+            key = str(item.get("order_item_id") or "")
+            qty = _to_float(item.get("qty"))
+            if key and qty > 0:
+                qtys[key] += qty
+        return dict(qtys)
+
+    def _magento_document_item_qtys(self, items, qty_keys):
+        """{push item id (str): qty} of a Magento document, keyed like a push payload.
+
+        Each item is mapped to its sale line; the line's ``_magento_push_item_id()``
+        (configurable parent id when there is one) is the key. A configurable parent
+        and its child map to one line and count once. Items without a sale line keep
+        their own id, so they make the document differ from any Odoo payload.
+        """
+        self.ensure_one()
+        per_line = {}
+        unmapped = defaultdict(float)
+        for item in items or []:
+            order_item_id = item.get("order_item_id") or item.get("item_id")
+            if not order_item_id:
+                continue
+            qty = 0.0
+            for qty_key in qty_keys:
+                if item.get(qty_key) not in (None, ""):
+                    qty = _to_float(item.get(qty_key))
+                    break
+            if qty <= 0:
+                continue
+            line = self._magento_line_for_item(order_item_id)
+            if not line:
+                unmapped[str(order_item_id)] += qty
+                continue
+            per_line[line] = max(per_line.get(line, 0.0), qty)
+        qtys = defaultdict(float, unmapped)
+        for line, qty in per_line.items():
+            qtys[str(line._magento_push_item_id())] += qty
+        return dict(qtys)
+
+    @api.model
+    def _magento_same_item_qtys(self, left, right):
+        if set(left) != set(right):
+            return False
+        return all(
+            float_compare(left[key], right[key], precision_digits=4) == 0 for key in left
+        )
+
+    @api.model
+    def _magento_document_sort_key(self, doc):
+        doc_id = doc.get("entity_id") or doc.get("id") or 0
+        try:
+            doc_id = int(doc_id)
+        except (TypeError, ValueError):
+            doc_id = 0
+        return (str(doc.get("created_at") or ""), doc_id)
+
+    def _magento_find_matching_document(self, api, kind, record, payload, amount=None, currency=None):
+        """Most recent Magento document of ``kind`` on this order that matches ``payload``
+        and is not linked to any Odoo document of the instance, or ``None``.
+
+        Match: same {push item id: qty} after mapping the Magento items through the sale
+        lines; for credit memos also the same grand total (``currency`` rounding).
+        Raises ``requests`` exceptions from the GET.
+        """
+        self.ensure_one()
+        spec = self._magento_document_kinds()[kind]
+        docs = getattr(api, spec["list"])(order_id=self.magento_order_id) or []
+        docs = [d for d in docs if isinstance(d, dict) and (d.get("entity_id") or d.get("id"))]
+        if not docs:
+            return None
+        doc_ids = [str(d.get("entity_id") or d.get("id")) for d in docs]
+        Model = self.env[spec["model"]].sudo().with_context(active_test=False)
+        linked = Model.search([
+            (spec["field"], "in", doc_ids),
+            ("magento_instance_id", "=", self.magento_instance_id.id),
+            ("id", "!=", record.id),
+        ])
+        linked_ids = set(linked.mapped(spec["field"]))
+        wanted = self._magento_payload_item_qtys(payload.get("items"))
+        for doc in sorted(docs, key=self._magento_document_sort_key, reverse=True):
+            doc_id = str(doc.get("entity_id") or doc.get("id"))
+            if doc_id in linked_ids:
+                continue
+            if "items" not in doc:
+                doc = getattr(api, spec["read"])(doc_id) or {}
+            found = self._magento_document_item_qtys(doc.get("items"), spec["qty_keys"])
+            if not self._magento_same_item_qtys(wanted, found):
+                continue
+            if amount is not None:
+                total = doc.get("grand_total")
+                if total in (None, ""):
+                    total = doc.get("base_grand_total")
+                currency = currency or self.currency_id
+                if currency.compare_amounts(abs(_to_float(total)), abs(amount)) != 0:
+                    continue
+            return doc
+        return None
+
+    def _magento_push_document(self, kind, record, payload, amount=None, currency=None):
+        """Idempotently create a Magento document of ``kind`` for ``record``.
+
+        Returns ``(magento_id, magento_doc)``: ``magento_doc`` is the matching Magento
+        document when an existing one was linked, ``None`` when it was POSTed
+        (``magento_id`` may then be ``None`` if Magento returned no id). Raises
+        ``UserError`` on failure; a retry is safe.
+        """
+        self.ensure_one()
+        spec = self._magento_document_kinds()[kind]
+        self._magento_lock_push_row(record)
+        api = MagentoAPI(self.magento_instance_id.sudo())
+
+        def find():
+            return self._magento_find_matching_document(
+                api, kind, record, payload, amount=amount, currency=currency
+            )
+
+        try:
+            match = find()
+        except requests.exceptions.RequestException as exc:
+            self._magento_raise_http_error(exc)
+        if match:
+            doc_id = str(match.get("entity_id") or match.get("id"))
+            _logger.info(
+                "Magento %s %s already exists for order %s: linked to %s without POST.",
+                kind, doc_id, self.name, record.display_name,
+            )
+            return doc_id, match
+
+        try:
+            result = getattr(api, spec["create"])(self.magento_order_id, payload)
+        except requests.exceptions.RequestException as exc:
+            if not self._magento_is_ambiguous_push_error(exc):
+                self._magento_raise_http_error(exc)
+            _logger.warning(
+                "Magento %s POST for order %s failed with an unknown outcome (%s); re-checking.",
+                kind, self.name, exc,
+            )
+            try:
+                match = find()
+            except requests.exceptions.RequestException as check_exc:
+                _logger.warning("Magento %s re-check for order %s failed: %s", kind, self.name, check_exc)
+                match = None
+            if match:
+                doc_id = str(match.get("entity_id") or match.get("id"))
+                _logger.info(
+                    "Magento %s %s was created despite the error; linked to %s.",
+                    kind, doc_id, record.display_name,
+                )
+                return doc_id, match
+            raise UserError(
+                _(
+                    "Magento did not confirm the %(doc)s for order %(order)s and it was not "
+                    "found in Magento afterwards (%(error)s). Retrying is safe."
+                )
+                % {"doc": spec["label"], "order": self.name, "error": self._magento_http_error_message(exc)}
+            ) from exc
+
+        if isinstance(result, dict):
+            result = result.get("entity_id") or result.get("id")
+        if result in (None, "", False):
+            return None, None
+        return str(result), None
 
     # -------------------------
     # MAGENTO API HELPERS
