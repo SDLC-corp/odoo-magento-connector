@@ -18,3 +18,4 @@ from . import test_paged_sync
 from . import test_p2_customers
 from . import test_p2_stock
 from . import test_p2_orders
+from . import test_p2_catalog

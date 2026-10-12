@@ -19,8 +19,12 @@ _logger = logging.getLogger(__name__)
 
 # Records processed between two commits when a sync runs from cron.
 _SYNC_BATCH_SIZE = 50
-# Magento product types the product import supports.
-_IMPORTABLE_PRODUCT_TYPES = frozenset({"simple", "virtual", "downloadable"})
+# Magento product types the product import supports. Configurable products become a
+# template with variants; bundle and grouped products keep their components in
+# ``magento.product.link`` (see magento_product_variant.py).
+_IMPORTABLE_PRODUCT_TYPES = frozenset({
+    "simple", "virtual", "downloadable", "configurable", "bundle", "grouped",
+})
 # Error/skip lines kept in a sync report's notes.
 _MAX_NOTE_LINES = 50
 
@@ -1795,9 +1799,12 @@ class MagentoInstance(models.Model):
         if cat:
             cat.write(vals)
             box.append(cat)
+            self._magento_after_category_import(cat)
             return "updated"
         vals.update({"instance_id": self.id, "magento_id": str(item["id"])})
-        box.append(cat_model.create(vals))
+        cat = cat_model.create(vals)
+        box.append(cat)
+        self._magento_after_category_import(cat)
         return "created"
 
     def sync_attribute_sets(self):
@@ -1861,8 +1868,8 @@ class MagentoInstance(models.Model):
 
     @api.model
     def _supported_product_types(self):
-        """Magento product types the importer handles. Configurable, bundle and grouped
-        exist in the selection (for display/export) but are not imported yet (Phase 2)."""
+        """Magento product types the importer handles (other types, e.g. gift cards, are
+        skipped). Configurable, bundle and grouped are imported but not exported."""
         field = self.env["magento.product.map"]._fields["type_id"]
         return _IMPORTABLE_PRODUCT_TYPES & set(field.get_values(self.env))
 
@@ -1918,6 +1925,9 @@ class MagentoInstance(models.Model):
         type_id = product_data.get("type_id") or type_id
         if type_id and type_id not in supported_types:
             return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
+        if type_id == "configurable":
+            # One template, a variant per child SKU (magento_product_variant.py).
+            return self._magento_import_configurable(api, p, product_data, stats, box=box)
 
         # active_test=False everywhere: a product disabled in Magento is archived in
         # Odoo and must be found again on the next sync, not duplicated.
@@ -1982,6 +1992,8 @@ class MagentoInstance(models.Model):
                 )
         mapping.with_context(skip_magento_sync=True).write(values)
         box.append(mapping)
+        # Category, bundle/grouped components, pending links (magento_product_variant.py).
+        self._magento_after_product_import(mapping, product_data)
         stock_item = (product_data.get("extension_attributes") or {}).get("stock_item")
         if stock_item is not None:
             stats.inventory_updated += 1

@@ -28,6 +28,7 @@
         'views/magento_stock_p2_views.xml',
         'data/magento_stock_data.xml',
         'views/magento_order_p2_views.xml',
+        'views/magento_catalog_p2_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

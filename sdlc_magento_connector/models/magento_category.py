@@ -28,6 +28,88 @@ class MagentoCategory(models.Model):
         related="instance_id.company_id", store=True, index=True, readonly=True
     )
     is_active = fields.Boolean(default=True)
+    categ_id = fields.Many2one(
+        "product.category",
+        string="Odoo Category",
+        ondelete="set null",
+        copy=False,
+        help="Odoo product category of this Magento category. Kept in line with the Magento "
+             "tree by the category sync when the instance mirrors categories; otherwise set "
+             "it by hand. Products in this Magento category get it as their category.",
+    )
+    public_categ_ref = fields.Integer(
+        string="Website Category ID",
+        copy=False,
+        readonly=True,
+        help="Technical: id of the mirrored eCommerce category (website_sale).",
+    )
+
+    # ------------------------------------------------------------------
+    # Mirror into product.category (and eCommerce categories)
+    # ------------------------------------------------------------------
+    def _magento_depth(self):
+        """Number of ancestors (cycle safe)."""
+        self.ensure_one()
+        depth, node, seen = 0, self.parent_id, {self.id}
+        while node and node.id not in seen:
+            seen.add(node.id)
+            depth += 1
+            node = node.parent_id
+        return depth
+
+    def _magento_mirror_product_category(self):
+        """Create or update the Odoo category of each Magento category (same name, parent
+        mirrored, the tree's top under the instance's category root). Returns them."""
+        result = self.env["product.category"]
+        for category in self:
+            result |= category._magento_mirror_one(set())
+        return result
+
+    def _magento_mirror_one(self, seen):
+        self.ensure_one()
+        if self.id in seen or not self.parent_id:
+            parent = self.instance_id._magento_product_category_root()
+        else:
+            seen.add(self.id)
+            parent = self.parent_id._magento_mirror_one(seen)
+        categories = self.env["product.category"].sudo()
+        categ = self.categ_id.sudo().exists()
+        vals = {"name": self.name, "parent_id": parent.id}
+        if categ:
+            changed = {k: v for k, v in vals.items() if (categ[k].id if k == "parent_id" else categ[k]) != v}
+            if changed and categ != parent:
+                categ.write(changed)
+        else:
+            categ = categories.create(vals)
+            self.with_context(magento_skip_push=True, skip_magento_sync=True).write({"categ_id": categ.id})
+        return categ.with_env(self.env)
+
+    def _magento_mirror_public_category(self):
+        """eCommerce categories (website_sale) mirroring these Magento categories."""
+        if "product.public.category" not in self.env:
+            return self.env["product.category"].browse()
+        result = self.env["product.public.category"]
+        for category in self:
+            result |= category._magento_mirror_public_one(set())
+        return result
+
+    def _magento_mirror_public_one(self, seen):
+        self.ensure_one()
+        public = self.env["product.public.category"].sudo()
+        parent = public.browse()
+        if self.parent_id and self.id not in seen:
+            seen.add(self.id)
+            parent = self.parent_id._magento_mirror_public_one(seen)
+        categ = public.browse(self.public_categ_ref).exists() if self.public_categ_ref else public.browse()
+        vals = {"name": self.name, "parent_id": parent.id or False}
+        if categ:
+            if categ.name != vals["name"] or categ.parent_id.id != (parent.id or False):
+                categ.write(vals)
+        else:
+            categ = public.create(vals)
+            self.with_context(magento_skip_push=True, skip_magento_sync=True).write(
+                {"public_categ_ref": categ.id})
+        return categ.with_env(self.env)
 
     def _build_magento_payload(self, for_update=False):
         self.ensure_one()
