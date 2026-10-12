@@ -10,12 +10,20 @@ from odoo.exceptions import UserError
 from odoo.tools import SQL, email_normalize, float_compare
 
 from ..services.magento_api import MagentoAPI
+from .magento_instance import _SyncStats
 
 
 _logger = logging.getLogger(__name__)
 
 # Odoo delivery_type values that are also valid Magento carrier codes.
 MAGENTO_CARRIER_CODES = ("ups", "usps", "fedex", "dhl")
+
+# Amount fields of an order item that live on the configurable parent row.
+ITEM_AMOUNT_KEYS = (
+    "price_incl_tax", "row_total", "row_total_incl_tax", "tax_percent", "tax_amount",
+    "discount_amount", "discount_percent", "weee_tax_applied_amount",
+    "weee_tax_applied_row_amount", "weee_tax_applied",
+)
 
 
 def _to_float(value, default=0.0):
@@ -91,6 +99,37 @@ class SaleOrder(models.Model):
         copy=False,
     )
 
+    # --- Phase 2 order fidelity (2.4) / auto-workflow (2.5) ---
+    magento_state = fields.Char("Magento State", readonly=True, copy=False,
+                                help="Magento order state (new, processing, complete, closed...).")
+    magento_payment_method = fields.Char("Magento Payment Method", readonly=True, copy=False)
+    magento_shipping_method = fields.Char("Magento Shipping Method", readonly=True, copy=False)
+    magento_shipping_description = fields.Char("Magento Shipping", readonly=True, copy=False)
+    magento_coupon_code = fields.Char("Coupon Code", readonly=True, copy=False)
+    magento_discount_description = fields.Char("Discount Description", readonly=True, copy=False)
+    magento_grand_total = fields.Monetary(
+        "Magento Grand Total", currency_field="currency_id", readonly=True, copy=False,
+    )
+    magento_total_difference = fields.Monetary(
+        "Difference with Magento", currency_field="currency_id", readonly=True, copy=False,
+        help="Magento grand total minus the Odoo total. Never booked as a plug line: the "
+             "difference stays visible until the cause (tax rate, rounding...) is fixed.",
+    )
+    magento_total_differs = fields.Boolean(
+        "Total Differs from Magento", readonly=True, copy=False, index=True,
+    )
+    magento_total_refunded = fields.Monetary(
+        "Magento Refunded", currency_field="currency_id", readonly=True, copy=False,
+    )
+    magento_refund_state = fields.Selection(
+        [("none", "Not Refunded"), ("partial", "Partially Refunded"), ("refunded", "Refunded")],
+        string="Magento Refund Status", readonly=True, copy=False,
+    )
+    magento_workflow_id = fields.Many2one(
+        "magento.order.workflow", string="Magento Workflow", readonly=True, copy=False,
+        ondelete="set null", help="Workflow rule last applied to this order.",
+    )
+
     _magento_order_uniq = models.Constraint(
         "unique(magento_instance_id, magento_order_id)",
         "This Magento order is already imported for this Magento instance.",
@@ -112,6 +151,13 @@ class SaleOrder(models.Model):
                 continue
             if order.magento_invoice_state in ("partial", "invoiced"):
                 order.invoice_status = "invoiced"
+
+    def _prepare_confirmation_values(self):
+        # Confirming an imported order must keep the Magento order date.
+        values = super()._prepare_confirmation_values()
+        if len(self) == 1 and self.magento_order_id and self.magento_created_at:
+            values["date_order"] = self.magento_created_at
+        return values
 
     # -------------------------
     # LOOKUPS
@@ -356,16 +402,33 @@ class SaleOrder(models.Model):
             payment_state = "partial"
         else:
             payment_state = "paid"
+        total_refunded = _to_float(data.get("total_refunded"))
+        if total_refunded <= 0:
+            refund_state = "none"
+        elif total_refunded + 0.0001 < (total_paid or grand_total):
+            refund_state = "partial"
+        else:
+            refund_state = "refunded"
+        payment = data.get("payment") or {}
         vals = {
             "magento_instance_id": instance.id if instance else False,
             "magento_order_id": magento_id,
             "magento_increment_id": data.get("increment_id") or "",
             "magento_status": data.get("status") or "",
+            "magento_state": data.get("state") or "",
             "magento_currency": currency_code,
             "magento_total_invoiced": total_invoiced,
             "magento_invoice_state": invoice_state,
             "magento_total_paid": total_paid,
             "magento_payment_state": payment_state,
+            "magento_total_refunded": total_refunded,
+            "magento_refund_state": refund_state,
+            "magento_grand_total": grand_total,
+            "magento_payment_method": (payment.get("method") or "") if isinstance(payment, dict) else "",
+            "magento_shipping_method": self._magento_shipping_method_code(data),
+            "magento_shipping_description": data.get("shipping_description") or "",
+            "magento_coupon_code": data.get("coupon_code") or "",
+            "magento_discount_description": data.get("discount_description") or "",
         }
         if data.get("created_at"):
             vals["magento_created_at"] = data.get("created_at")
@@ -399,6 +462,17 @@ class SaleOrder(models.Model):
             if currency:
                 vals["currency_id"] = currency.id
         return vals
+
+    @api.model
+    def _magento_shipping_method_code(self, data):
+        code = data.get("shipping_method") or ""
+        if not code:
+            extension = data.get("extension_attributes") or {}
+            for assignment in extension.get("shipping_assignments") or []:
+                code = ((assignment or {}).get("shipping") or {}).get("method") or ""
+                if code:
+                    break
+        return code
 
     @api.model
     def _magento_effective_items(self, items):
@@ -437,6 +511,11 @@ class SaleOrder(models.Model):
                     merged = dict(item)
                     if _to_float(item.get("price")) <= 0:
                         merged["price"] = parent.get("price")
+                        # Magento keeps the amounts (tax, discount, FPT) on the configurable
+                        # parent row when the child carries no price.
+                        for key in ITEM_AMOUNT_KEYS:
+                            if not _to_float(item.get(key)) and parent.get(key) not in (None, ""):
+                                merged[key] = parent.get(key)
                     if _to_float(item.get("qty_ordered") or item.get("qty")) <= 0:
                         merged["qty_ordered"] = parent.get("qty_ordered") or parent.get("qty")
                     merged["name"] = item.get("name") or parent.get("name")
@@ -492,18 +571,29 @@ class SaleOrder(models.Model):
                   "Import or map the product first.")
                 % {"sku": sku or "-", "item": item.get("item_id") or "-"}
             )
-        qty = _to_float(item.get("qty_ordered") or item.get("qty"))
+        qty = _to_float(item.get("qty_ordered") or item.get("qty")) or 1.0
         return {
             "product_id": product.id,
             "product_uom_id": product.uom_id.id,
             "name": item.get("name") or product.display_name or sku,
-            "product_uom_qty": qty or 1.0,
-            "price_unit": _to_float(item.get("price")),
+            "product_uom_qty": qty,
+            "price_unit": self._magento_item_unit_price(item, instance, qty),
             "magento_item_id": str(item.get("item_id") or ""),
             "magento_parent_item_id": item.get("_magento_parent_item_id") or False,
             "magento_product_id": product_map.id if product_map else False,
             "magento_sku": sku,
         }
+
+    @api.model
+    def _magento_item_unit_price(self, item, instance, qty):
+        """Magento unit price: tax-included when the instance mirrors tax-included catalog
+        prices (the line then carries price-included taxes), tax-excluded otherwise."""
+        price = _to_float(item.get("price"))
+        if instance and instance.prices_include_tax:
+            if item.get("price_incl_tax") not in (None, ""):
+                return _to_float(item.get("price_incl_tax"))
+            return price + _to_float(item.get("tax_amount")) / (qty or 1.0)
+        return price
 
     @api.model
     def _magento_compute_invoice_summary(self, order_data, invoices):
@@ -536,52 +626,270 @@ class SaleOrder(models.Model):
     def _magento_sync_order_lines(self, data):
         """Bring the order lines in line with the Magento order.
 
-        Draft/sent orders: lines are upserted by Magento item id (stable line ids, so the
-        sale line <-> invoice line links survive re-syncs). Any other state: lines are never
-        touched; differences are flagged with ``magento_sync_conflict``.
+        Draft/sent orders: lines are upserted by a stable key (Magento item id for product
+        lines, ``shipping`` / ``discount:<item>`` / ``fpt:<item>`` for the other roles), so
+        the sale line <-> invoice line links survive re-syncs. Any other state: lines are
+        never touched; differences are flagged with ``magento_sync_conflict``. In both cases
+        the Odoo total is then compared with Magento's grand total.
         """
         self.ensure_one()
+        self._magento_register_order_mappings(data)
         items = self._magento_effective_items(data.get("items"))
         if not items:
             return
         if self.state in ("draft", "sent"):
-            self._magento_write_order_lines(items)
+            self._magento_write_order_lines(items, data=data)
             self._magento_set_conflict([])
         else:
             self._magento_set_conflict(self._magento_compare_order_lines(items))
+        self._magento_update_total_difference(data)
 
-    def _magento_write_order_lines(self, items):
+    def _magento_register_order_mappings(self, data):
+        """Record the payment and shipping methods met (mapping rows) and apply the carrier."""
+        self.ensure_one()
+        instance = self.magento_instance_id
+        if not instance or not data:
+            return
+        payment = data.get("payment") or {}
+        if isinstance(payment, dict) and payment.get("method"):
+            title = ""
+            info = payment.get("additional_information") or []
+            if isinstance(info, list) and info and isinstance(info[0], str):
+                title = info[0]
+            instance._magento_note_payment_method(payment["method"], title)
+        code = self._magento_shipping_method_code(data)
+        if code:
+            mapping = instance._magento_note_carrier(code, data.get("shipping_description"))
+            carrier = mapping._carrier() if mapping else False
+            if (carrier and "carrier_id" in self._fields and self.state in ("draft", "sent")
+                    and self.carrier_id != carrier):
+                self.carrier_id = carrier.id
+
+    # -- line specs ---------------------------------------------------------
+    @api.model
+    def _magento_line_key_of(self, line):
+        return line.magento_line_key or line.magento_item_id or ""
+
+    def _magento_line_by_key(self, key):
+        self.ensure_one()
+        return self.order_line.filtered(lambda l: not l.display_type and self._magento_line_key_of(l) == key)[:1]
+
+    @api.model
+    def _magento_tax_details(self, data):
+        """Magento tax breakdown: order-level rates, per-item rates, shipping rates."""
+        extension = data.get("extension_attributes") or {}
+        applied = [t for t in extension.get("applied_taxes") or [] if isinstance(t, dict)]
+        by_item = {}
+        shipping = None
+        for entry in extension.get("item_applied_taxes") or []:
+            if not isinstance(entry, dict):
+                continue
+            rates = [t for t in entry.get("applied_taxes") or [] if isinstance(t, dict)]
+            kind = entry.get("type") or "product"
+            item_id = entry.get("item_id") or entry.get("associated_item_id")
+            if kind == "shipping":
+                shipping = rates
+            elif kind == "product" and item_id:
+                by_item[str(item_id)] = rates
+        return {"applied": applied, "by_item": by_item, "shipping": shipping}
+
+    def _magento_pick_rates(self, details, explicit, percent, tax_amount, base_amount):
+        """Magento rates (dicts with code/title/percent) that taxed an amount.
+
+        ``explicit``: the per-item / shipping breakdown when Magento sent one. Otherwise the
+        order-level rates are matched on the item's ``tax_percent``, then on the amount
+        (combined rates, then each single rate); last resort, a rate without code at the
+        Magento percentage.
+        """
+        explicit = [r for r in explicit or [] if _to_float(r.get("percent"))]
+        if explicit:
+            return explicit
+        currency = self.currency_id or self.env.company.currency_id
+        if percent <= 0 and (currency.is_zero(tax_amount) or tax_amount <= 0):
+            return []
+        applied = [r for r in details["applied"] if _to_float(r.get("percent"))]
+        if percent > 0:
+            total = sum(_to_float(r.get("percent")) for r in applied)
+            if applied and abs(total - percent) < 0.00005:
+                return applied
+            for rate in applied:
+                if abs(_to_float(rate.get("percent")) - percent) < 0.00005:
+                    return [rate]
+            return [{"code": "", "title": "", "percent": percent}]
+        if base_amount:
+            candidates = []
+            if applied:
+                candidates.append(applied)
+                candidates.extend([rate] for rate in applied)
+            for rates in candidates:
+                pct = sum(_to_float(r.get("percent")) for r in rates)
+                if currency.compare_amounts(base_amount * pct / 100.0, tax_amount) == 0:
+                    return rates
+            return [{"code": "", "title": "", "percent": round(tax_amount / base_amount * 100.0, 4)}]
+        return []
+
+    def _magento_taxes_for_rates(self, rates, price_include):
+        self.ensure_one()
+        taxes = self.env["account.tax"]
+        instance = self.magento_instance_id
+        for rate in rates:
+            taxes |= instance._magento_tax_for_rate(rate, price_include, company=self.company_id)
+        return taxes
+
+    def _magento_line_specs(self, data, items):
+        """[(key, vals)] of every Magento line of the order: products, FPT, discounts, shipping.
+
+        Discounts: a discount that Odoo's line discount (%) reproduces to the cent (same
+        discounted row total, e.g. a 10% coupon) becomes the line discount; any other
+        discount becomes a separate line (discount product, price = -Magento discount,
+        same taxes as the product when Magento taxes after discount), so the taxed base is
+        exactly Magento's ``row_total - discount_amount``.
+        """
+        self.ensure_one()
+        instance = self.magento_instance_id
+        currency = self.currency_id or self.env.company.currency_id
+        details = self._magento_tax_details(data)
+        incl = bool(instance.prices_include_tax)
+        after_discount = instance.tax_after_discount
+        digits = self.env["decimal.precision"].precision_get("Discount")
+        specs = []
+        extra = []
+        for item in items:
+            vals = self._magento_prepare_order_line_vals(item, instance)
+            key = vals["magento_item_id"] or "sku:%s" % (vals.get("magento_sku") or "")
+            qty = vals["product_uom_qty"]
+            price = vals["price_unit"]
+            row = _to_float(item.get("row_total_incl_tax") if incl else item.get("row_total")) \
+                or price * qty
+            explicit = details["by_item"].get(str(item.get("item_id") or "")) \
+                or details["by_item"].get(str(item.get("_magento_parent_item_id") or ""))
+            rates = self._magento_pick_rates(
+                details, explicit, _to_float(item.get("tax_percent")),
+                _to_float(item.get("tax_amount")), _to_float(item.get("row_total")),
+            )
+            taxes = self._magento_taxes_for_rates(rates, incl)
+            vals.update({
+                "tax_ids": [Command.set(taxes.ids)],
+                "discount": 0.0,
+                "magento_line_role": "product",
+                "magento_line_key": key,
+            })
+            label = vals.get("magento_sku") or vals["name"]
+            discount = abs(_to_float(item.get("discount_amount")))
+            if discount and not currency.is_zero(discount):
+                pct = 0.0
+                if after_discount and row:
+                    pct = round(_to_float(item.get("discount_percent")) or discount / row * 100.0, digits)
+                    exact = price * qty * (1.0 - pct / 100.0)
+                    if not 0 < pct <= 100 or abs(exact - (row - discount)) > 1e-6:
+                        pct = 0.0
+                if pct:
+                    vals["discount"] = pct
+                else:
+                    extra.append(("discount:%s" % key, self._magento_extra_line_vals(
+                        "discount", self._magento_discount_label(data, label), -discount,
+                        taxes if after_discount else self.env["account.tax"], key="discount:%s" % key,
+                    )))
+            fpt = _to_float(item.get("weee_tax_applied_row_amount"))
+            if fpt and not currency.is_zero(fpt):
+                extra.append(("fpt:%s" % key, self._magento_extra_line_vals(
+                    "fpt", _("FPT: %s") % label, fpt, self.env["account.tax"], key="fpt:%s" % key,
+                )))
+            specs.append((key, vals))
+        specs.extend(extra)
+
+        shipping_incl = bool(instance.shipping_includes_tax)
+        shipping_excl = _to_float(data.get("shipping_amount"))
+        shipping = shipping_excl
+        if shipping_incl and data.get("shipping_incl_tax") not in (None, ""):
+            shipping = _to_float(data.get("shipping_incl_tax"))
+        if shipping and not currency.is_zero(shipping):
+            rates = self._magento_pick_rates(
+                details, details["shipping"], 0.0, _to_float(data.get("shipping_tax_amount")),
+                shipping_excl,
+            )
+            shipping_taxes = self._magento_taxes_for_rates(rates, shipping_incl)
+            specs.append(("shipping", self._magento_extra_line_vals(
+                "shipping", data.get("shipping_description") or _("Shipping"), shipping,
+                shipping_taxes, key="shipping",
+            )))
+            shipping_discount = abs(_to_float(data.get("shipping_discount_amount")))
+            if shipping_discount and not currency.is_zero(shipping_discount):
+                specs.append(("discount:shipping", self._magento_extra_line_vals(
+                    "discount", self._magento_discount_label(data, _("shipping")), -shipping_discount,
+                    shipping_taxes if after_discount else self.env["account.tax"],
+                    key="discount:shipping",
+                )))
+        return specs
+
+    @api.model
+    def _magento_discount_label(self, data, what):
+        reason = data.get("discount_description") or data.get("coupon_code") or ""
+        if reason:
+            return _("Discount %(reason)s (%(what)s)", reason=reason, what=what)
+        return _("Discount (%s)", what)
+
+    def _magento_extra_line_vals(self, role, name, price, taxes, key):
+        self.ensure_one()
+        product = self.magento_instance_id._magento_service_product(
+            "discount" if role == "discount" else role
+        )
+        return {
+            "product_id": product.id,
+            "product_uom_id": product.uom_id.id,
+            "name": name,
+            "product_uom_qty": 1.0,
+            "price_unit": price,
+            "tax_ids": [Command.set(taxes.ids)],
+            "discount": 0.0,
+            "magento_line_role": role,
+            "magento_line_key": key,
+        }
+
+    def _magento_write_order_lines(self, items, data=None):
         self.ensure_one()
         instance = self.magento_instance_id
         keep_price = self.magento_exported_from_odoo
-        existing = {
-            line.magento_item_id: line
-            for line in self.order_line
-            if line.magento_item_id and not line.display_type
-        }
+        if keep_price or not data:
+            # Orders created in Odoo keep their Odoo prices, taxes and extra lines.
+            specs = []
+            for item in items:
+                vals = self._magento_prepare_order_line_vals(item, instance)
+                if keep_price:
+                    vals.pop("price_unit")
+                specs.append((vals["magento_item_id"], vals))
+        else:
+            specs = self._magento_line_specs(data, items)
+        existing = {}
+        for line in self.order_line:
+            key = self._magento_line_key_of(line)
+            if key and not line.display_type:
+                existing.setdefault(key, line)
         commands = []
         seen = set()
-        for item in items:
-            vals = self._magento_prepare_order_line_vals(item, instance)
-            if keep_price:
-                vals.pop("price_unit")
-            key = vals["magento_item_id"]
+        sequence = max(self.order_line.mapped("sequence") or [10])
+        for key, vals in specs:
             line = existing.get(key) if key else None
             if not line:
-                commands.append(Command.create(vals))
+                sequence += 1
+                commands.append(Command.create(dict(vals, sequence=sequence)))
                 continue
             seen.add(key)
             changed = {
                 fname: value
                 for fname, value in vals.items()
-                if fname != "magento_item_id" and self._magento_line_value_differs(line, fname, value)
+                if fname not in ("magento_item_id", "magento_line_key")
+                and self._magento_line_value_differs(line, fname, value)
             }
             if changed:
-                # Always rewrite qty and price together so Odoo's pricelist recompute
-                # (triggered by product/qty changes) can't override the Magento price.
-                # Exported orders keep their Odoo price.
+                # Always rewrite qty, price, taxes and discount together so Odoo's
+                # recomputes (triggered by product/qty changes) can't override Magento's
+                # values. Exported orders keep their Odoo price.
                 changed.setdefault("product_uom_qty", vals["product_uom_qty"])
                 changed.setdefault("price_unit", line.price_unit if keep_price else vals["price_unit"])
+                for fname in ("tax_ids", "discount"):
+                    if fname in vals:
+                        changed.setdefault(fname, vals[fname])
                 commands.append(Command.update(line.id, changed))
         for key, line in existing.items():
             if key not in seen:
@@ -595,13 +903,106 @@ class SaleOrder(models.Model):
         field = line._fields[fname]
         if field.type == "many2one":
             return current.id != (value or False)
+        if field.type == "many2many":
+            ids = set()
+            for command in value or []:
+                if command[0] == Command.SET:
+                    ids = set(command[2])
+            return set(current.ids) != ids
         if fname == "product_uom_qty":
             rounding = line.product_uom_id.rounding or 0.0001
             return float_compare(current, value or 0.0, precision_rounding=rounding) != 0
         if fname == "price_unit":
             currency = line.currency_id or line.order_id.currency_id or self.env.company.currency_id
             return currency.compare_amounts(current, value or 0.0) != 0
+        if fname == "discount":
+            digits = self.env["decimal.precision"].precision_get("Discount")
+            return float_compare(current or 0.0, value or 0.0, precision_digits=digits) != 0
         return (current or False) != (value or False)
+
+    # -- totals -------------------------------------------------------------
+    def _magento_update_total_difference(self, data):
+        """Compare the Odoo total with Magento's grand total; flag (never plug) a difference."""
+        self.ensure_one()
+        grand_total = data.get("grand_total")
+        if grand_total in (None, ""):
+            grand_total = data.get("base_grand_total")
+        if grand_total in (None, "") or self.magento_exported_from_odoo:
+            return
+        grand_total = _to_float(grand_total)
+        currency = self.currency_id or self.env.company.currency_id
+        difference = currency.round(grand_total - self.amount_total)
+        differs = not currency.is_zero(difference)
+        vals = {
+            "magento_grand_total": grand_total,
+            "magento_total_difference": difference if differs else 0.0,
+            "magento_total_differs": differs,
+        }
+        post = differs and (
+            not self.magento_total_differs
+            or currency.compare_amounts(self.magento_total_difference, difference) != 0
+        )
+        if any(
+            (self[f] != v) if f == "magento_total_differs" else currency.compare_amounts(self[f], v) != 0
+            for f, v in vals.items()
+        ):
+            self.sudo().write(vals)
+        if post:
+            self.message_post(body=self._magento_total_difference_note(data, difference))
+
+    def _magento_total_difference_note(self, data, difference):
+        self.ensure_one()
+        currency = self.currency_id or self.env.company.currency_id
+        lines = self.order_line.filtered(lambda l: not l.display_type)
+
+        def odoo(role):
+            return sum(lines.filtered(lambda l: (l.magento_line_role or "product") == role).mapped("price_subtotal"))
+
+        def fmt(amount):
+            return "%.*f" % (currency.decimal_places, amount)
+
+        rows = [
+            (_("Products"), _to_float(data.get("subtotal")), odoo("product")),
+            (_("Discounts"), -abs(_to_float(data.get("discount_amount"))), odoo("discount")),
+            (_("Shipping"), _to_float(data.get("shipping_amount")), odoo("shipping")),
+            (_("FPT"), sum(_to_float(i.get("weee_tax_applied_row_amount"))
+                           for i in data.get("items") or [] if isinstance(i, dict)), odoo("fpt")),
+            (_("Tax"), _to_float(data.get("tax_amount")), self.amount_tax),
+            (_("Total"), _to_float(data.get("grand_total")), self.amount_total),
+        ]
+        hints = []
+        instance = self.magento_instance_id
+        company_method = self.company_id.tax_calculation_rounding_method
+        if instance and company_method and company_method != instance.tax_rounding_method:
+            hints.append(_("Odoo rounds taxes '%(odoo)s' but Magento is set to '%(magento)s' on the "
+                           "instance (Orders & Payments > Tax Rounding).",
+                           odoo=company_method, magento=instance.tax_rounding_method))
+        if not currency.is_zero(_to_float(data.get("discount_tax_compensation_amount"))):
+            hints.append(_("Magento applied a discount tax compensation (discount on tax-included "
+                           "prices)."))
+        extension = data.get("extension_attributes") or {}
+        for key in ("gift_cards_amount", "customer_balance_amount", "reward_currency_amount",
+                    "base_customer_balance_amount"):
+            if _to_float(data.get(key) or extension.get(key)):
+                hints.append(_("Magento deducted %(what)s (%(amount)s) from the grand total.",
+                               what=key, amount=_to_float(data.get(key) or extension.get(key))))
+        if self.state not in ("draft", "sent"):
+            hints.append(_("The order is no longer a quotation in Odoo; its lines were not updated."))
+        body = Markup("<p>%s</p><table class='table table-sm o_magento_total_diff'>"
+                      "<thead><tr><th></th><th class='text-end'>%s</th><th class='text-end'>%s</th>"
+                      "</tr></thead><tbody>%s</tbody></table>") % (
+            _("The Odoo total differs from the Magento grand total by %(diff)s %(cur)s. "
+              "No adjustment line was added.", diff=fmt(difference), cur=currency.name),
+            _("Magento"), _("Odoo"),
+            Markup("").join(
+                Markup("<tr><td>%s</td><td class='text-end'>%s</td><td class='text-end'>%s</td></tr>")
+                % (label, fmt(magento), fmt(odoo_amount))
+                for label, magento, odoo_amount in rows
+            ),
+        )
+        if hints:
+            body += Markup("<ul>%s</ul>") % Markup("").join(Markup("<li>%s</li>") % h for h in hints)
+        return body
 
     def _magento_compare_order_lines(self, items):
         """Return human-readable differences between Magento items and the current lines."""
@@ -758,7 +1159,101 @@ class SaleOrder(models.Model):
             ("magento_instance_id", "=", self.magento_instance_id.id),
         ], limit=1)
 
+    def _magento_document_line_vals(self, doc, kind):
+        """Invoice line values of a Magento invoice (``kind`` = ``invoice``) or credit memo.
+
+        Product lines come from the mapped sale lines (``_prepare_invoice_line``: same
+        price, line discount and taxes, linked to the sale line). The document's own
+        amounts then drive the extra lines: per-item discount lines, FPT, shipping, the
+        shipping discount and, for credit memos, the adjustment refund / fee. Returns
+        ``(vals_list, unmapped Magento item ids)``.
+        """
+        self.ensure_one()
+        instance = self.magento_instance_id
+        currency = self.currency_id or self.env.company.currency_id
+        qty_keys = ("qty", "qty_invoiced", "qty_ordered") if kind == "invoice" else ("qty", "qty_refunded")
+        line_qty, missing = self._magento_map_document_items(doc.get("items"), qty_keys)
+        sale_lines = self.env["sale.order.line"].browse(list(line_qty))
+        result = [line._prepare_invoice_line(quantity=line_qty[line.id]) for line in sale_lines]
+
+        discounts = defaultdict(float)
+        fpts = defaultdict(float)
+        for item in doc.get("items") or []:
+            line = self._magento_line_for_item(item.get("order_item_id") or item.get("item_id"))
+            if not line:
+                continue
+            discounts[line] = max(discounts[line], abs(_to_float(item.get("discount_amount"))))
+            fpts[line] = max(fpts[line], _to_float(item.get("weee_tax_applied_row_amount")))
+        items_discount = 0.0
+        for line, amount in discounts.items():
+            items_discount += amount
+            extra = self._magento_line_by_key("discount:%s" % self._magento_line_key_of(line))
+            if extra and not currency.is_zero(amount):
+                result.append(extra._prepare_invoice_line(quantity=1.0, price_unit=-amount))
+        for line, amount in fpts.items():
+            extra = self._magento_line_by_key("fpt:%s" % self._magento_line_key_of(line))
+            if extra and not currency.is_zero(amount):
+                result.append(extra._prepare_invoice_line(quantity=1.0, price_unit=amount))
+
+        shipping = _to_float(doc.get("shipping_amount"))
+        if instance.shipping_includes_tax and doc.get("shipping_incl_tax") not in (None, ""):
+            shipping = _to_float(doc.get("shipping_incl_tax"))
+        if not currency.is_zero(shipping):
+            line = self._magento_line_by_key("shipping")
+            if line:
+                result.append(line._prepare_invoice_line(quantity=1.0, price_unit=shipping))
+            else:
+                product = instance._magento_service_product("shipping")
+                result.append({
+                    "product_id": product.id, "name": self.magento_shipping_description or _("Shipping"),
+                    "quantity": 1.0, "price_unit": shipping, "tax_ids": [Command.clear()],
+                })
+        shipping_discount = abs(_to_float(doc.get("discount_amount"))) - items_discount
+        if shipping_discount > 0 and not currency.is_zero(shipping_discount):
+            line = self._magento_line_by_key("discount:shipping")
+            if line:
+                result.append(line._prepare_invoice_line(quantity=1.0, price_unit=-shipping_discount))
+
+        if kind == "credit_memo":
+            adjustments = (
+                (_to_float(doc.get("adjustment_positive")), _("Adjustment refund")),
+                (-_to_float(doc.get("adjustment_negative")), _("Adjustment fee")),
+            )
+            for amount, label in adjustments:
+                if not currency.is_zero(amount):
+                    product = instance._magento_service_product("discount")
+                    result.append({
+                        "product_id": product.id, "name": label, "quantity": 1.0,
+                        "price_unit": amount, "tax_ids": [Command.clear()],
+                    })
+        return result, missing
+
+    def _magento_document_move_vals(self, doc, kind, line_vals):
+        """Header values of an imported Magento invoice / credit memo (from the order)."""
+        self.ensure_one()
+        doc_date = doc.get("created_at")
+        if doc_date:
+            doc_date = fields.Date.to_date(fields.Datetime.to_datetime(doc_date))
+        vals = self._prepare_invoice()
+        vals.pop("transaction_ids", None)
+        vals.update({
+            "move_type": "out_invoice" if kind == "invoice" else "out_refund",
+            "invoice_date": doc_date or False,
+            "invoice_user_id": False,
+            "ref": doc.get("increment_id") or "",
+            "invoice_line_ids": [Command.create(v) for v in line_vals],
+        })
+        return vals
+
     def _magento_create_invoice_from_magento(self, invoice_data):
+        """Import one Magento invoice: exactly one Odoo invoice per Magento invoice.
+
+        An Odoo invoice already linked to it is reused; else an Odoo invoice of the order
+        not linked to any Magento invoice (created by the workflow or a user) is linked
+        instead of creating a second one; else the invoice is created from the Magento
+        document, linked to the sale lines. Imported invoices are posted without any push
+        back to Magento (they came from Magento).
+        """
         self.ensure_one()
         invoice_id = invoice_data.get("entity_id") or invoice_data.get("id")
         if not invoice_id:
@@ -801,12 +1296,12 @@ class SaleOrder(models.Model):
                     vals["ref"] = invoice_ref
                 match.with_context(skip_magento_sync=True).write(vals)
                 self._magento_release_invoice_user(match)
+                if match.state == "draft":
+                    match.with_context(skip_magento_sync=True).action_post()
                 return match
 
-        line_qty, missing_items = self._magento_map_document_items(
-            invoice_data.get("items"), ("qty", "qty_invoiced", "qty_ordered")
-        )
-        if not line_qty:
+        line_vals, missing_items = self._magento_document_line_vals(invoice_data, "invoice")
+        if not any(v.get("sale_line_ids") for v in line_vals):
             raise UserError(
                 _("Magento invoice %(invoice)s: no item could be mapped to a line of order %(order)s.")
                 % {"invoice": invoice_data.get("increment_id") or invoice_id, "order": self.name}
@@ -818,35 +1313,32 @@ class SaleOrder(models.Model):
                 self.name,
                 ",".join(missing_items),
             )
-        sale_lines = self.env["sale.order.line"].browse(list(line_qty))
-        line_vals = [
-            Command.create(line._prepare_invoice_line(quantity=line_qty[line.id]))
-            for line in sale_lines
-        ]
-
-        invoice_date = invoice_data.get("created_at")
-        if invoice_date:
-            invoice_date = fields.Date.to_date(fields.Datetime.to_datetime(invoice_date))
-
-        vals = {
-            "move_type": "out_invoice",
-            "partner_id": (self.partner_invoice_id or self.partner_id).id,
-            "partner_shipping_id": self.partner_shipping_id.id,
-            "invoice_origin": self.name,
-            "invoice_date": invoice_date or False,
-            "invoice_user_id": False,
-            "currency_id": self.currency_id.id,
-            "company_id": self.company_id.id,
-            "invoice_line_ids": line_vals,
-            "ref": invoice_data.get("increment_id") or "",
-            "magento_invoice_id": str(invoice_id),
-        }
+        vals = self._magento_document_move_vals(invoice_data, "invoice", line_vals)
+        vals["magento_invoice_id"] = str(invoice_id)
         move = self.env["account.move"].with_context(
             default_move_type="out_invoice",
             skip_magento_sync=True,
         ).create(vals)
         move.with_context(skip_magento_sync=True).action_post()
+        self._magento_check_document_total(move, invoice_data, _("invoice"))
         return move
+
+    def _magento_check_document_total(self, move, doc, label):
+        """Note on the move when its total differs from the Magento document's."""
+        total = doc.get("grand_total")
+        if total in (None, ""):
+            total = doc.get("base_grand_total")
+        if total in (None, ""):
+            return
+        currency = move.currency_id
+        difference = currency.round(abs(_to_float(total)) - move.amount_total)
+        if not currency.is_zero(difference):
+            move.message_post(body=_(
+                "The total of this %(doc)s differs from the Magento %(doc)s %(ref)s by %(diff)s "
+                "(Magento %(magento)s, Odoo %(odoo)s). No adjustment line was added.",
+                doc=label, ref=doc.get("increment_id") or "", diff=difference,
+                magento=_to_float(total), odoo=move.amount_total,
+            ))
 
     def _magento_sync_invoices(self, api=None):
         self.ensure_one()
@@ -887,10 +1379,8 @@ class SaleOrder(models.Model):
                 existing_move.with_context(skip_magento_sync=True).action_post()
             return existing_move
 
-        line_qty, missing_items = self._magento_map_document_items(
-            credit_data.get("items"), ("qty", "qty_refunded")
-        )
-        if not line_qty:
+        line_vals, missing_items = self._magento_document_line_vals(credit_data, "credit_memo")
+        if not any(v.get("sale_line_ids") for v in line_vals):
             raise UserError(
                 _("Magento credit memo %(memo)s: no item could be mapped to a line of order %(order)s.")
                 % {"memo": credit_data.get("increment_id") or credit_id, "order": self.name}
@@ -902,38 +1392,23 @@ class SaleOrder(models.Model):
                 self.name,
                 ",".join(missing_items),
             )
-        sale_lines = self.env["sale.order.line"].browse(list(line_qty))
-        line_vals = [
-            Command.create(line._prepare_invoice_line(quantity=line_qty[line.id]))
-            for line in sale_lines
-        ]
-
-        credit_date = credit_data.get("created_at")
-        if credit_date:
-            credit_date = fields.Date.to_date(fields.Datetime.to_datetime(credit_date))
-
-        vals = {
-            "move_type": "out_refund",
-            "partner_id": (self.partner_invoice_id or self.partner_id).id,
-            "invoice_origin": self.name,
-            "invoice_date": credit_date or False,
-            "invoice_user_id": False,
-            "currency_id": self.currency_id.id,
-            "company_id": self.company_id.id,
-            "invoice_line_ids": line_vals,
-            "ref": credit_data.get("increment_id") or "",
-            "magento_credit_memo_id": str(credit_id),
-        }
+        vals = self._magento_document_move_vals(credit_data, "credit_memo", line_vals)
+        vals["magento_credit_memo_id"] = str(credit_id)
         if credit_data.get("created_at"):
             vals["magento_credit_memo_created_at"] = fields.Datetime.to_datetime(
                 credit_data.get("created_at")
             )
+        if credit_data.get("invoice_id"):
+            invoice = self._magento_find_move("magento_invoice_id", credit_data["invoice_id"])
+            if invoice and invoice.state == "posted":
+                vals["reversed_entry_id"] = invoice.id
         move = self.env["account.move"].with_context(
             default_move_type="out_refund",
             skip_magento_sync=True,
         ).create(vals)
         self._magento_update_credit_memo_amounts(move, credit_data)
         move.with_context(skip_magento_sync=True).action_post()
+        self._magento_check_document_total(move, credit_data, _("credit memo"))
         return move
 
     def _magento_update_credit_memo_amounts(self, move, credit_data):
@@ -953,7 +1428,9 @@ class SaleOrder(models.Model):
         }
         move.with_context(skip_magento_sync=True).write(vals)
 
-    def _magento_sync_credit_memos(self, api=None):
+    def _magento_sync_credit_memos(self, api=None, settle=False):
+        """Import the Magento credit memos of the order. ``settle``: also settle each
+        refunded credit note (against open invoices, then with a refund payment)."""
         self.ensure_one()
         if not self.magento_order_id or not self.magento_instance_id:
             return
@@ -973,7 +1450,59 @@ class SaleOrder(models.Model):
                     credit_data = api.get_credit_memo(credit_id)
                 except requests.exceptions.RequestException as exc:
                     self._magento_raise_http_error(exc)
-            self._magento_create_credit_memo_from_magento(credit_data)
+            move = self._magento_create_credit_memo_from_magento(credit_data)
+            if settle and move:
+                self._magento_settle_credit_note(move, credit_data)
+
+    def _magento_settle_credit_note(self, move, credit_data):
+        """Make an imported, refunded Magento credit note paid in Odoo.
+
+        It is first reconciled with the order's open invoices (refund before payment);
+        what remains was paid back to the customer in Magento (credit memo state
+        "refunded"), so a refund payment is registered on the payment method's journal.
+        Idempotent: a settled credit note is left alone.
+        """
+        self.ensure_one()
+        if not move or move.move_type != "out_refund" or move.state != "posted":
+            return
+        if move.payment_state in ("paid", "in_payment", "reversed"):
+            return
+        state = credit_data.get("state")
+        if state not in (None, "", 2, "2"):
+            return  # 1 = open (refund pending), 3 = canceled
+        currency = move.currency_id
+        invoices = self._magento_get_customer_invoices().filtered(
+            lambda m: not m.currency_id.is_zero(m.amount_residual)
+        )
+        if invoices:
+            receivables = (move.line_ids | invoices.line_ids).filtered(
+                lambda l: l.account_id.account_type == "asset_receivable" and not l.reconciled
+            )
+            if len(receivables) > 1:
+                receivables.with_context(skip_magento_sync=True).reconcile()
+        if currency.is_zero(move.amount_residual):
+            return
+        instance = self.magento_instance_id
+        journal, method = instance._magento_payment_config(
+            self.magento_payment_method, self.company_id, outbound=True
+        )
+        if not journal or not method:
+            _logger.warning(
+                "Magento credit memo %s of order %s is refunded but instance %s has no refund "
+                "journal/method.", move.magento_credit_memo_id, self.name, instance.display_name,
+            )
+            return
+        self.env["account.payment.register"].with_context(
+            active_model="account.move",
+            active_ids=move.ids,
+            dont_redirect_to_payments=True,
+            skip_magento_sync=True,
+        ).create({
+            "journal_id": journal.id,
+            "payment_method_line_id": method.id,
+            "amount": move.amount_residual,
+            "payment_date": move.invoice_date or fields.Date.context_today(self),
+        }).action_create_payments()
 
     def _magento_get_customer_invoices(self):
         """Posted customer invoices of this order.
@@ -997,10 +1526,16 @@ class SaleOrder(models.Model):
             ])
         return moves.filtered(lambda m: m.move_type == "out_invoice" and m.state == "posted")
 
-    def _magento_apply_payments_from_magento(self):
+    def _magento_apply_payments_from_magento(self, force=False):
+        """Register in Odoo what Magento reports as paid.
+
+        ``force``: the order workflow asked for it (otherwise the instance's "Auto Register
+        Magento Payments" decides). The journal comes from the payment method mapping,
+        falling back to the instance default. Payments are dated like the invoice.
+        """
         self.ensure_one()
         instance = self.magento_instance_id
-        if not instance or not instance.auto_register_magento_payment:
+        if not instance or not (force or instance.auto_register_magento_payment):
             return
         if self.magento_payment_state not in ("partial", "paid"):
             return
@@ -1017,7 +1552,7 @@ class SaleOrder(models.Model):
         if currency.compare_amounts(already_paid, total_paid) >= 0:
             return
 
-        journal, method = instance._get_magento_payment_config(self.company_id)
+        journal, method = instance._magento_payment_config(self.magento_payment_method, self.company_id)
         if not journal or not method:
             _logger.warning(
                 "Magento order %s is paid but instance %s has no payment journal/method configured.",
@@ -1042,9 +1577,68 @@ class SaleOrder(models.Model):
                 "journal_id": journal.id,
                 "payment_method_line_id": method.id,
                 "amount": amount,
+                "payment_date": invoice.invoice_date or fields.Date.context_today(self),
             })
             wizard.action_create_payments()
             remaining -= amount
+
+    # -------------------------
+    # ORDER WORKFLOW STEPS (2.5)
+    # -------------------------
+    def _magento_wf_confirm(self):
+        for order in self:
+            if order.state in ("draft", "sent"):
+                order.with_context(skip_magento_sync=True, magento_skip_push=True).action_confirm()
+
+    def _magento_wf_cancel(self):
+        for order in self:
+            if order.state == "cancel":
+                continue
+            if order.locked:
+                order.action_unlock()
+            order.with_context(skip_magento_sync=True, magento_skip_push=True)._action_cancel()
+
+    def _magento_wf_create_invoice(self):
+        """Invoice in Odoo only what Magento did not invoice itself.
+
+        Magento invoices are imported (and reused) by the invoice sync step; an Odoo invoice
+        is created only for a confirmed order that Magento has not invoiced and that has no
+        invoice yet. The workflow never pushes it to Magento.
+        """
+        for order in self:
+            if order.state != "sale" or order.magento_invoice_state in ("partial", "invoiced"):
+                continue
+            existing = order.invoice_ids.filtered(
+                lambda m: m.move_type == "out_invoice" and m.state != "cancel"
+            )
+            if existing or order._magento_get_customer_invoices():
+                continue
+            if not order._get_invoiceable_lines():
+                continue
+            moves = order.with_context(skip_magento_sync=True, magento_skip_push=True)._create_invoices()
+            for move in moves:
+                order._magento_release_invoice_user(move)
+
+    def _magento_wf_post_invoices(self):
+        for order in self:
+            drafts = (order.invoice_ids | self.env["account.move"].search([
+                ("magento_sale_order_id", "=", order.id),
+            ])).filtered(lambda m: m.state == "draft" and m.move_type == "out_invoice")
+            if drafts:
+                drafts.with_context(skip_magento_sync=True).action_post()
+
+    def _magento_wf_validate_delivery(self, api=None):
+        """Validate the deliveries Magento shipped (imported Magento shipments only, so
+        nothing is ever pushed back as a new Magento shipment)."""
+        for order in self:
+            if order.state != "sale":
+                continue
+            order._magento_sync_shipments(api)
+
+    def _magento_wf_lock(self):
+        for order in self:
+            if order.state == "sale" and not order.locked:
+                order.action_lock()
 
     # -------------------------
     # SHIPMENTS
@@ -1943,12 +2537,25 @@ class SaleOrder(models.Model):
                     values["magento_invoice_state"] = invoice_state
         self.write(values)
         self._magento_sync_order_lines(data)
-        if self.magento_invoice_state in ("partial", "invoiced"):
-            self._magento_sync_invoices(api)
-        if self.magento_payment_state in ("partial", "paid"):
-            self._magento_apply_payments_from_magento()
-        self._magento_sync_credit_memos(api)
-        self._magento_sync_shipments(api)
+        # Same follow-up steps (documents + order workflow) as the scheduled import.
+        stats = _SyncStats("order")
+        failures = instance._sync_order_followups(api, self, self.magento_order_id, stats)
+        instance._magento_notify_record_result(
+            "order", self.magento_order_id, not failures,
+            exc=failures[0][1] if failures else None, payload=data, record=self,
+        )
+        if failures:
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Magento"),
+                    "message": _("Order pulled, but %(step)s failed: %(error)s",
+                                 step=failures[0][0], error=failures[0][1]),
+                    "type": "warning",
+                    "sticky": True,
+                },
+            }
         return self._magento_rainbow_man_action(_("Order pulled from Magento."))
 
 
@@ -1969,6 +2576,15 @@ class SaleOrderLine(models.Model):
         ondelete="set null",
     )
     magento_sku = fields.Char("Magento SKU")
+    magento_line_role = fields.Selection(
+        [("product", "Product"), ("shipping", "Shipping"), ("discount", "Discount"), ("fpt", "FPT")],
+        string="Magento Line Role", readonly=True, copy=False,
+    )
+    magento_line_key = fields.Char(
+        "Magento Line Key", readonly=True, copy=False, index="btree_not_null",
+        help="Stable key of an imported line (item id, 'shipping', 'discount:<item>'...) used to "
+             "update quotation lines in place on re-sync.",
+    )
 
     def _magento_push_item_id(self):
         """Magento order item id to send in invoices/shipments/credit memos created in Odoo."""
