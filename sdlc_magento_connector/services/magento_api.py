@@ -1130,3 +1130,59 @@ class MagentoAPI:
     def get_bulk_detailed_status(self, bulk_uuid):
         """``GET /V1/bulk/:uuid/detailed-status``: adds serialized_data / result_serialized_data."""
         return self._get(f"/rest/V1/bulk/{quote(str(bulk_uuid or '').strip(), safe='')}/detailed-status")
+
+    # ------------------------------------------------------------------
+    # Bulk price storage (roadmap 2.9 / 3.4): /V1/products/{base,special,tier}-price*
+    # ------------------------------------------------------------------
+    # These endpoints are natively bulk and synchronous: one request carries a list of
+    # prices; Magento saves the valid rows and answers with the rejected ones as a list of
+    # ``{"message": ..., "parameters": ...}`` (an empty list: everything was saved).
+    @staticmethod
+    def _price_failures(result):
+        return [row for row in result if isinstance(row, dict)] if isinstance(result, list) else []
+
+    def update_base_prices(self, prices):
+        """``POST /V1/products/base-prices``: ``[{sku, price, store_id}]`` -> failed items."""
+        return self._price_failures(self._post("/rest/V1/products/base-prices", {"prices": list(prices)}))
+
+    def get_base_prices(self, skus):
+        """``POST /V1/products/base-prices-information``: ``[{sku, price, store_id}]``."""
+        return self._post("/rest/V1/products/base-prices-information", {"skus": list(skus)}) or []
+
+    def update_special_prices(self, prices):
+        """``POST /V1/products/special-price``: ``[{sku, price, store_id, price_from, price_to}]``
+        -> failed items. Dates are ``Y-m-d H:i:s``; a date left out is not cleared."""
+        return self._price_failures(self._post("/rest/V1/products/special-price", {"prices": list(prices)}))
+
+    def delete_special_prices(self, prices):
+        """``POST /V1/products/special-price-delete``: removes the special price and both
+        dates of each (sku, store_id) -> failed items."""
+        return self._price_failures(
+            self._post("/rest/V1/products/special-price-delete", {"prices": list(prices)})
+        )
+
+    def get_special_prices(self, skus):
+        """``POST /V1/products/special-price-information``:
+        ``[{sku, price, store_id, price_from, price_to}]``."""
+        return self._post("/rest/V1/products/special-price-information", {"skus": list(skus)}) or []
+
+    def update_tier_prices(self, prices):
+        """``POST /V1/products/tier-prices`` (add or update):
+        ``[{sku, price, price_type, website_id, customer_group, quantity}]`` -> failed items.
+        ``customer_group`` is a group code or ``ALL GROUPS``."""
+        return self._price_failures(self._post("/rest/V1/products/tier-prices", {"prices": list(prices)}))
+
+    def replace_tier_prices(self, prices):
+        """``PUT /V1/products/tier-prices``: replaces ALL tier prices of the SKUs sent."""
+        return self._price_failures(self._put("/rest/V1/products/tier-prices", {"prices": list(prices)}))
+
+    def delete_tier_prices(self, prices):
+        """``POST /V1/products/tier-prices-delete``: removes the tier prices matching
+        (sku, website_id, customer_group, quantity, price) -> failed items."""
+        return self._price_failures(
+            self._post("/rest/V1/products/tier-prices-delete", {"prices": list(prices)})
+        )
+
+    def get_tier_prices(self, skus):
+        """``POST /V1/products/tier-prices-information``."""
+        return self._post("/rest/V1/products/tier-prices-information", {"skus": list(skus)}) or []

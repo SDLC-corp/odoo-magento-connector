@@ -195,4 +195,16 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_price_rule_company" model="ir.rule">
+        <field name="name">Magento price rule: multi-company</field>
+        <field name="model_id" ref="model_magento_price_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_price_push_state_company" model="ir.rule">
+        <field name="name">Magento pushed price: multi-company</field>
+        <field name="model_id" ref="model_magento_price_push_state"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>
