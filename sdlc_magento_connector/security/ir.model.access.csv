@@ -31,3 +31,11 @@ access_magento_reconciliation_line_user,magento.reconciliation.line user,model_m
 access_magento_reconciliation_line_manager,magento.reconciliation.line manager,model_magento_reconciliation_line,group_magento_manager,1,1,1,1
 access_magento_reconciliation_order_user,magento.reconciliation.order user,model_magento_reconciliation_order,group_magento_user,1,1,1,0
 access_magento_reconciliation_order_manager,magento.reconciliation.order manager,model_magento_reconciliation_order,group_magento_manager,1,1,1,1
+access_magento_tax_map_user,magento.tax.map user,model_magento_tax_map,group_magento_user,1,0,0,0
+access_magento_tax_map_manager,magento.tax.map manager,model_magento_tax_map,group_magento_manager,1,1,1,1
+access_magento_payment_map_user,magento.payment.map user,model_magento_payment_map,group_magento_user,1,0,0,0
+access_magento_payment_map_manager,magento.payment.map manager,model_magento_payment_map,group_magento_manager,1,1,1,1
+access_magento_carrier_map_user,magento.carrier.map user,model_magento_carrier_map,group_magento_user,1,0,0,0
+access_magento_carrier_map_manager,magento.carrier.map manager,model_magento_carrier_map,group_magento_manager,1,1,1,1
+access_magento_order_workflow_user,magento.order.workflow user,model_magento_order_workflow,group_magento_user,1,0,0,0
+access_magento_order_workflow_manager,magento.order.workflow manager,model_magento_order_workflow,group_magento_manager,1,1,1,1

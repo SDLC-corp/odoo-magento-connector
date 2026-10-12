@@ -2109,14 +2109,7 @@ class MagentoInstance(models.Model):
         """
         self.ensure_one()
         failures = []
-        steps = []
-        if order.magento_invoice_state in ("partial", "invoiced"):
-            steps.append(("invoice sync", lambda: order._magento_sync_invoices(api)))
-        if order.magento_payment_state in ("partial", "paid"):
-            steps.append(("payment sync", lambda: order._magento_apply_payments_from_magento()))
-        steps.append(("credit memo sync", lambda: order._magento_sync_credit_memos(api)))
-        steps.append(("shipment sync", lambda: order._magento_sync_shipments(api)))
-        steps.append(("shipment push", lambda: order._magento_push_shipments()))
+        steps = self._magento_order_followup_steps(api, order)
         for label, step in steps:
             try:
                 with self.env.cr.savepoint():
@@ -2125,6 +2118,18 @@ class MagentoInstance(models.Model):
                 stats.error("order", magento_id, exc, instance=self, step=label)
                 failures.append((label, exc))
         return failures
+
+    def _magento_order_followup_steps(self, api, order):
+        """``[(label, callable)]`` run by ``_sync_order_followups`` (order workflow hook)."""
+        steps = []
+        if order.magento_invoice_state in ("partial", "invoiced"):
+            steps.append(("invoice sync", lambda: order._magento_sync_invoices(api)))
+        if order.magento_payment_state in ("partial", "paid"):
+            steps.append(("payment sync", lambda: order._magento_apply_payments_from_magento()))
+        steps.append(("credit memo sync", lambda: order._magento_sync_credit_memos(api)))
+        steps.append(("shipment sync", lambda: order._magento_sync_shipments(api)))
+        steps.append(("shipment push", lambda: order._magento_push_shipments()))
+        return steps
 
     def action_sync_orders(self):
         self.ensure_one()
