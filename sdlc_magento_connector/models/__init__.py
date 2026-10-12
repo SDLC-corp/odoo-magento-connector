@@ -10,3 +10,4 @@ from . import magento_field_mapping
 from . import magento_sync_report
 from . import res_partner_inherit
 from . import magento_dashboard
+from . import magento_instance_auth

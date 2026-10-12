@@ -8,6 +8,8 @@ import requests
 from requests.compat import urlparse, urlunparse
 from requests.utils import quote
 
+from . import magento_auth
+
 _logger = logging.getLogger(__name__)
 
 
@@ -29,17 +31,68 @@ class MagentoAPI:
         self._store_code = None
         self._guest_cart_rest_prefix = "/rest/V1"
         self.headers = {"Content-Type": "application/json"}
-        # The token is restricted to Magento managers (field ``groups``). Syncs may
-        # be run by Magento users or cron, so read only the secret with sudo.
-        access_token = getattr(instance.sudo(), "access_token", None)
-        if isinstance(access_token, str):
-            access_token = access_token.strip()
-        if access_token:
-            self.headers["Authorization"] = f"Bearer {access_token}"
+        # Credentials are restricted to Magento managers (field ``groups``). Syncs may
+        # be run by Magento users or cron, so read only the secrets with sudo.
+        self._auth = self._load_auth(instance.sudo())
 
         self.verify = bool(instance.verify_ssl)
         self._container_gateway_ip = self._detect_container_gateway_ip()
         self._base_urls = self._build_base_urls()
+
+    # ------------------------------------------------------------------
+    # Authentication (OAuth 1.0a signing or legacy Bearer token)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _load_auth(instance_sudo):
+        def _secret(name):
+            value = getattr(instance_sudo, name, None)
+            return value.strip() if isinstance(value, str) else ""
+
+        # Instances created before OAuth support have no auth_method: they keep Bearer.
+        auth_method = getattr(instance_sudo, "auth_method", None) or "bearer"
+        signature = getattr(instance_sudo, "oauth_signature_method", None) or "sha256"
+        return {
+            "method": auth_method,
+            "token": _secret("access_token"),
+            "consumer_key": _secret("consumer_key"),
+            "consumer_secret": _secret("consumer_secret"),
+            "token_secret": _secret("access_token_secret"),
+            "signature_method": "HMAC-SHA1" if signature == "sha1" else "HMAC-SHA256",
+        }
+
+    def _auth_prepare_query(self, endpoint, params):
+        """OAuth 1.0a: append the query to the URL ourselves (RFC 3986, a space is
+        ``%20``, never ``+``) so the signed query is byte for byte what Magento
+        receives. Bearer requests keep passing ``params`` to requests."""
+        if self._auth["method"] != "oauth1" or not params:
+            return endpoint, params
+        query = magento_auth.encode_query(params)
+        if not query:
+            return endpoint, None
+        separator = "&" if "?" in endpoint else "?"
+        return f"{endpoint}{separator}{query}", None
+
+    def _auth_header(self, method, url, params=None):
+        """``Authorization`` value for one request; OAuth signs every call with a
+        fresh nonce/timestamp (so each retry and fallback URL is re-signed)."""
+        auth = self._auth
+        if auth["method"] == "oauth1":
+            return magento_auth.sign(
+                method, url, params,
+                auth["consumer_key"], auth["consumer_secret"],
+                auth["token"], auth["token_secret"],
+                signature_method=auth["signature_method"],
+            )
+        if auth["token"]:
+            return f"Bearer {auth['token']}"
+        return None
+
+    def _request_headers(self, method, url, params=None):
+        headers = dict(self.headers)
+        authorization = self._auth_header(method, url, params)
+        if authorization:
+            headers["Authorization"] = authorization
+        return headers
 
     def _is_containerized_runtime(self):
         # Docker/Podman usually expose one of these markers in Linux containers.
@@ -178,8 +231,8 @@ class MagentoAPI:
         method = (method or "get").lower()
         idempotent = method in self.IDEMPOTENT_METHODS
         retry_statuses = self.RETRY_STATUSES if idempotent else self.RETRY_STATUSES_UNSAFE_METHODS
+        endpoint, params = self._auth_prepare_query(endpoint, params)
         request_kwargs = {
-            "headers": self.headers,
             "timeout": self.TIMEOUT,
             "verify": self.verify,
         }
@@ -195,6 +248,7 @@ class MagentoAPI:
             retryable = False
             for base_url in list(self._base_urls):
                 url = f"{base_url}{endpoint}"
+                request_kwargs["headers"] = self._request_headers(method, url, params)
                 _logger.debug("Magento %s %s (attempt %s)", method.upper(), url, attempt + 1)
                 try:
                     response = requests.request(method, url, **request_kwargs)
