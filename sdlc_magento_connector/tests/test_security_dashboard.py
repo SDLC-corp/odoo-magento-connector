@@ -129,6 +129,14 @@ class TestDashboard(MagentoTestCommon):
         self.assertNotIn(self.instance_b.id, data_b["selected_ids"])
         self.assertNotIn(self.instance_b.id, data_b["scope_ids"])
 
+    def test_d1_kpi_rail_keys(self):
+        """Phase 1 rail: Failed syncs became Open issues, Queue was added, Customers dropped."""
+        data = self._console(self.sales_user_a).get_dashboard_data()
+        self.assertEqual(
+            [k["key"] for k in data["kpis"]],
+            ["orders", "revenue", "drafts", "conflicts", "open_issues", "queue", "products"],
+        )
+
     def test_d1_top_countries_from_shipping_country(self):
         data = self._console(self.sales_user_a).get_dashboard_data()
         countries = data["by_country"]

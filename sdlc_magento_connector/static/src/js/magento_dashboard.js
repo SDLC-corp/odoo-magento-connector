@@ -102,8 +102,12 @@ export class MagentoConsole extends Component {
     // Navigation and drill-downs
     // ------------------------------------------------------------------
 
-    /** Open the records behind a figure, with the scope currently on screen. */
-    open(drill) {
+    /**
+     * Open the records behind a figure, with the scope currently on screen.
+     * A drill naming an action (`xml_id`: Error Center, Job Queue) opens that
+     * action, keeping its views, search view and help, restricted to the domain.
+     */
+    async open(drill) {
         if (!drill) {
             return;
         }
@@ -119,7 +123,23 @@ export class MagentoConsole extends Component {
         if (drill.res_id) {
             action.res_id = drill.res_id;
         }
-        this.action.doAction(action);
+        if (drill.xml_id) {
+            try {
+                const base = await this.action.loadAction(drill.xml_id);
+                if (base?.res_model === drill.res_model) {
+                    Object.assign(action, {
+                        id: base.id,
+                        xml_id: base.xml_id,
+                        views: base.views?.length ? base.views : action.views,
+                        search_view_id: base.search_view_id,
+                        help: base.help,
+                    });
+                }
+            } catch {
+                // Fall back to a plain list of the same records.
+            }
+        }
+        await this.action.doAction(action);
     }
 
     onKeyOpen(ev, drill) {
@@ -176,6 +196,31 @@ export class MagentoConsole extends Component {
         }
         const dt = deserializeDateTime(inst.last_sync_at);
         return _t("Synced %s", dt.toRelative() || formatDateTime(dt));
+    }
+
+    issuesLabel(inst) {
+        const n = Number(inst.open_issues) || 0;
+        return n === 1 ? _t("1 open issue") : _t("%s open issues", this.count(n));
+    }
+
+    /** Full split for the row tooltip. */
+    entityDetail(row) {
+        const parts = [];
+        if (row.permanent) {
+            parts.push(_t("%s permanent", this.count(row.permanent)));
+        }
+        if (row.transient) {
+            parts.push(_t("%s transient", this.count(row.transient)));
+        }
+        return parts.join(" · ");
+    }
+
+    /** Short tag beside the entity name: the severity mix at a glance. */
+    entityTag(row) {
+        if (row.permanent && row.transient) {
+            return _t("%s perm.", this.count(row.permanent));
+        }
+        return row.permanent ? _t("permanent") : _t("transient");
     }
 
     lastSyncTitle(inst) {
