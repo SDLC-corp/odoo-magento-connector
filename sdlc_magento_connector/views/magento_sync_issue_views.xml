@@ -188,7 +188,15 @@
                         invisible="failed_job_count == 0">
                     <field name="failed_job_count" widget="statinfo" string="Failed Jobs"/>
                 </button>
+                <button name="action_view_queued_jobs" type="object"
+                        class="oe_stat_button" icon="fa-hourglass-half"
+                        invisible="pending_job_count == 0">
+                    <field name="pending_job_count" widget="statinfo" string="Queued Jobs"/>
+                </button>
             </div>
+            <field name="auto_sync_enabled" position="before">
+                <field name="run_syncs_in_background" widget="boolean_toggle"/>
+            </field>
             <xpath expr="//notebook" position="inside">
                 <page string="Alerts &amp; Logs" name="alerts_logs">
                     <group>
