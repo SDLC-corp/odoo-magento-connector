@@ -9,7 +9,7 @@ from .magento_product import magento_push_skipped, schedule_magento_push
 
 _logger = logging.getLogger(__name__)
 
-# Fields whose change triggers the automatic (post-commit) push to Magento.
+# Fields whose change triggers the automatic (queued) push to Magento.
 _CUSTOMER_SYNC_FIELDS = {
     "email",
     "prefix",
@@ -71,6 +71,7 @@ def _normalize_yes_no_vals(vals):
 class MagentoCustomer(models.Model):
     _name = "magento.customer"
     _inherit = ["magento.push.error.mixin"]
+    _magento_push_entity = "customer"
     _description = "Magento Customer"
 
     _uniq_instance_magento_id = models.UniqueIndex(
@@ -430,8 +431,13 @@ class MagentoCustomer(models.Model):
             }
         }
 
-    def _magento_auto_push(self, flags):
-        """Automatic (post-commit) push to Magento. Raises on failure."""
+    def _magento_push_ref(self):
+        """Magento id, else the e-mail of a customer not created in Magento yet."""
+        self.ensure_one()
+        return self.magento_id or self.email or super()._magento_push_ref()
+
+    def _magento_push_now(self, flags):
+        """Automatic (queued) push to Magento. Raises on failure."""
         self.ensure_one()
         if not self.instance_id:
             return
@@ -458,14 +464,14 @@ class MagentoCustomer(models.Model):
     def write(self, vals):
         vals = _normalize_yes_no_vals(vals)
         res = super().write(vals)
-        # Pushed after commit: Magento being slow or down never blocks the save.
+        # Pushed by a queued job: Magento being slow or down never blocks the save.
         self._schedule_magento_push(set(vals))
         return res
 
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create([_normalize_yes_no_vals(vals) for vals in vals_list])
-        # New customers without a Magento id are created in Magento after commit.
+        # New customers without a Magento id are created in Magento by a queued job.
         if not magento_push_skipped(self.env):
             schedule_magento_push(
                 records.filtered(lambda r: r.instance_id and not r.magento_id),
