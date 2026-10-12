@@ -258,6 +258,9 @@ class MagentoTestCommon(TransactionCase):
         if mock is not None:
             inner = getattr(mock, "mock", mock)  # autospec'd functions wrap a Mock
             inner.reset_mock(return_value=True, side_effect=True)
+            # An autospec'd function keeps its own side_effect: clear it explicitly,
+            # or switching from side_effect=... to return_value=... has no effect.
+            kwargs.setdefault("side_effect", None)
             inner.configure_mock(**kwargs)
             return mock
         if not hasattr(MagentoAPI, method):

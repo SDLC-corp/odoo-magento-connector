@@ -224,27 +224,70 @@ class MagentoSyncIssue(models.Model):
         jobs = self.env["magento.job"]
         if not hasattr(type(self.env["magento.instance"]), "_magento_resync_one"):
             raise UserError(_("Retrying single records is not available in this version of the connector."))
-        queued = 0
+        queued = skipped = 0
         for issue in self.filtered(lambda i: i.state == "open"):
-            job = jobs.enqueue(
-                issue.instance_id, "_magento_resync_one",
-                args=(issue.entity, issue.magento_ref),
-                instance=issue.instance_id,
-                identity_key="retry-%s" % issue.trace_key,
-                description=_("Retry %(what)s", what=issue.display_label),
-            )
+            job = issue._enqueue_retry_job(jobs)
+            if not job:
+                skipped += 1
+                continue
             issue.job_id = job.id
             queued += 1
+        message = _("%s retry job(s) queued.", queued)
+        if skipped:
+            message += " " + _("%s issue(s) cannot be retried automatically; fix the cause and "
+                               "resolve them.", skipped)
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
                 "title": _("Error Center"),
-                "message": _("%s retry job(s) queued.", queued),
-                "type": "info",
-                "sticky": False,
+                "message": message,
+                "type": "warning" if skipped else "info",
+                "sticky": bool(skipped),
             },
         }
+
+    # Outgoing operations are retried by replaying them, never by pulling the
+    # record back from Magento (which would overwrite the Odoo change).
+    _REPLAYABLE_METHODS = ("_magento_auto_push", "_magento_push_stock_bulk")
+
+    def _enqueue_retry_job(self, jobs):
+        """Queue the right retry for this issue, or return an empty recordset."""
+        self.ensure_one()
+        failed = self.job_id.sudo()
+        if failed and failed.method_name in self._REPLAYABLE_METHODS and failed.model_name in self.env:
+            records = self.env[failed.model_name].browse(failed.res_ids or []).exists()
+            if not records:
+                return jobs.browse()
+            return jobs.enqueue(
+                records, failed.method_name, args=tuple(failed.args or ()),
+                kwargs=failed.kwargs or None, instance=self.instance_id,
+                channel=failed.channel, priority=failed.priority,
+                identity_key=failed.identity_key or "retry-%s" % self.trace_key,
+                description=_("Retry %(what)s", what=self.display_label),
+            )
+        if self.entity == "stock":
+            if not hasattr(type(self.instance_id), "_magento_push_stock_bulk"):
+                return jobs.browse()
+            return jobs.enqueue(
+                self.instance_id, "_magento_push_stock_bulk", instance=self.instance_id,
+                channel="stock-%s" % self.instance_id.id,
+                identity_key="stock-push-%s" % self.instance_id.id,
+                description=_("Retry stock push"),
+            )
+        ref = self.magento_ref or ""
+        resyncable = self.entity in ("order", "product", "customer", "category") or (
+            self.entity == "attribute_set" and ref == "list"
+        )
+        if not resyncable or ref.startswith(("odoo-", "bulk-")):
+            return jobs.browse()
+        return jobs.enqueue(
+            self.instance_id, "_magento_resync_one",
+            args=(self.entity, ref),
+            instance=self.instance_id,
+            identity_key="retry-%s" % self.trace_key,
+            description=_("Retry %(what)s", what=self.display_label),
+        )
 
     def _close(self, state):
         self.filtered(lambda i: i.state == "open").write({

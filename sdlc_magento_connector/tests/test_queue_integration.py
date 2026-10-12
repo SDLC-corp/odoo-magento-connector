@@ -278,6 +278,40 @@ class TestQueueIntegration(MagentoTestCommon):
         self.assertEqual(issue.record_ref, self.product_map)
         self.assertGreaterEqual(self.instance.failed_job_count, 1)
 
+    def test_retrying_push_issue_replays_the_push_not_a_pull(self):
+        magento_fixed = []
+        pushes = []
+
+        def _update_product(api, *args, **kwargs):
+            pushes.append(args)
+            if not magento_fixed:
+                raise requests.exceptions.HTTPError(
+                    "400 Client Error", response=make_response(400, {"message": "Invalid attribute"}))
+            return {}
+
+        self.patch_api("update_product", side_effect=_update_product)
+        resync = self.patch_api("get_product", side_effect=AssertionError("Retry must not pull"))
+        self.product.write({"name": "Queue Bag fixed later"})
+        failed = self.push_jobs(self.product_map)
+        self.run_jobs()
+        issue = self.Issue.search([("trace_key", "=", "%s-product-Q-PUSH" % self.instance.id),
+                                   ("state", "=", "open")])
+        self.assertEqual(issue.job_id, failed)
+
+        # The cause is fixed in Magento; Retry must push the Odoo data again.
+        magento_fixed.append(True)
+        pushes.clear()
+        issue.action_retry()
+        retry_job = issue.job_id
+        self.assertNotEqual(retry_job, failed)
+        self.assertEqual(retry_job.method_name, "_magento_auto_push")
+        self.run_jobs()
+        self.assertEqual(retry_job.state, "done", retry_job.last_error)
+        self.assertTrue(pushes, "Retry must push the Odoo data again")
+        self.assertFalse(resync.called)
+        self.assertEqual(issue.state, "resolved")
+        self.assertFalse(self.product_map.magento_last_error)
+
     def test_skip_push_context_enqueues_nothing(self):
         self.product.with_context(magento_skip_push=True).write({"name": "Queue Bag skip"})
         self.product_map.with_context(magento_skip_push=True).write({"price": 65.0})

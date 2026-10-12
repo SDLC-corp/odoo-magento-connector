@@ -352,9 +352,21 @@ class MagentoJob(models.Model):
 
     @api.model
     def _requeue_stale_jobs(self):
-        """Started jobs older than one hour were interrupted (worker killed): requeue them."""
+        """Requeue started jobs whose worker died.
+
+        A running job keeps its row locked for its whole execution (see ``_run_job``),
+        so an old "started" job whose row can still be locked has no live worker; one
+        whose row is locked is just long-running and is left alone.
+        """
         now = fields.Datetime.now()
-        stale = self.search([("state", "=", "started"), ("date_started", "<", now - _STALE_AFTER)])
+        candidates = self.search([("state", "=", "started"), ("date_started", "<", now - _STALE_AFTER)])
+        if not candidates:
+            return candidates
+        self.env.cr.execute(SQL(
+            "SELECT id FROM magento_job WHERE id IN %s FOR UPDATE SKIP LOCKED",
+            tuple(candidates.ids),
+        ))
+        stale = self.browse([row[0] for row in self.env.cr.fetchall()])
         for job in stale:
             if job.attempts >= job.max_attempts:
                 job.write({"state": "failed", "date_done": now, "error_class": "transient",
@@ -374,6 +386,10 @@ class MagentoJob(models.Model):
             "attempts": job.attempts + 1,
         })
         job._job_commit(0)
+        # The commit above released the row lock taken when the job was acquired;
+        # hold it again for the whole run so other workers never treat a
+        # long-running job as interrupted (``_requeue_stale_jobs``).
+        self.env.cr.execute(SQL("SELECT id FROM magento_job WHERE id = %s FOR UPDATE", job.id))
         try:
             with self.env.cr.savepoint():
                 result = job._perform()
