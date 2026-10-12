@@ -30,6 +30,8 @@
         'views/magento_order_p2_views.xml',
         'views/magento_catalog_p2_views.xml',
         'views/magento_shipping_p2_views.xml',
+        'views/magento_pricing_p2_views.xml',
+        'data/magento_pricing_data.xml',
     ],
     'assets': {
         'web.assets_backend': [

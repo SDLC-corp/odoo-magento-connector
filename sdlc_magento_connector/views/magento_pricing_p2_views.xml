@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         Pushed prices (magento.price.push.state): read only
+         ============================================================ -->
+    <record id="view_magento_price_push_state_list" model="ir.ui.view">
+        <field name="name">magento.price.push.state.list</field>
+        <field name="model">magento.price.push.state</field>
+        <field name="arch" type="xml">
+            <list string="Pushed Prices" create="0" edit="0" import="0">
+                <field name="rule_id" column_invisible="context.get('default_rule_id')"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="sku"/>
+                <field name="product_id" optional="show"/>
+                <field name="kind" widget="badge"
+                       decoration-info="kind == 'base'"
+                       decoration-warning="kind == 'special'"
+                       decoration-success="kind == 'tier'"/>
+                <field name="store_id" optional="show" invisible="kind == 'tier'"/>
+                <field name="website_id" optional="show" invisible="kind != 'tier'"/>
+                <field name="customer_group" optional="show" invisible="kind != 'tier'"/>
+                <field name="quantity" optional="show" invisible="kind != 'tier'"/>
+                <field name="price" class="text-end"/>
+                <field name="price_from" optional="show" invisible="kind != 'special'"/>
+                <field name="price_to" optional="show" invisible="kind != 'special'"/>
+                <field name="pushed_at"/>
+                <field name="key" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_price_push_state_search" model="ir.ui.view">
+        <field name="name">magento.price.push.state.search</field>
+        <field name="model">magento.price.push.state</field>
+        <field name="arch" type="xml">
+            <search string="Pushed Prices">
+                <field name="sku"/>
+                <field name="product_id"/>
+                <field name="rule_id"/>
+                <field name="customer_group"/>
+                <filter name="base" string="Base" domain="[('kind', '=', 'base')]"/>
+                <filter name="special" string="Special" domain="[('kind', '=', 'special')]"/>
+                <filter name="tier" string="Tier" domain="[('kind', '=', 'tier')]"/>
+                <group>
+                    <filter name="group_rule" string="Rule" context="{'group_by': 'rule_id'}"/>
+                    <filter name="group_kind" string="Kind" context="{'group_by': 'kind'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_price_push_state" model="ir.actions.act_window">
+        <field name="name">Pushed Prices</field>
+        <field name="res_model">magento.price.push.state</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_price_push_state_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Nothing pushed yet</p>
+            <p>Each row is a price Magento accepted. Only prices that differ from it are sent again.</p>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Price rules: Configuration > Price Export
+         ============================================================ -->
+    <record id="view_magento_price_rule_list" model="ir.ui.view">
+        <field name="name">magento.price.rule.list</field>
+        <field name="model">magento.price.rule</field>
+        <field name="arch" type="xml">
+            <list string="Price Export Rules" decoration-muted="not active">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="instance_id" column_invisible="context.get('default_instance_id')"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="pricelist_id"/>
+                <field name="kind" widget="badge"
+                       decoration-info="kind == 'base'"
+                       decoration-warning="kind == 'special'"
+                       decoration-success="kind == 'tier'"/>
+                <field name="scope" optional="show"/>
+                <field name="effective_store_id" optional="hide"/>
+                <field name="effective_website_id" optional="hide"/>
+                <field name="customer_group_codes" optional="show"/>
+                <field name="last_push_at" optional="show"/>
+                <field name="last_push_state" widget="badge" optional="show"
+                       decoration-success="last_push_state == 'done'"
+                       decoration-warning="last_push_state == 'partial'"
+                       decoration-danger="last_push_state == 'failed'"/>
+                <field name="push_state_count" string="Pushed" optional="show"/>
+                <field name="auto_push" widget="boolean_toggle" optional="hide"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_price_rule_form" model="ir.ui.view">
+        <field name="name">magento.price.rule.form</field>
+        <field name="model">magento.price.rule</field>
+        <field name="arch" type="xml">
+            <form string="Price Export Rule">
+                <header>
+                    <button name="action_push_prices" type="object" string="Push Prices Now"
+                            class="btn-primary" invisible="not active or not id"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_resend_all" type="object" string="Resend All"
+                            invisible="not active or not id"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_remove_from_magento" type="object" string="Remove from Magento"
+                            invisible="kind == 'base' or push_state_count == 0"
+                            confirm="Delete in Magento the special / tier prices this rule created?"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_push_states" type="object"
+                                class="oe_stat_button" icon="fa-tags">
+                            <field name="push_state_count" widget="statinfo" string="Pushed Prices"/>
+                        </button>
+                    </div>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <field name="active" invisible="1"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Retail prices"/></h1>
+                    </div>
+                    <group>
+                        <group string="Source">
+                            <field name="instance_id" options="{'no_create': True}"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="pricelist_id" options="{'no_create': True}"/>
+                            <field name="currency_id" groups="base.group_multi_currency"/>
+                            <field name="kind" widget="radio"/>
+                        </group>
+                        <group string="Magento Scope">
+                            <field name="scope" widget="radio"/>
+                            <field name="magento_store_id" invisible="scope != 'store'"/>
+                            <field name="store_view_name" invisible="scope != 'store' or not store_view_name"/>
+                            <field name="magento_website_id" invisible="scope != 'store'"/>
+                            <field name="website_code" invisible="scope != 'store'"/>
+                            <field name="effective_store_id" invisible="kind == 'tier'"/>
+                            <field name="effective_website_id" invisible="kind != 'tier'"/>
+                        </group>
+                    </group>
+                    <group invisible="kind != 'tier'">
+                        <group string="Customer Groups">
+                            <field name="customer_group_mode" widget="radio"/>
+                            <field name="customer_group_id" options="{'no_create': True}"
+                                   invisible="customer_group_mode != 'group'"
+                                   required="kind == 'tier' and customer_group_mode == 'group'"/>
+                            <field name="customer_group_codes"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-info" role="status" invisible="kind != 'special'">
+                        The pricelist price for one unit is sent as the special price of each
+                        product a pricelist item applies to; the item's start and end dates
+                        become its From / To dates. When the item is removed or expires, the
+                        special price is deleted in Magento.
+                    </div>
+                    <div class="alert alert-info" role="status" invisible="kind != 'tier'">
+                        Pricelist items with a minimum quantity above 1 become Magento tier prices
+                        (fixed price per unit) for the groups above, when they make the product
+                        cheaper than one unit. Tier prices the rule no longer produces are deleted
+                        in Magento.
+                    </div>
+                    <notebook>
+                        <page name="push" string="Last Push">
+                            <group>
+                                <group>
+                                    <field name="last_push_at"/>
+                                    <field name="last_push_state" widget="badge"
+                                           decoration-success="last_push_state == 'done'"
+                                           decoration-warning="last_push_state == 'partial'"
+                                           decoration-danger="last_push_state == 'failed'"/>
+                                    <field name="auto_push" widget="boolean_toggle"/>
+                                </group>
+                                <group>
+                                    <field name="sequence"/>
+                                </group>
+                            </group>
+                            <field name="last_push_summary" nolabel="1" readonly="1"
+                                   placeholder="Not pushed yet."/>
+                        </page>
+                        <page name="states" string="Pushed Prices">
+                            <field name="push_state_ids" nolabel="1" readonly="1"
+                                   context="{'default_rule_id': id}"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_price_rule_search" model="ir.ui.view">
+        <field name="name">magento.price.rule.search</field>
+        <field name="model">magento.price.rule</field>
+        <field name="arch" type="xml">
+            <search string="Price Export Rules">
+                <field name="name"/>
+                <field name="instance_id"/>
+                <field name="pricelist_id"/>
+                <filter name="base" string="Base Price" domain="[('kind', '=', 'base')]"/>
+                <filter name="special" string="Special Price" domain="[('kind', '=', 'special')]"/>
+                <filter name="tier" string="Tier Prices" domain="[('kind', '=', 'tier')]"/>
+                <separator/>
+                <filter name="failed" string="Last push failed"
+                        domain="[('last_push_state', 'in', ('partial', 'failed'))]"/>
+                <filter name="never" string="Never pushed" domain="[('last_push_at', '=', False)]"/>
+                <separator/>
+                <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_kind" string="Kind" context="{'group_by': 'kind'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_price_rule" model="ir.actions.act_window">
+        <field name="name">Price Export</field>
+        <field name="res_model">magento.price.rule</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_price_rule_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No price export rule yet</p>
+            <p>A rule pushes an Odoo pricelist to Magento as base prices, special prices with
+               dates, or tier prices per customer group, globally or for one website / store view.
+               Only prices that changed since the last push are sent.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_price_rule" name="Price Export"
+              parent="sdlc_magento_connector.menu_magento_configuration"
+              action="action_magento_price_rule" sequence="18"/>
+
+    <record id="action_magento_price_rule_push" model="ir.actions.server">
+        <field name="name">Push Prices Now</field>
+        <field name="model_id" ref="model_magento_price_rule"/>
+        <field name="binding_model_id" ref="model_magento_price_rule"/>
+        <field name="binding_view_types">list</field>
+        <field name="group_ids" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
+        <field name="state">code</field>
+        <field name="code">action = records.action_push_prices()</field>
+    </record>
+
+    <!-- ============================================================
+         Instance form: Price Rules smart button
+         ============================================================ -->
+    <record id="view_magento_instance_form_pricing_p2" model="ir.ui.view">
+        <field name="name">magento.instance.form.pricing.p2</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_price_rules" type="object"
+                        class="oe_stat_button" icon="fa-tags">
+                    <field name="price_rule_count" widget="statinfo" string="Price Rules"/>
+                </button>
+            </div>
+        </field>
+    </record>
+
+</odoo>

@@ -20,3 +20,4 @@ from . import test_p2_stock
 from . import test_p2_orders
 from . import test_p2_catalog
 from . import test_p2_shipping
+from . import test_p2_pricing
