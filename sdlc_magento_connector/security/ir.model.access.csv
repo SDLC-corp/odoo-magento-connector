@@ -68,3 +68,7 @@ access_magento_setup_wizard_store_manager,magento.setup.wizard.store manager,mod
 access_magento_setup_wizard_mapping_manager,magento.setup.wizard.mapping manager,model_magento_setup_wizard_mapping,group_magento_manager,1,1,1,1
 access_magento_setup_wizard_check_manager,magento.setup.wizard.check manager,model_magento_setup_wizard_check,group_magento_manager,1,1,1,1
 access_magento_setup_wizard_issue_manager,magento.setup.wizard.issue manager,model_magento_setup_wizard_issue,group_magento_manager,1,1,1,1
+access_magento_return_reason_user,magento.return.reason user,model_magento_return_reason,base.group_user,1,0,0,0
+access_magento_return_reason_manager,magento.return.reason manager,model_magento_return_reason,group_magento_manager,1,1,1,1
+access_magento_return_location_rule_user,magento.return.location.rule user,model_magento_return_location_rule,group_magento_user,1,0,0,0
+access_magento_return_location_rule_manager,magento.return.location.rule manager,model_magento_return_location_rule,group_magento_manager,1,1,1,1

@@ -24,3 +24,4 @@ from . import test_p2_pricing
 from . import test_p2_stores
 from . import test_p2_fixes
 from . import test_p2_wizard
+from . import test_p3_returns

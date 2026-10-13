@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ================================================================
+         Returns lifecycle (3.2): reasons, return location rules, instance
+         "Returns" tab, credit note refund mode / restock, return pickings.
+         ================================================================ -->
+
+    <!-- Return reasons -->
+    <record id="view_magento_return_reason_list" model="ir.ui.view">
+        <field name="name">magento.return.reason.list</field>
+        <field name="model">magento.return.reason</field>
+        <field name="arch" type="xml">
+            <list string="Return Reasons" editable="bottom" decoration-muted="not active">
+                <field name="sequence" widget="handle"/>
+                <field name="code"/>
+                <field name="name"/>
+                <field name="restock" widget="boolean_toggle"/>
+                <field name="instance_id" options="{'no_create': True}" placeholder="All instances"
+                       optional="show"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_return_reason_search" model="ir.ui.view">
+        <field name="name">magento.return.reason.search</field>
+        <field name="model">magento.return.reason</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="code"/>
+                <field name="name"/>
+                <field name="instance_id"/>
+                <filter name="no_restock" string="Not returned to stock" domain="[('restock', '=', False)]"/>
+                <separator/>
+                <filter name="archived" string="Archived" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_return_reason" model="ir.actions.act_window">
+        <field name="name">Return Reasons</field>
+        <field name="res_model">magento.return.reason</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_return_reason_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No return reason yet</p>
+            <p>Reasons are set on credit notes and return receipts, sent to Magento as the credit
+               memo comment, and recognised in the comments of imported Magento credit memos.
+               A reason can block the return to stock (e.g. damaged goods).</p>
+        </field>
+    </record>
+
+    <!-- Return location rules -->
+    <record id="view_magento_return_location_rule_list" model="ir.ui.view">
+        <field name="name">magento.return.location.rule.list</field>
+        <field name="model">magento.return.location.rule</field>
+        <field name="arch" type="xml">
+            <list string="Return Locations" editable="bottom" decoration-muted="not active">
+                <field name="sequence" widget="handle"/>
+                <field name="instance_id" options="{'no_create': True}"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="warehouse_id" options="{'no_create': True}" placeholder="Any warehouse"/>
+                <field name="categ_id" options="{'no_create': True}" placeholder="Any category"/>
+                <field name="reason_id" options="{'no_create': True}" placeholder="Any reason"/>
+                <field name="location_id" options="{'no_create': True}"/>
+                <field name="active" widget="boolean_toggle" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_magento_return_location_rule" model="ir.actions.act_window">
+        <field name="name">Return Locations</field>
+        <field name="res_model">magento.return.location.rule</field>
+        <field name="view_mode">list</field>
+        <field name="context">{'active_test': False}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No return location rule</p>
+            <p>Returned goods of imported Magento credit memos go to the first matching rule
+               (by sequence) on warehouse, product category and reason; without a match, to the
+               stock location of the order's warehouse.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_returns_config" name="Returns" parent="menu_magento_configuration"
+              sequence="35"/>
+    <menuitem id="menu_magento_return_reason" name="Return Reasons" parent="menu_magento_returns_config"
+              action="action_magento_return_reason" sequence="10"/>
+    <menuitem id="menu_magento_return_location_rule" name="Return Locations"
+              parent="menu_magento_returns_config" action="action_magento_return_location_rule"
+              sequence="20"/>
+
+    <!-- Payment methods: refund mode -->
+    <record id="view_magento_payment_map_list_p3_returns" model="ir.ui.view">
+        <field name="name">magento.payment.map.list.p3.returns</field>
+        <field name="model">magento.payment.map</field>
+        <field name="inherit_id" ref="view_magento_payment_map_list"/>
+        <field name="arch" type="xml">
+            <field name="refund_method_line_id" position="after">
+                <field name="refund_mode"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- Instance form: Returns tab -->
+    <record id="view_magento_instance_form_p3_returns" model="ir.ui.view">
+        <field name="name">magento.instance.form.p3.returns</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='orders_payments']" position="after">
+                <page string="Returns" name="returns">
+                    <group>
+                        <group string="Odoo Credit Notes to Magento">
+                            <field name="magento_refund_online"/>
+                            <field name="magento_refund_notify"/>
+                        </group>
+                        <group string="Magento Credit Memos to Odoo">
+                            <field name="magento_import_restock"/>
+                        </group>
+                    </group>
+                    <div class="text-muted small mb-3">
+                        Online refunds go through the payment gateway (/V1/invoice/{id}/refund);
+                        check/money order, bank transfer and cash on delivery always refund offline.
+                        Override per payment method in Configuration › Orders › Payment Methods.
+                    </div>
+                    <group>
+                        <group string="Refund Adjustment (extra refund)">
+                            <field name="refund_adjustment_product_id" options="{'no_create': True}"
+                                   placeholder="Created on first use"/>
+                            <field name="refund_adjustment_account_id" options="{'no_create': True}"
+                                   placeholder="Product income account"/>
+                        </group>
+                        <group string="Return Fee (kept by the store)">
+                            <field name="return_fee_product_id" options="{'no_create': True}"
+                                   placeholder="Created on first use"/>
+                            <field name="return_fee_account_id" options="{'no_create': True}"
+                                   placeholder="Product income account"/>
+                        </group>
+                    </group>
+                    <separator string="Return Locations"/>
+                    <field name="return_location_rule_ids" context="{'default_instance_id': id}">
+                        <list editable="bottom" decoration-muted="not active">
+                            <field name="sequence" widget="handle"/>
+                            <field name="warehouse_id" options="{'no_create': True}"
+                                   placeholder="Any warehouse"/>
+                            <field name="categ_id" options="{'no_create': True}" placeholder="Any category"/>
+                            <field name="reason_id" options="{'no_create': True}" placeholder="Any reason"/>
+                            <field name="location_id" options="{'no_create': True}"/>
+                            <field name="active" widget="boolean_toggle"/>
+                        </list>
+                    </field>
+                    <div class="text-muted small mb-3">
+                        The first matching rule wins; without a match, returns go to the stock location
+                        of the order's warehouse.
+                    </div>
+                    <separator string="Return Reasons"/>
+                    <field name="return_reason_ids" context="{'default_instance_id': id}">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="code"/>
+                            <field name="name"/>
+                            <field name="restock" widget="boolean_toggle"/>
+                        </list>
+                    </field>
+                    <div class="text-muted small">
+                        Reasons of this instance only; reasons shared by every instance are in
+                        Configuration › Returns › Return Reasons.
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Credit note form: refund mode badge, restock flag, reason, return receipts -->
+    <record id="view_move_form_magento_p3_returns" model="ir.ui.view">
+        <field name="name">account.move.form.magento.p3.returns</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="view_move_form_magento_inherit"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[.//field[@name='magento_credit_memo_created_at']]" position="inside">
+                <group string="Return" invisible="move_type != 'out_refund'">
+                    <group>
+                        <field name="magento_refund_mode" widget="badge" readonly="1"
+                               invisible="not magento_refund_mode"
+                               decoration-info="magento_refund_mode == 'online'"
+                               decoration-muted="magento_refund_mode == 'offline'"/>
+                        <field name="magento_restock" readonly="1"/>
+                        <field name="magento_restock_waiting" readonly="1"
+                               invisible="not magento_restock_waiting" decoration-warning="1"/>
+                    </group>
+                    <group>
+                        <field name="magento_return_reason_id" options="{'no_create': True}"
+                               readonly="magento_credit_memo_id"/>
+                        <field name="magento_return_picking_ids" widget="many2many_tags"
+                               invisible="not magento_return_picking_ids"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Return picking: credit note and reason -->
+    <record id="view_stock_picking_form_magento_p3_returns" model="ir.ui.view">
+        <field name="name">stock.picking.form.magento.p3.returns</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="view_stock_picking_form_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <group string="Magento Return"
+                       invisible="not magento_order_id or picking_type_code != 'incoming'">
+                    <group>
+                        <field name="magento_return_reason_id" options="{'no_create': True}"/>
+                    </group>
+                    <group>
+                        <field name="magento_refund_move_id" invisible="not magento_refund_move_id"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Return wizard: reason -->
+    <record id="view_stock_return_picking_form_magento_p3" model="ir.ui.view">
+        <field name="name">stock.return.picking.form.magento.p3</field>
+        <field name="model">stock.return.picking</field>
+        <field name="inherit_id" ref="stock.view_stock_return_picking_form"/>
+        <field name="arch" type="xml">
+            <field name="product_return_moves" position="before">
+                <field name="magento_order" invisible="1"/>
+                <group invisible="not magento_order">
+                    <field name="magento_return_reason_id" options="{'no_create': True}"/>
+                </group>
+            </field>
+        </field>
+    </record>
+</odoo>
