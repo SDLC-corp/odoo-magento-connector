@@ -30,6 +30,14 @@
         </div>
       </div>
       <div class="mg-masthead__actions">
+        <button t-if="data and data.instances.length" type="button" class="mg-digest"
+                t-att-class="{'mg-digest--none': !data.last_digest}"
+                t-att-title="lastDigestTitle"
+                t-att-disabled="!data.last_digest"
+                t-on-click="() => this.open(data.last_digest and data.last_digest.drill)">
+          <i class="fa fa-envelope-o" aria-hidden="true"/>
+          <span t-esc="lastDigestLabel"/>
+        </button>
         <button type="button" class="mg-btn" t-on-click="() => this.load()" t-att-disabled="state.loading">
           <i class="fa fa-refresh" t-att-class="{'mg-btn__spin': state.loading}" aria-hidden="true"/>
           <t t-if="state.loading">Refreshing</t>
@@ -174,7 +182,45 @@
             </ul>
           </section>
 
-          <div class="mg-flow" t-if="!data.orders_hidden or !data.issues_hidden">
+          <div class="mg-flow" t-if="data.net_profit or !data.orders_hidden or !data.issues_hidden">
+            <!-- Net profit (period): a panel, the KPI rail is full (see magento_dashboard.py). -->
+            <section class="mg-panel mg-panel--profit" t-if="data.net_profit">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Net profit (period)</h2>
+                <p class="mg-panel__hint">
+                  <t t-esc="periodLabel"/> · <t t-esc="data.currency.name"/> · excl. tax
+                </p>
+              </div>
+              <p t-if="!data.net_profit.orders" class="mg-empty">No Magento orders dated in this period.</p>
+              <t t-else="">
+                <div t-attf-class="mg-profit__total {{ data.net_profit.tone ? 'mg-profit__total--' + data.net_profit.tone : '' }}"
+                     role="link" tabindex="0" title="Open the net profit report"
+                     t-on-click="() => this.open(data.net_profit.drill)"
+                     t-on-keydown="(ev) => this.onKeyOpen(ev, data.net_profit.drill)">
+                  <span class="mg-profit__value" t-esc="money(data.net_profit.net)"/>
+                  <span class="mg-profit__meta">
+                    <span t-if="marginLabel" t-esc="marginLabel"/>
+                    <span><t t-esc="count(data.net_profit.orders)"/> orders</span>
+                  </span>
+                </div>
+                <ul class="mg-profit">
+                  <li t-foreach="data.net_profit.rows" t-as="row" t-key="row.key"
+                      class="mg-profit__row" role="link" tabindex="0" t-att-title="row.hint"
+                      t-att-class="{'mg-profit__row--minus': row.sign &lt; 0}"
+                      t-on-click="() => this.open(row.drill)"
+                      t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                    <span class="mg-profit__label" t-esc="row.label"/>
+                    <span class="mg-num" t-esc="signedMoney(row)"/>
+                  </li>
+                </ul>
+                <button t-if="data.net_profit.estimated_orders" type="button" class="mg-profit__note"
+                        t-on-click="() => this.open(data.net_profit.estimated_drill)">
+                  <i class="fa fa-info-circle" aria-hidden="true"/>
+                  Shipping estimated on <t t-esc="count(data.net_profit.estimated_orders)"/> order(s): no carrier cost known.
+                </button>
+              </t>
+            </section>
+
             <section class="mg-panel" t-if="!data.issues_hidden">
               <div class="mg-panel__head">
                 <h2 class="mg-panel__title">Error center by entity</h2>

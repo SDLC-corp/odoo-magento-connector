@@ -118,7 +118,7 @@ export class MagentoConsole extends Component {
             views: drill.views,
             domain: drill.domain,
             target: "current",
-            context: { create: false },
+            context: { create: false, ...(drill.context || {}) },
         };
         if (drill.res_id) {
             action.res_id = drill.res_id;
@@ -130,7 +130,9 @@ export class MagentoConsole extends Component {
                     Object.assign(action, {
                         id: base.id,
                         xml_id: base.xml_id,
-                        views: base.views?.length ? base.views : action.views,
+                        // `keep_views`: the drill asks for its own first view (e.g. a list
+                        // grouped by order inside a pivot-first report action).
+                        views: !drill.keep_views && base.views?.length ? base.views : action.views,
                         search_view_id: base.search_view_id,
                         help: base.help,
                     });
@@ -221,6 +223,37 @@ export class MagentoConsole extends Component {
             return _t("%s perm.", this.count(row.permanent));
         }
         return row.permanent ? _t("permanent") : _t("transient");
+    }
+
+    /** Masthead: when the last daily digest was queued. */
+    get lastDigestLabel() {
+        const digest = this.data?.last_digest;
+        if (!digest) {
+            return _t("No digest sent yet");
+        }
+        const dt = deserializeDateTime(digest.sent_at);
+        return _t("Digest sent %s", dt.toRelative() || formatDateTime(dt));
+    }
+
+    get lastDigestTitle() {
+        const digest = this.data?.last_digest;
+        return digest
+            ? _t("%(instance)s, %(when)s", {
+                  instance: digest.instance,
+                  when: formatDateTime(deserializeDateTime(digest.sent_at)),
+              })
+            : _t("Turn on the 'Magento: Daily Digest' scheduled action, or use Send Digest Now on an instance.");
+    }
+
+    /** Net profit panel: signed component amount. */
+    signedMoney(row) {
+        const value = Number(row.value) || 0;
+        return row.sign < 0 && value ? `− ${this.money(Math.abs(value))}` : this.money(value);
+    }
+
+    get marginLabel() {
+        const margin = this.data?.net_profit?.margin;
+        return margin === false || margin === undefined ? "" : _t("%s margin", `${margin}%`);
     }
 
     lastSyncTitle(inst) {

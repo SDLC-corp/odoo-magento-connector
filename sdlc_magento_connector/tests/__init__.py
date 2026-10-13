@@ -32,3 +32,4 @@ from . import test_p3_catalog
 from . import test_p3_accs
 from . import test_p3_b2b
 from . import test_p3_dryrun
+from . import test_p3_insights

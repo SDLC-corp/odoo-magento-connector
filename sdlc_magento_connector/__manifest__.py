@@ -41,6 +41,8 @@
         'views/magento_catalog_p3_views.xml',
         'views/magento_b2b_p3_views.xml',
         'views/magento_dryrun_p3_views.xml',
+        'views/magento_insights_p3_views.xml',
+        'data/magento_insights_data.xml',
     ],
     'assets': {
         'web.assets_backend': [

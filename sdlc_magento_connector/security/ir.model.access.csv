@@ -92,3 +92,10 @@ access_magento_dryrun_user,magento.dryrun user,model_magento_dryrun,group_magent
 access_magento_dryrun_manager,magento.dryrun manager,model_magento_dryrun,group_magento_manager,1,1,1,1
 access_magento_dryrun_line_user,magento.dryrun.line user,model_magento_dryrun_line,group_magento_user,1,0,0,0
 access_magento_dryrun_line_manager,magento.dryrun.line manager,model_magento_dryrun_line,group_magento_manager,1,1,1,1
+access_magento_digest_user,magento.digest user,model_magento_digest,group_magento_user,1,0,0,0
+access_magento_digest_manager,magento.digest manager,model_magento_digest,group_magento_manager,1,1,1,1
+access_magento_digest_link_user,magento.digest.link user,model_magento_digest_link,group_magento_user,1,0,0,0
+access_magento_digest_link_manager,magento.digest.link manager,model_magento_digest_link,group_magento_manager,1,1,1,1
+access_magento_net_profit_user,magento.net.profit user,model_magento_net_profit,group_magento_user,1,0,0,0
+access_magento_settings_transfer_manager,magento.settings.transfer manager,model_magento_settings_transfer,group_magento_manager,1,1,1,1
+access_magento_settings_transfer_line_manager,magento.settings.transfer.line manager,model_magento_settings_transfer_line,group_magento_manager,1,1,1,1

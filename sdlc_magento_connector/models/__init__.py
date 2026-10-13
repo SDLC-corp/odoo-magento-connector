@@ -31,3 +31,4 @@ from . import magento_catalog_p3
 from . import magento_accs
 from . import magento_b2b
 from . import magento_dryrun
+from . import magento_insights
