@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 3 catalog: tier price import (3.4), bundle / grouped
+         export (3.5). Standard views only (house style: odoo-trs-ui).
+         ============================================================ -->
+
+    <!-- Imported tier prices (read only). -->
+    <record id="view_magento_tier_price_import_list" model="ir.ui.view">
+        <field name="name">magento.tier.price.import.list</field>
+        <field name="model">magento.tier.price.import</field>
+        <field name="arch" type="xml">
+            <list string="Imported Tier Prices" create="0" edit="0" import="0">
+                <field name="instance_id" column_invisible="context.get('default_instance_id')"/>
+                <field name="sku"/>
+                <field name="product_id" optional="show"/>
+                <field name="customer_group" widget="badge"
+                       decoration-info="customer_group == 'ALL GROUPS'"/>
+                <field name="website_id" optional="hide"/>
+                <field name="quantity" class="text-end"/>
+                <field name="price_type" widget="badge"
+                       decoration-success="price_type == 'fixed'"
+                       decoration-warning="price_type == 'discount'"/>
+                <field name="value" class="text-end"/>
+                <field name="pricelist_id" optional="show"/>
+                <field name="item_id" optional="hide"/>
+                <field name="imported_at" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_tier_price_import_search" model="ir.ui.view">
+        <field name="name">magento.tier.price.import.search</field>
+        <field name="model">magento.tier.price.import</field>
+        <field name="arch" type="xml">
+            <search string="Imported Tier Prices">
+                <field name="sku"/>
+                <field name="product_id"/>
+                <field name="customer_group"/>
+                <field name="pricelist_id"/>
+                <field name="instance_id"/>
+                <filter name="all_groups" string="All Groups" domain="[('customer_group', '=', 'ALL GROUPS')]"/>
+                <filter name="per_group" string="One Customer Group" domain="[('customer_group', '!=', 'ALL GROUPS')]"/>
+                <separator/>
+                <filter name="fixed" string="Fixed Price" domain="[('price_type', '=', 'fixed')]"/>
+                <filter name="discount" string="Discount" domain="[('price_type', '=', 'discount')]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_customer_group" string="Customer Group" context="{'group_by': 'customer_group'}"/>
+                    <filter name="group_pricelist" string="Pricelist" context="{'group_by': 'pricelist_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_tier_price_import" model="ir.actions.act_window">
+        <field name="name">Imported Tier Prices</field>
+        <field name="res_model">magento.tier.price.import</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_tier_price_import_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No tier price imported yet</p>
+            <p>Use "Import Tier Prices" on the instance (Catalog tab). Each row is a Magento tier
+               price kept in step with a pricelist item; rows disappear with their Magento tier.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_tier_price_import" name="Tier Prices" parent="menu_magento_data"
+              action="action_magento_tier_price_import" sequence="47"/>
+
+    <!-- ============================================================
+         Instance form: tier price import (Catalog tab) + smart button
+         ============================================================ -->
+    <record id="view_magento_instance_form_catalog_p3" model="ir.ui.view">
+        <field name="name">magento.instance.form.catalog.p3</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_tier_imports" type="object"
+                        class="oe_stat_button" icon="fa-sort-amount-asc"
+                        invisible="tier_import_count == 0">
+                    <field name="tier_import_count" widget="statinfo" string="Tier Prices"/>
+                </button>
+            </div>
+            <page name="catalog" position="inside">
+                <group name="catalog_tier_prices_p3">
+                    <group string="Tier and Customer-Group Prices">
+                        <field name="import_tier_prices" widget="boolean_toggle"/>
+                        <field name="magento_tier_pricelist_id" options="{'no_create': True}"
+                               placeholder="Created on the first import"/>
+                        <field name="magento_tier_group_pricelists" widget="boolean_toggle"/>
+                        <div class="text-muted small" colspan="2">
+                            ALL GROUPS tier prices go to the tier price pricelist; a customer group's
+                            go to the group's pricelist. Imported items are kept in step with
+                            Magento and never pushed back by the price export.
+                        </div>
+                        <button name="action_import_tier_prices" type="object"
+                                string="Import Tier Prices" class="btn-secondary" colspan="2"
+                                groups="sdlc_magento_connector.group_magento_manager"/>
+                    </group>
+                </group>
+            </page>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Product binding form: editable bundle / grouped components
+         ============================================================ -->
+    <record id="view_magento_product_map_form_p3" model="ir.ui.view">
+        <field name="name">magento.product.map.form.p3</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_form_p2"/>
+        <field name="arch" type="xml">
+            <field name="child_link_ids" position="attributes">
+                <attribute name="readonly">type_id not in ('bundle', 'grouped')</attribute>
+                <attribute name="context">{'default_link_type': type_id}</attribute>
+            </field>
+            <xpath expr="//field[@name='child_link_ids']/list" position="attributes">
+                <attribute name="editable">bottom</attribute>
+            </xpath>
+            <xpath expr="//field[@name='child_link_ids']/list/field[@name='child_sku']" position="before">
+                <field name="link_type" column_invisible="True"/>
+                <field name="option_type" optional="hide" placeholder="select"
+                       column_invisible="parent.type_id != 'bundle'"/>
+            </xpath>
+            <xpath expr="//field[@name='child_link_ids']/list/field[@name='child_map_id']" position="attributes">
+                <attribute name="domain">[('instance_id', '=', parent.instance_id), ('type_id', 'not in', ('configurable', 'bundle', 'grouped'))]</attribute>
+                <attribute name="options">{'no_create': True}</attribute>
+            </xpath>
+            <xpath expr="//page[@name='magento_children']/div[last()]" position="after">
+                <div class="text-muted small mb-2" invisible="type_id not in ('bundle', 'grouped')">
+                    Export sends these components with the product (a kit bill of materials, when
+                    the product has one, takes precedence). Every component SKU must already exist
+                    in Magento.
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Product template: "Export as Magento bundle / grouped"
+         ============================================================ -->
+    <record id="view_product_template_form_magento_p3" model="ir.ui.view">
+        <field name="name">product.template.form.magento.p3</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Magento" name="magento_composite"
+                      groups="sdlc_magento_connector.group_magento_user">
+                    <group>
+                        <group string="Magento Product Type">
+                            <field name="magento_composite_type" widget="radio"
+                                   placeholder="Simple product"/>
+                            <field name="magento_bundle_price_type" widget="radio"
+                                   invisible="magento_composite_type != 'bundle'"/>
+                        </group>
+                        <group>
+                            <div class="text-muted small" colspan="2">
+                                Leave empty for an ordinary (simple) product. A bundle takes its
+                                options from the product's kit (Manufacturing), else from the
+                                components of its Magento binding; a grouped product shows its
+                                associated products together.
+                            </div>
+                            <button name="action_magento_export_composite" type="object"
+                                    string="Export to Magento" class="btn-primary" colspan="2"
+                                    invisible="not magento_composite_type or not id"
+                                    groups="sdlc_magento_connector.group_magento_manager"/>
+                        </group>
+                    </group>
+                    <div invisible="not magento_composite_type">
+                        <div class="o_form_label text-uppercase small fw-bold text-muted mb-1"
+                             style="letter-spacing: .07em">Components</div>
+                        <field name="magento_composite_preview" nolabel="1" readonly="1"/>
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Pricelist rules: mark the ones imported from Magento. -->
+    <record id="view_product_pricelist_form_magento_p3" model="ir.ui.view">
+        <field name="name">product.pricelist.form.magento.p3</field>
+        <field name="model">product.pricelist</field>
+        <field name="inherit_id" ref="product.product_pricelist_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='item_ids']/list/field[@name='min_quantity']" position="after">
+                <field name="magento_tier_imported" string="From Magento" optional="show"
+                       groups="sdlc_magento_connector.group_magento_user"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
