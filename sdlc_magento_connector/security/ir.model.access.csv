@@ -68,3 +68,7 @@ access_magento_setup_wizard_store_manager,magento.setup.wizard.store manager,mod
 access_magento_setup_wizard_mapping_manager,magento.setup.wizard.mapping manager,model_magento_setup_wizard_mapping,group_magento_manager,1,1,1,1
 access_magento_setup_wizard_check_manager,magento.setup.wizard.check manager,model_magento_setup_wizard_check,group_magento_manager,1,1,1,1
 access_magento_setup_wizard_issue_manager,magento.setup.wizard.issue manager,model_magento_setup_wizard_issue,group_magento_manager,1,1,1,1
+access_magento_order_conflict_user,magento.order.conflict user,model_magento_order_conflict,group_magento_user,1,1,0,0
+access_magento_order_conflict_manager,magento.order.conflict manager,model_magento_order_conflict,group_magento_manager,1,1,1,1
+access_magento_order_status_event_user,magento.order.status.event user,model_magento_order_status_event,group_magento_user,1,0,0,0
+access_magento_order_status_event_manager,magento.order.status.event manager,model_magento_order_status_event,group_magento_manager,1,1,1,1
