@@ -273,4 +273,10 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_shared_catalog_company" model="ir.rule">
+        <field name="name">Magento shared catalog: multi-company</field>
+        <field name="model_id" ref="model_magento_shared_catalog"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

@@ -28,3 +28,5 @@ from . import test_p3_conflicts
 from . import test_p3_totals
 from . import test_p3_returns
 from . import test_p3_webhooks
+from . import test_p3_accs
+from . import test_p3_b2b
