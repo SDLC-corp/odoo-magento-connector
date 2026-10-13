@@ -82,3 +82,10 @@ access_magento_return_location_rule_user,magento.return.location.rule user,model
 access_magento_return_location_rule_manager,magento.return.location.rule manager,model_magento_return_location_rule,group_magento_manager,1,1,1,1
 access_magento_webhook_event_user,magento.webhook.event user,model_magento_webhook_event,group_magento_user,1,0,0,0
 access_magento_webhook_event_manager,magento.webhook.event manager,model_magento_webhook_event,group_magento_manager,1,0,0,1
+access_magento_digest_user,magento.digest user,model_magento_digest,group_magento_user,1,0,0,0
+access_magento_digest_manager,magento.digest manager,model_magento_digest,group_magento_manager,1,1,1,1
+access_magento_digest_link_user,magento.digest.link user,model_magento_digest_link,group_magento_user,1,0,0,0
+access_magento_digest_link_manager,magento.digest.link manager,model_magento_digest_link,group_magento_manager,1,1,1,1
+access_magento_net_profit_user,magento.net.profit user,model_magento_net_profit,group_magento_user,1,0,0,0
+access_magento_settings_transfer_manager,magento.settings.transfer manager,model_magento_settings_transfer,group_magento_manager,1,1,1,1
+access_magento_settings_transfer_line_manager,magento.settings.transfer.line manager,model_magento_settings_transfer_line,group_magento_manager,1,1,1,1

@@ -26,6 +26,9 @@ JOB_QUEUE_ACTION = "sdlc_magento_connector.action_magento_job"
 ACTIVE_JOB_STATES = ("pending", "started")
 # An auto-synced instance whose orders marker has not moved for this long is flagged.
 STALE_MARKER_HOURS = 24
+NET_PROFIT_MODEL = "magento.net.profit"
+NET_PROFIT_ACTION = "sdlc_magento_connector.action_magento_net_profit"
+DIGEST_MODEL = "magento.digest"
 
 
 class MagentoDashboard(models.AbstractModel):
@@ -69,6 +72,13 @@ class MagentoDashboard(models.AbstractModel):
          "Every sync run and its errors", "fa-history", "Configuration & logs"),
         ("sdlc_magento_connector.action_magento_mapping_report", "Mapping report",
          "Mapping coverage check", "fa-check-square-o", "Configuration & logs"),
+        # Phase 3.10
+        (NET_PROFIT_ACTION, "Net profit",
+         "Revenue minus refunds, cost of goods, shipping and payment fees", "fa-line-chart",
+         "Operations"),
+        ("sdlc_magento_connector.action_magento_settings_transfer", "Settings export/import",
+         "Copy an instance's configuration to another instance", "fa-exchange",
+         "Configuration & logs"),
     ]
 
     # ------------------------------------------------------------------
@@ -164,6 +174,8 @@ class MagentoDashboard(models.AbstractModel):
             "orders_hidden": False,
             "by_entity": [],
             "issues_hidden": not self._readable(ISSUE_MODEL),
+            "net_profit": False,
+            "last_digest": False,
         }
         if not all_instances:
             payload["instances_elsewhere"] = Instance.with_context(
@@ -233,6 +245,11 @@ class MagentoDashboard(models.AbstractModel):
         # Drop every figure whose records the user could not open anyway.
         payload["kpis"] = [k for k in kpis if self._readable(k["drill"]["res_model"])]
         payload["attention"] = [a for a in attention if self._readable(a["drill"]["res_model"])]
+        # Phase 3.10: the rail is full (seven tiles, one row on desktop), so net profit is a
+        # panel with its own breakdown rather than an eighth tile.
+        if self._readable(NET_PROFIT_MODEL):
+            payload["net_profit"] = self._net_profit(scope, companies, payload["date_from"], currency, company)
+        payload["last_digest"] = self._last_digest(scope)
         return payload
 
     def _readable(self, model_name):
@@ -721,6 +738,90 @@ class MagentoDashboard(models.AbstractModel):
                 ),
             })
         return items[:ATTENTION_LIMIT]
+
+    # ------------------------------------------------------------------
+    # Phase 3.10: net profit panel and last digest
+    # ------------------------------------------------------------------
+    def _net_profit(self, scope, companies, date_from, currency, company):
+        """Net profit of the period: one row per component, each drilling into the report."""
+        domain = [
+            ("instance_id", "in", scope.ids),
+            ("company_id", "in", companies.ids),
+            ("date_order", ">=", date_from),
+        ]
+        measures = ["revenue_untaxed", "refund_amount", "cogs", "shipping_cost", "payment_fee",
+                    "net_profit", "revenue_total"]
+        rows = self.env[NET_PROFIT_MODEL]._read_group(
+            domain, ["currency_id"], ["%s:sum" % m for m in measures] + ["order_count:sum"])
+        rate = self._rate_getter(currency, company)
+        today = fields.Date.context_today(self)
+        totals = dict.fromkeys(measures, 0.0)
+        orders = 0.0
+        for cur, *values in rows:
+            factor = rate(cur, today)
+            for name, value in zip(measures, values[:-1]):
+                totals[name] += (value or 0.0) * factor
+            orders += values[-1] or 0.0
+        estimated = len(self.env[NET_PROFIT_MODEL]._read_group(
+            domain + [("shipping_estimated", "=", True)], ["order_id"], []))
+        action = NET_PROFIT_ACTION if self._user_can_open(NET_PROFIT_ACTION) else False
+
+        def drill(name, extra=(), group_by=None):
+            result = self._drill(NET_PROFIT_MODEL, name, domain + list(extra),
+                                 views=[[False, "list"], [False, "pivot"], [False, "graph"]],
+                                 action=action)
+            if group_by:
+                # A list grouped by order, inside the report action (search view, help).
+                result["context"] = {"group_by": group_by}
+                result["keep_views"] = True
+            return result
+
+        components = [
+            ("revenue_untaxed", _("Revenue excl. tax"), 1, [], _("Magento grand totals minus tax")),
+            ("refund_amount", _("Refunds"), -1, [("refund_amount", "!=", 0)],
+             _("Posted credit notes, excl. tax")),
+            ("cogs", _("Cost of goods"), -1, [("cogs", "!=", 0)],
+             _("Stock valuation of delivered goods, else product cost x quantity delivered")),
+            ("shipping_cost", _("Shipping"), -1, [("shipping_cost", "!=", 0)],
+             _("Carrier cost when known; otherwise the shipping charged (estimate)")),
+            ("payment_fee", _("Payment fees"), -1, [("payment_fee", "!=", 0)],
+             _("Fee % and fixed fee of the payment method mapping")),
+        ]
+        revenue = totals["revenue_untaxed"]
+        net = totals["net_profit"]
+        return {
+            "orders": round(orders),
+            "net": round(net, 2),
+            "revenue_total": round(totals["revenue_total"], 2),
+            "margin": round(net / revenue * 100.0, 1) if revenue else False,
+            "tone": "crit" if net < 0 else "",
+            "estimated_orders": estimated,
+            "rows": [
+                {
+                    "key": key, "label": label, "sign": sign,
+                    "value": round(totals[key], 2), "hint": hint,
+                    "drill": drill(label, extra, group_by=["order_id"]),
+                }
+                for key, label, sign, extra, hint in components
+            ],
+            "estimated_drill": drill(_("Orders with estimated shipping"),
+                                     [("shipping_estimated", "=", True)], group_by=["order_id"]),
+            "drill": drill(_("Net profit")),
+        }
+
+    def _last_digest(self, scope):
+        if not self._readable(DIGEST_MODEL):
+            return False
+        digest = self.env[DIGEST_MODEL].search(
+            [("instance_id", "in", scope.ids), ("state", "=", "sent")], order="sent_at desc, id desc", limit=1)
+        if not digest:
+            return False
+        return {
+            "sent_at": fields.Datetime.to_string(digest.sent_at),
+            "instance": digest.instance_id.name,
+            "drill": self._drill(DIGEST_MODEL, digest.name, [("id", "=", digest.id)],
+                                 views=[[False, "form"]], res_id=digest.id),
+        }
 
     def _drill(self, model, name, domain, views=None, res_id=False, action=False):
         """Describe the records behind a figure; the console turns it into an act_window.

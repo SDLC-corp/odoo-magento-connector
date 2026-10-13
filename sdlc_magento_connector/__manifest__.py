@@ -38,6 +38,8 @@
         'views/magento_totals_p3_views.xml',
         'views/magento_returns_p3_views.xml',
         'views/magento_webhook_p3_views.xml',
+        'views/magento_insights_p3_views.xml',
+        'data/magento_insights_data.xml',
     ],
     'assets': {
         'web.assets_backend': [

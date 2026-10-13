@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Opens the records behind one digest figure: /odoo/<link id>/action-<this action>. -->
+    <record id="action_magento_digest_link_open" model="ir.actions.server">
+        <field name="name">Open Magento digest figure</field>
+        <field name="model_id" ref="model_magento_digest_link"/>
+        <field name="state">code</field>
+        <field name="code">action = model.browse(env.context.get("active_id"))._magento_open()</field>
+    </record>
+
+    <!-- noupdate: an administrator's activation, time and template edits survive upgrades. -->
+    <data noupdate="1">
+        <!-- Daily digest. Inactive by default; sends one e-mail per instance with "Daily
+             Digest" on, to its Alert Users and Digest Recipients. Quiet days are skipped
+             unless the instance has "Send Even When Quiet". -->
+        <record id="ir_cron_magento_send_digest" model="ir.cron">
+            <field name="name">Magento: Daily Digest</field>
+            <field name="model_id" ref="model_magento_instance"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_magento_send_digest()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 06:00:00')"/>
+            <field name="active" eval="False"/>
+        </record>
+
+        <!-- House style for e-mail: Magento admin palette, inline CSS, tables, no script.
+             Every figure links to the records behind it (see magento.digest.link). -->
+        <record id="mail_template_magento_digest" model="mail.template">
+            <field name="name">Magento: Daily Digest</field>
+            <field name="model_id" ref="model_magento_digest"/>
+            <field name="subject">Magento digest · {{ object.instance_id.name }} · {{ object.day }}</field>
+            <field name="email_from">{{ (object.company_id.email_formatted or user.email_formatted) }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html" type="html">
+<div style="margin:0; padding:24px 12px; background-color:#f7f3eb; font-family:'Segoe UI', Inter, Arial, Helvetica, sans-serif; font-size:14px; line-height:1.5; color:#41362f;">
+<t t-set="p" t-value="object.payload or {}"/>
+<t t-set="tones" t-value="{'ok': '#067647', 'warn': '#8a6100', 'crit': '#b42318'}"/>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; margin:0 auto; border-collapse:separate; background-color:#ffffff; border:1px solid #dad1c8; border-radius:12px; overflow:hidden;">
+    <!-- Masthead -->
+    <tr>
+        <td style="background-color:#373330; border-top:4px solid #eb5202; padding:20px 24px;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#c3bbb1;">Magento daily digest</div>
+            <div style="font-family:Rockwell, 'Roboto Slab', Georgia, serif; font-size:22px; font-weight:700; color:#ffffff; margin-top:2px;" t-out="p.get('instance')"/>
+            <div style="font-size:12px; color:#dad1c8; margin-top:2px;">
+                Yesterday <t t-out="p.get('day')"/> · last 7 days from <t t-out="p.get('week_from')"/> · <t t-out="p.get('currency')"/>
+            </div>
+        </td>
+    </tr>
+
+    <!-- Sales -->
+    <tr>
+        <td style="padding:20px 24px 4px;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#736963; margin-bottom:6px;">Sales</div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                <tr>
+                    <td style="padding:6px 0; font-size:11px; color:#736963;"/>
+                    <td align="right" style="padding:6px 0; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#736963;">Yesterday</td>
+                    <td align="right" style="padding:6px 0 6px 16px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#736963;">Last 7 days</td>
+                </tr>
+                <t t-foreach="p.get('sales') or []" t-as="row">
+                    <tr>
+                        <td t-attf-style="padding:8px 0; border-top:1px solid #efe8df; color:#41362f; {{ 'font-weight:700;' if row.get('strong') else '' }}" t-out="row.get('label')"/>
+                        <td align="right" t-attf-style="padding:8px 0; border-top:1px solid #efe8df; font-variant-numeric:tabular-nums; white-space:nowrap; {{ 'font-weight:700;' if row.get('strong') else '' }}">
+                            <a t-att-href="row.get('y_url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="row.get('y')"/>
+                        </td>
+                        <td align="right" t-attf-style="padding:8px 0 8px 16px; border-top:1px solid #efe8df; font-variant-numeric:tabular-nums; white-space:nowrap; {{ 'font-weight:700;' if row.get('strong') else '' }}">
+                            <a t-att-href="row.get('w_url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="row.get('w')"/>
+                        </td>
+                    </tr>
+                </t>
+            </table>
+        </td>
+    </tr>
+
+    <!-- Top products -->
+    <tr t-if="p.get('top_products')">
+        <td style="padding:16px 24px 4px;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#736963; margin-bottom:6px;">Top products · last 7 days</div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                <t t-foreach="p.get('top_products')" t-as="prod">
+                    <tr>
+                        <td style="padding:7px 0; border-top:1px solid #efe8df;">
+                            <a t-att-href="prod.get('url')" style="color:#41362f; text-decoration:none;" t-out="prod.get('name')"/>
+                        </td>
+                        <td align="right" style="padding:7px 0; border-top:1px solid #efe8df; color:#736963; font-size:12px; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                            <t t-out="prod.get('qty')"/> sold
+                        </td>
+                        <td align="right" style="padding:7px 0 7px 16px; border-top:1px solid #efe8df; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                            <a t-att-href="prod.get('url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="prod.get('revenue')"/>
+                        </td>
+                    </tr>
+                </t>
+            </table>
+        </td>
+    </tr>
+
+    <!-- Operations -->
+    <tr>
+        <td style="padding:16px 24px 4px;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#736963; margin-bottom:6px;">Sync health</div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                <t t-foreach="p.get('health') or []" t-as="row">
+                    <tr>
+                        <td style="padding:7px 0; border-top:1px solid #efe8df;">
+                            <span t-attf-style="display:inline-block; width:8px; height:8px; border-radius:4px; margin-right:8px; background-color:{{ tones.get(row.get('tone')) or '#dad1c8' }};"/>
+                            <t t-out="row.get('label')"/>
+                        </td>
+                        <td align="right" style="padding:7px 0; border-top:1px solid #efe8df; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                            <a t-att-href="row.get('y_url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="row.get('y')"/>
+                        </td>
+                        <td align="right" t-attf-style="padding:7px 0 7px 16px; border-top:1px solid #efe8df; white-space:nowrap; font-variant-numeric:tabular-nums; color:{{ tones.get(row.get('tone')) or '#41362f' }};">
+                            <a t-att-href="row.get('w_url')" t-attf-style="color:{{ tones.get(row.get('tone')) or '#41362f' }}; text-decoration:underline; text-decoration-color:#c3bbb1; {{ 'font-weight:700;' if row.get('tone') else '' }}" t-out="row.get('w')"/>
+                        </td>
+                    </tr>
+                </t>
+                <t t-foreach="p.get('open') or []" t-as="row">
+                    <tr>
+                        <td style="padding:7px 0; border-top:1px solid #efe8df;">
+                            <span t-attf-style="display:inline-block; width:8px; height:8px; border-radius:4px; margin-right:8px; background-color:{{ tones.get(row.get('tone')) or '#dad1c8' }};"/>
+                            <t t-out="row.get('label')"/>
+                            <span style="color:#736963; font-size:12px;"> · open now</span>
+                        </td>
+                        <td style="border-top:1px solid #efe8df;"/>
+                        <td align="right" style="padding:7px 0 7px 16px; border-top:1px solid #efe8df; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                            <a t-att-href="row.get('url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="row.get('count')"/>
+                        </td>
+                    </tr>
+                </t>
+            </table>
+        </td>
+    </tr>
+
+    <!-- Pushes and real-time -->
+    <tr t-if="p.get('push') or p.get('webhook')">
+        <td style="padding:16px 24px 4px;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#736963; margin-bottom:6px;">Pushes to Magento</div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                <t t-foreach="p.get('push') or []" t-as="row">
+                    <tr>
+                        <td style="padding:7px 0; border-top:1px solid #efe8df; white-space:nowrap;">
+                            <span t-attf-style="display:inline-block; width:8px; height:8px; border-radius:4px; margin-right:8px; background-color:{{ tones.get(row.get('tone')) or '#dad1c8' }};"/>
+                            <t t-out="row.get('label')"/>
+                        </td>
+                        <td align="right" style="padding:7px 0 7px 16px; border-top:1px solid #efe8df; font-size:13px;">
+                            <a t-att-href="row.get('url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;" t-out="row.get('status')"/>
+                            <br/>
+                            <a t-att-href="row.get('detail_url')" t-attf-style="font-size:12px; color:{{ tones.get(row.get('tone')) if row.get('tone') == 'crit' else '#736963' }}; text-decoration:underline; text-decoration-color:#dad1c8;" t-out="row.get('detail')"/>
+                        </td>
+                    </tr>
+                </t>
+                <t t-set="wh" t-value="p.get('webhook') or {}"/>
+                <tr t-if="p.get('webhook')">
+                    <td style="padding:7px 0; border-top:1px solid #efe8df; white-space:nowrap;">
+                        <span t-attf-style="display:inline-block; width:8px; height:8px; border-radius:4px; margin-right:8px; background-color:{{ tones.get(wh.get('tone')) or '#dad1c8' }};"/>
+                        <t t-out="wh.get('label')"/>
+                    </td>
+                    <td align="right" style="padding:7px 0 7px 16px; border-top:1px solid #efe8df; font-size:13px;">
+                        <a t-if="wh.get('url')" t-att-href="wh.get('url')" style="color:#41362f; text-decoration:underline; text-decoration-color:#c3bbb1;">
+                            <t t-out="wh.get('status')"/> · <t t-out="wh.get('events')"/> event(s), <t t-out="wh.get('rejected')"/> rejected in 24 h
+                        </a>
+                        <br/>
+                        <span style="font-size:12px; color:#736963;">Last push <t t-out="wh.get('last')"/> UTC</span>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+        <td style="padding:20px 24px 24px;">
+            <a t-att-href="p.get('console_url')" style="display:inline-block; padding:9px 16px; border-radius:8px; background-color:#c34706; color:#ffffff; font-weight:600; text-decoration:none;">Open the Magento Console</a>
+            <a t-att-href="p.get('instance_url')" style="display:inline-block; margin-left:12px; color:#41362f; font-size:13px; text-decoration:underline; text-decoration-color:#c3bbb1;">Digest settings</a>
+            <div style="margin-top:14px; font-size:11px; color:#736963;">
+                Amounts in <t t-out="p.get('currency')"/>, cancelled orders excluded from revenue. Each figure opens the records behind it in Odoo.
+            </div>
+        </td>
+    </tr>
+</table>
+</div>
+            </field>
+        </record>
+    </data>
+</odoo>
