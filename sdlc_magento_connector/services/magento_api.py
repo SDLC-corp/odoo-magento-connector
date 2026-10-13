@@ -1,6 +1,8 @@
 import http.client
+import json
 import logging
 import os
+import re
 import socket
 import time
 from datetime import datetime, timezone
@@ -12,9 +14,56 @@ from requests.compat import urlparse, urlunparse
 from requests.utils import quote
 from urllib3 import exceptions as urllib3_exceptions
 
+from odoo.exceptions import UserError
+
 from . import magento_auth
 
 _logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Adobe Commerce as a Cloud Service (ACCS, roadmap 3.9)
+# ---------------------------------------------------------------------------
+# ACCS REST URLs are ``https://<server>.api.commerce.adobe.com/<tenant-id>/V1/<endpoint>``:
+# no ``/rest`` and no store code in the path; the store scope travels in the ``Store``
+# HTTP header (``all``, ``default`` or a store view code). Async bulk is
+# ``/<tenant-id>/V1/async/bulk/<route>`` (``async/bulk`` after ``V1``, not before).
+#   https://developer.adobe.com/commerce/webapi/rest/  (SaaS section)
+#   https://developer.adobe.com/commerce/webapi/rest/use-rest/bulk-endpoints/
+# Every PaaS path the connector builds (``/rest[/<store>][/async/bulk]/V1/...``) is
+# rewritten in ``MagentoAPI._request`` when ``instance.platform == 'accs'``; nothing
+# changes for Magento Open Source / Adobe Commerce PaaS.
+#
+# Validated against Adobe's documented API with simulated responses only; not yet
+# tested against a live ACCS tenant.
+PLATFORM_ACCS = "accs"
+_PAAS_REST_PATH = re.compile(
+    r"^/rest(?:/(?P<store>[^/?]+))?/(?P<bulk>async/bulk/)?V1(?P<rest>(?:[/?].*)?)$"
+)
+# The guest and customer (self-service) REST APIs do not exist on ACCS (Adobe: "use the
+# GraphQL APIs"), and the bulk/async form of POST /V1/customers is not supported.
+ACCS_UNAVAILABLE = (
+    (re.compile(r"^V1/guest-carts(?:[/?]|$)"), "guest_cart",
+     "the guest cart REST API (/V1/guest-carts), used to export Odoo orders to Magento"),
+    (re.compile(r"^V1/(?:carts|customers)/mine(?:[/?]|$)"), "customer_self",
+     "the customer self-service REST API (/V1/carts/mine, /V1/customers/me)"),
+    (re.compile(r"^V1/customers/me(?:[/?]|$)"), "customer_self",
+     "the customer self-service REST API (/V1/carts/mine, /V1/customers/me)"),
+    (re.compile(r"^V1/async/bulk/customers(?:[/?]|$)"), "bulk_customers",
+     "the async/bulk form of POST /V1/customers"),
+)
+
+
+class MagentoCapabilityError(UserError):
+    """The Magento platform of the instance does not offer this REST API.
+
+    Raised before any HTTP request, so a feature that cannot work (e.g. the guest cart
+    order export on Adobe Commerce as a Cloud Service) fails with a clear message
+    instead of an obscure 404.
+    """
+
+    def __init__(self, message, capability=None):
+        super().__init__(message)
+        self.capability = capability
 
 
 class MagentoAPI:
@@ -32,6 +81,10 @@ class MagentoAPI:
     def __init__(self, instance):
         self.instance = instance
         self.base_url = instance.base_url.rstrip("/")
+        # Adobe Commerce as a Cloud Service: tenant URLs, Store header, IMS bearer token.
+        self.platform = getattr(instance, "platform", None) or "open_source_paas"
+        self.accs_tenant = str(getattr(instance, "accs_tenant_id", "") or "").strip().strip("/")
+        self._instance_sudo = instance.sudo()
         self._store_code = None
         self._guest_cart_rest_prefix = "/rest/V1"
         self.headers = {"Content-Type": "application/json"}
@@ -80,6 +133,10 @@ class MagentoAPI:
         """``Authorization`` value for one request; OAuth signs every call with a
         fresh nonce/timestamp (so each retry and fallback URL is re-signed)."""
         auth = self._auth
+        if auth["method"] == "ims":
+            # Adobe IMS (ACCS): bearer token fetched / refreshed near expiry, see _ims_token.
+            token = self._ims_token()
+            return f"Bearer {token}" if token else None
         if auth["method"] == "oauth1":
             return magento_auth.sign(
                 method, url, params,
@@ -97,6 +154,60 @@ class MagentoAPI:
         if authorization:
             headers["Authorization"] = authorization
         return headers
+
+    # ------------------------------------------------------------------
+    # Adobe IMS token (auth_method ``ims``) and ACCS URL building (roadmap 3.9)
+    # ------------------------------------------------------------------
+    def _ims_token(self, force_refresh=False):
+        """Cached Adobe IMS access token of the instance, fetched or refreshed near its
+        expiry by ``magento.instance._magento_ims_token``."""
+        getter = getattr(self._instance_sudo, "_magento_ims_token", None)
+        if getter is None:
+            return ""
+        return getter(force_refresh=force_refresh) or ""
+
+    @property
+    def is_accs(self):
+        return self.platform == PLATFORM_ACCS
+
+    def _accs_tenant_prefix(self):
+        """``/<tenant>``, or ``""`` when the base URL already ends with the tenant id."""
+        if not self.accs_tenant:
+            raise MagentoCapabilityError(
+                "Adobe Commerce as a Cloud Service needs the tenant ID of the instance "
+                "(the last part of the REST endpoint shown in Cloud Manager)."
+            )
+        if self.base_url.lower().endswith("/" + self.accs_tenant.lower()):
+            return ""
+        return "/" + quote(self.accs_tenant, safe="")
+
+    def _accs_endpoint(self, endpoint):
+        """``(endpoint, extra headers)`` of a PaaS path on ACCS.
+
+        ``/rest/V1/x`` -> ``/<tenant>/V1/x``; ``/rest/<store>/V1/x`` -> ``/<tenant>/V1/x``
+        with ``Store: <store>``; ``/rest/<store>/async/bulk/V1/<route>`` ->
+        ``/<tenant>/V1/async/bulk/<route>`` with ``Store: <store>``. Other paths are kept.
+        Raises ``MagentoCapabilityError`` for the REST APIs ACCS does not offer.
+        """
+        match = _PAAS_REST_PATH.match(endpoint or "")
+        if not match:
+            return endpoint, None
+        rest = match.group("rest") or ""
+        if match.group("bulk"):
+            path = "V1/async/bulk" + rest
+        else:
+            path = "V1" + rest
+        for pattern, capability, label in ACCS_UNAVAILABLE:
+            if pattern.match(path):
+                raise MagentoCapabilityError(
+                    "Not available on Adobe Commerce as a Cloud Service: %s. Adobe does not "
+                    "offer this REST API on ACCS (the guest and customer REST APIs are "
+                    "replaced by GraphQL there)." % label,
+                    capability=capability,
+                )
+        store = match.group("store")
+        headers = {"Store": store} if store else None
+        return "%s/%s" % (self._accs_tenant_prefix(), path), headers
 
     def _is_containerized_runtime(self):
         # Docker/Podman usually expose one of these markers in Linux containers.
@@ -264,7 +375,30 @@ class MagentoAPI:
     def _request(self, method, endpoint, *, params=None, payload=None):
         """Send one HTTP request, trying the container fallback hosts, retrying
         transient failures (429/502/503/504, connection errors, timeouts) up to
-        ``MAX_RETRIES`` times with exponential backoff."""
+        ``MAX_RETRIES`` times with exponential backoff.
+
+        On Adobe Commerce as a Cloud Service the PaaS path is first rewritten to the
+        tenant URL (``_accs_endpoint``). With Adobe IMS auth a 401 forces one token
+        refresh and one retry (the cached token may have been revoked early)."""
+        extra_headers = None
+        if self.is_accs:
+            endpoint, extra_headers = self._accs_endpoint(endpoint)
+        try:
+            return self._send_request(method, endpoint, params=params, payload=payload,
+                                      extra_headers=extra_headers)
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status != 401 or self._auth["method"] != "ims":
+                raise
+            _logger.info("Magento %s %s: HTTP 401 with an IMS token, refreshing it once",
+                         (method or "get").upper(), endpoint)
+            if not self._ims_token(force_refresh=True):
+                raise
+            return self._send_request(method, endpoint, params=params, payload=payload,
+                                      extra_headers=extra_headers)
+
+    def _send_request(self, method, endpoint, *, params=None, payload=None, extra_headers=None):
+        """One final path of ``_request``: fallback hosts, retries and backoff."""
         method = (method or "get").lower()
         idempotent = method in self.IDEMPOTENT_METHODS
         retry_statuses = self.RETRY_STATUSES if idempotent else self.RETRY_STATUSES_UNSAFE_METHODS
@@ -286,6 +420,8 @@ class MagentoAPI:
             for base_url in list(self._base_urls):
                 url = f"{base_url}{endpoint}"
                 request_kwargs["headers"] = self._request_headers(method, url, params)
+                if extra_headers:
+                    request_kwargs["headers"].update(extra_headers)
                 _logger.debug("Magento %s %s (attempt %s)", method.upper(), url, attempt + 1)
                 try:
                     response = requests.request(method, url, **request_kwargs)
@@ -931,8 +1067,8 @@ class MagentoAPI:
     def _bulk_endpoint(self, route, store_code=None):
         """PaaS / on-premise bulk path: ``/rest/<store|all>/async/bulk/V1/<route>``.
 
-        (Adobe Commerce as a Cloud Service uses ``/<tenant>/V1/async/bulk/<route>``
-        instead; not supported yet.)
+        (On Adobe Commerce as a Cloud Service ``_request`` rewrites it to
+        ``/<tenant>/V1/async/bulk/<route>`` with the ``Store`` header.)
         """
         store = str(store_code or "").strip() or "all"
         return f"/rest/{quote(store, safe='')}/async/bulk/V1/{self._bulk_route(route)}"
@@ -1246,3 +1382,146 @@ class MagentoAPI:
         safe_sku = quote(str(sku or "").strip(), safe="")
         safe_id = quote(str(entry_id or "").strip(), safe="")
         return self._json(self._request("delete", f"/rest/all/V1/products/{safe_sku}/media/{safe_id}"))
+
+    # ------------------------------------------------------------------
+    # Adobe Commerce B2B (roadmap 3.6)
+    # ------------------------------------------------------------------
+    # Only present on Adobe Commerce with the B2B modules; Magento Open Source answers 404
+    # ("Request does not match any route"). Endpoints and payloads from:
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/integrations
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/company-object
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/company-structures
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/credit-manage
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/shared-cat-manage
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/shared-cat-product-assign
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/shared-cat-company
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/negotiable-manage
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/negotiable-update
+    #   https://developer.adobe.com/commerce/webapi/rest/b2b/negotiable-order-workflow
+    # Validated against these documented payloads with simulated responses only; not yet
+    # tested against a live Adobe Commerce store.
+    B2B_ID_SORT = (("entity_id", "ASC"),)
+
+    def probe_b2b(self):
+        """``GET /V1/company?searchCriteria[pageSize]=1``: raises HTTPError 404 without B2B."""
+        return self._get("/rest/V1/company", params={"searchCriteria[pageSize]": 1, "searchCriteria[currentPage]": 1})
+
+    def get_companies(self, *, filters=None, page_size=None, lazy=False, limit=None):
+        """``GET /V1/company`` (searchCriteria), paged by entity id."""
+        return self._search_list(
+            "/rest/V1/company", filters=filters, page_size=page_size, lazy=lazy, limit=limit,
+            sort=self.B2B_ID_SORT, id_key="id",
+        )
+
+    def get_company(self, company_id):
+        """``GET /V1/company/:companyId``."""
+        return self._get(f"/rest/V1/company/{quote(str(company_id), safe='')}")
+
+    def create_company(self, company):
+        """``POST /V1/company`` with ``{"company": {...}}``; returns the saved company."""
+        return self._post("/rest/V1/company", {"company": company})
+
+    def update_company(self, company_id, company):
+        """``PUT /V1/company/:companyId`` with ``{"company": {..., "id": id}}``."""
+        body = dict(company, id=int(company_id))
+        return self._put(f"/rest/V1/company/{quote(str(company_id), safe='')}", {"company": body})
+
+    def get_company_relations(self, params=None):
+        """``GET /V1/company/relations`` (parent / child companies)."""
+        return self._get("/rest/V1/company/relations", params=params or {"searchCriteria": ""})
+
+    def get_company_hierarchy(self, company_id):
+        """``GET /V1/hierarchy/:id``: ``[{structure_id, entity_id, entity_type
+        ("customer" | "team"), structure_parent_id}]`` of one company."""
+        result = self._get(f"/rest/V1/hierarchy/{quote(str(company_id), safe='')}")
+        return result if isinstance(result, list) else []
+
+    def get_company_credit(self, company_id):
+        """``GET /V1/companyCredits/company/:companyId``: ``{id, company_id, credit_limit,
+        balance, currency_code, exceed_limit, available_limit}``."""
+        return self._get(f"/rest/V1/companyCredits/company/{quote(str(company_id), safe='')}")
+
+    def get_shared_catalogs(self, *, page_size=None):
+        """``GET /V1/sharedCatalog`` (searchCriteria): ``{id, name, description,
+        customer_group_id, type (0 custom, 1 public), created_at, created_by, store_id,
+        tax_class_id}``."""
+        return self._search_list(
+            "/rest/V1/sharedCatalog", page_size=page_size, sort=self.B2B_ID_SORT, id_key="id",
+        )
+
+    def get_shared_catalog(self, catalog_id):
+        return self._get(f"/rest/V1/sharedCatalog/{quote(str(catalog_id), safe='')}")
+
+    def get_shared_catalog_products(self, catalog_id):
+        """``GET /V1/sharedCatalog/:id/products``: a list of SKUs."""
+        result = self._get(f"/rest/V1/sharedCatalog/{quote(str(catalog_id), safe='')}/products")
+        return [str(sku) for sku in result if sku not in (None, "")] if isinstance(result, list) else []
+
+    def assign_shared_catalog_products(self, catalog_id, skus):
+        """``POST /V1/sharedCatalog/:id/assignProducts`` with ``{"products": [{"sku": ...}]}``."""
+        payload = {"products": [{"sku": sku} for sku in skus]}
+        return self._post(f"/rest/V1/sharedCatalog/{quote(str(catalog_id), safe='')}/assignProducts", payload)
+
+    def get_shared_catalog_companies(self, catalog_id):
+        """``GET /V1/sharedCatalog/:id/companies``. Adobe documents the answer as a JSON
+        *string* holding the id list (``"[\\"1\\",\\"2\\"]"``); a plain list is accepted too."""
+        result = self._get(f"/rest/V1/sharedCatalog/{quote(str(catalog_id), safe='')}/companies")
+        if isinstance(result, str):
+            try:
+                result = json.loads(result or "[]")
+            except ValueError:
+                result = []
+        return [str(cid) for cid in result if cid not in (None, "")] if isinstance(result, list) else []
+
+    def assign_shared_catalog_companies(self, catalog_id, company_ids):
+        """``POST /V1/sharedCatalog/:id/assignCompanies`` with ``{"companies": [{"id": ...}]}``."""
+        payload = {"companies": [{"id": int(cid)} for cid in company_ids]}
+        return self._post(f"/rest/V1/sharedCatalog/{quote(str(catalog_id), safe='')}/assignCompanies", payload)
+
+    def get_negotiable_quote(self, quote_id):
+        """``GET /V1/carts/:cartId`` (admin token): the quote with ``items`` and
+        ``extension_attributes.negotiable_quote``."""
+        return self._get(f"/rest/V1/carts/{quote(str(quote_id), safe='')}")
+
+    def search_negotiable_quotes(self, updated_from=None, *, page_size=None, lazy=False, limit=None):
+        """Quotes from ``GET /V1/carts/search`` updated since ``updated_from``, keeping the
+        ones that carry ``extension_attributes.negotiable_quote``. (Adobe documents no
+        REST list endpoint for negotiable quotes; single quotes are read with
+        ``get_negotiable_quote``.)"""
+        rows = self._search_list(
+            "/rest/V1/carts/search", updated_from=updated_from, page_size=page_size,
+            lazy=True, limit=limit, id_key="id",
+        )
+        result = (
+            row for row in rows
+            if isinstance(row, dict) and ((row.get("extension_attributes") or {}).get("negotiable_quote"))
+        )
+        return result if lazy else list(result)
+
+    def get_negotiable_quote_comments(self, quote_id):
+        """``GET /V1/negotiableQuote/:quoteId/comments``: ``[{entity_id, parent_id,
+        creator_type (2 seller, 3 buyer), is_decline, is_draft, creator_id, comment,
+        created_at, attachments}]``."""
+        result = self._get(f"/rest/V1/negotiableQuote/{quote(str(quote_id), safe='')}/comments")
+        return result if isinstance(result, list) else []
+
+    def update_negotiable_quote(self, quote_id, negotiable_quote):
+        """``PUT /V1/negotiableQuote/:quoteId`` with ``{"quote": {"id": id,
+        "extension_attributes": {"negotiable_quote": {...}}}}`` (e.g.
+        ``negotiated_price_type`` 1 % / 2 amount / 3 proposed total,
+        ``negotiated_price_value``, ``expiration_period``)."""
+        payload = {"quote": {
+            "id": int(quote_id),
+            "extension_attributes": {"negotiable_quote": dict(negotiable_quote)},
+        }}
+        return self._put(f"/rest/V1/negotiableQuote/{quote(str(quote_id), safe='')}", payload)
+
+    def submit_negotiable_quote(self, quote_id, comment=""):
+        """``POST /V1/negotiableQuote/submitToCustomer`` with ``{"quoteId", "comment"}``."""
+        return self._post("/rest/V1/negotiableQuote/submitToCustomer",
+                          {"quoteId": int(quote_id), "comment": comment or ""})
+
+    def decline_negotiable_quote(self, quote_id, reason):
+        """``POST /V1/negotiableQuote/decline`` with ``{"quoteId", "reason"}``."""
+        return self._post("/rest/V1/negotiableQuote/decline",
+                          {"quoteId": int(quote_id), "reason": reason or ""})

@@ -6,7 +6,8 @@ The supported method is to sign every request with the integration's four
 credentials: Consumer Key, Consumer Secret, Access Token and Access Token
 Secret. Magento accepts HMAC-SHA256 and HMAC-SHA1.
 
-Pure standard library: no oauthlib dependency.
+Pure standard library: no oauthlib dependency. (The Adobe IMS helper at the end,
+used by Adobe Commerce as a Cloud Service, posts with ``requests``.)
 
 Only the query string and the ``oauth_*`` protocol parameters are signed.
 Magento REST bodies are JSON (not ``application/x-www-form-urlencoded``), so,
@@ -149,6 +150,93 @@ def sign(method, url, params, consumer_key, consumer_secret, token, token_secret
         signature_method=signature_method, nonce=nonce, timestamp=timestamp, version=version,
     )
     return "OAuth " + ", ".join(f'{percent_encode(k)}="{percent_encode(v)}"' for k, v in oauth.items())
+
+
+# ---------------------------------------------------------------------------
+# Adobe IMS OAuth 2 server-to-server (Adobe Commerce as a Cloud Service, roadmap 3.9)
+# ---------------------------------------------------------------------------
+# ACCS does not accept integration (OAuth 1.0a) or admin tokens. A server-to-server
+# credential from the Adobe Developer Console (client id + client secret) is exchanged
+# for a bearer access token at the IMS token endpoint with ``grant_type=client_credentials``
+# and the ``commerce.accs`` scope. Documented at:
+#   https://developer.adobe.com/commerce/services/cloud/guides/rest/authentication
+#   https://experienceleague.adobe.com/en/docs/commerce-learn/tutorials/getting-started/commerce-as-a-cloud-service/webapi-rest/customer
+# The documented response is ``{"access_token": "...", "token_type": "bearer",
+# "expires_in": 86399}`` (seconds, about 24 hours).
+#
+# Validated against Adobe's documented payloads with simulated responses only: the
+# connector has not been run against a live ACCS tenant.
+IMS_TOKEN_URL = "https://ims-na1.adobelogin.com/ims/token/v3"
+IMS_DEFAULT_SCOPES = "openid,AdobeID,commerce.accs"
+# Refresh a cached token this many seconds before it expires.
+IMS_REFRESH_MARGIN = 300
+# Used when IMS omits ``expires_in`` (it does not in the documented response).
+IMS_DEFAULT_LIFETIME = 3600
+
+
+class ImsTokenError(Exception):
+    """Adobe IMS did not return a usable access token."""
+
+
+def fetch_ims_token(client_id, client_secret, scopes=None, *, token_url=None, timeout=30,
+                    verify=True, now=None):
+    """Exchange server-to-server credentials for an IMS access token.
+
+    ``POST https://ims-na1.adobelogin.com/ims/token/v3`` (form encoded):
+    ``grant_type=client_credentials``, ``client_id``, ``client_secret``, ``scope``.
+
+    Returns ``{"access_token", "token_type", "expires_in", "expires_at"}`` where
+    ``expires_at`` is an epoch timestamp. Raises ``ImsTokenError`` with Adobe's
+    ``error`` / ``error_description`` when the request is refused, and lets
+    ``requests`` connection errors propagate (they are transient).
+    """
+    import requests  # local: keep the OAuth 1.0a helpers dependency free
+
+    if not (client_id or "").strip() or not (client_secret or "").strip():
+        raise ImsTokenError("Adobe IMS needs a client ID and a client secret.")
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": client_id.strip(),
+        "client_secret": client_secret.strip(),
+        "scope": (scopes or IMS_DEFAULT_SCOPES).replace(" ", ""),
+    }
+    response = requests.post(
+        token_url or IMS_TOKEN_URL, data=data, timeout=timeout, verify=verify,
+        headers={"Accept": "application/json"},
+    )
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    if response.status_code >= 400 or not body.get("access_token"):
+        detail = body.get("error_description") or body.get("error") or (response.text or "").strip()[:200]
+        raise ImsTokenError(
+            "Adobe IMS refused the token request (HTTP %s): %s"
+            % (response.status_code, detail or "no access_token in the response")
+        )
+    try:
+        expires_in = int(body.get("expires_in") or 0)
+    except (TypeError, ValueError):
+        expires_in = 0
+    if expires_in <= 0:
+        expires_in = IMS_DEFAULT_LIFETIME
+    issued = time.time() if now is None else now
+    return {
+        "access_token": body["access_token"],
+        "token_type": body.get("token_type") or "bearer",
+        "expires_in": expires_in,
+        "expires_at": issued + expires_in,
+    }
+
+
+def ims_token_is_fresh(expires_at, now=None, margin=IMS_REFRESH_MARGIN):
+    """True while a token expiring at ``expires_at`` (epoch) is usable for ``margin`` more seconds."""
+    if not expires_at:
+        return False
+    current = time.time() if now is None else now
+    return float(expires_at) - margin > current
 
 
 def parse_authorization_header(header):

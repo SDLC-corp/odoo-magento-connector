@@ -84,3 +84,7 @@ access_magento_webhook_event_user,magento.webhook.event user,model_magento_webho
 access_magento_webhook_event_manager,magento.webhook.event manager,model_magento_webhook_event,group_magento_manager,1,0,0,1
 access_magento_tier_price_import_user,magento.tier.price.import user,model_magento_tier_price_import,group_magento_user,1,0,0,0
 access_magento_tier_price_import_manager,magento.tier.price.import manager,model_magento_tier_price_import,group_magento_manager,1,1,1,1
+access_magento_shared_catalog_user,magento.shared.catalog user,model_magento_shared_catalog,group_magento_user,1,0,0,0
+access_magento_shared_catalog_manager,magento.shared.catalog manager,model_magento_shared_catalog,group_magento_manager,1,1,1,1
+access_magento_b2b_quote_wizard_user,magento.b2b.quote.wizard user,model_magento_b2b_quote_wizard,group_magento_user,1,1,1,0
+access_magento_b2b_quote_wizard_manager,magento.b2b.quote.wizard manager,model_magento_b2b_quote_wizard,group_magento_manager,1,1,1,1

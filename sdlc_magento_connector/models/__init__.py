@@ -28,3 +28,5 @@ from . import magento_totals_explainer
 from . import magento_returns
 from . import magento_webhook
 from . import magento_catalog_p3
+from . import magento_accs
+from . import magento_b2b
