@@ -1186,6 +1186,30 @@ class MagentoAPI:
     def get_tier_prices(self, skus):
         """``POST /V1/products/tier-prices-information``."""
         return self._post("/rest/V1/products/tier-prices-information", {"skus": list(skus)}) or []
+
+    def get_tier_price_rows(self, skus):
+        """Tier prices of ``skus`` as dicts only:
+        ``[{sku, price, price_type ("fixed" | "discount"), website_id, customer_group, quantity}]``
+        (``customer_group`` is a group code or ``ALL GROUPS``)."""
+        result = self.get_tier_prices(skus)
+        return [row for row in result if isinstance(row, dict)] if isinstance(result, list) else []
+
+    def get_product_types_by_sku(self, skus, page_size=100):
+        """``{sku: type_id}`` of the products of ``skus`` that exist in Magento
+        (``GET /V1/products`` with an ``sku in`` filter, ``page_size`` SKUs per request)."""
+        skus = [str(s) for s in dict.fromkeys(skus or ()) if s]
+        found = {}
+        size = self.clamp_page_size(page_size)
+        for start in range(0, len(skus), size):
+            chunk = skus[start:start + size]
+            rows = self.get_products(None, filters=[("sku", ",".join(chunk), "in")], page_size=size)
+            wanted = {sku.lower(): sku for sku in chunk}
+            for row in rows or []:
+                if isinstance(row, dict) and row.get("sku"):
+                    # Magento compares SKUs case-insensitively: report under our spelling.
+                    sku = wanted.get(str(row["sku"]).lower(), row["sku"])
+                    found[sku] = row.get("type_id") or "simple"
+        return found
     # Store hierarchy and store-view scope (roadmap 2.8)
     # ------------------------------------------------------------------
     def get_store_groups(self):

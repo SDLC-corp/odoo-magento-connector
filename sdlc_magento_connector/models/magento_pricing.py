@@ -47,6 +47,13 @@ Runs
     rule's **Push Prices Now** button, and an inactive-by-default cron that queues every
     active rule with "Scheduled Push" on.
 
+Prices imported from Magento (roadmap 3.4)
+    Pricelist items created or adopted by the tier price import
+    (``magento.tier.price.import``) hold what Magento already has. An entry whose winning
+    pricelist item is such an item is marked ``magento_owned``: it is neither sent nor
+    withdrawn (its push state, if any, is kept), so an import is never pushed back as a
+    change and an imported percentage tier is never turned into a fixed one.
+
 Store models of the multi-store work (``magento.website`` / ``magento.store.view``) are
 used softly: when they are installed, the rule shows the store view name of its store id
 and fills the website id / code from it; nothing here imports or requires them.
@@ -385,8 +392,19 @@ class MagentoPriceRule(models.Model):
         entry.update(extra)
         return entry
 
+    def _magento_imported_item_ids(self):
+        """Ids of the pricelist items of this rule's pricelist that the tier price import
+        owns (prices that come from Magento: never pushed back)."""
+        self.ensure_one()
+        if "magento.tier.price.import" not in self.env or not self.pricelist_id:
+            return set()
+        return set(self.env["magento.tier.price.import"].sudo().search([
+            ("pricelist_id", "=", self.pricelist_id.id), ("item_id", "!=", False),
+        ]).item_id.ids)
+
     def _magento_desired_entries(self, maps=None):
-        """``{(sku, key): entry}`` this rule wants in Magento now."""
+        """``{(sku, key): entry}`` this rule wants in Magento now. An entry priced by an
+        imported item carries ``magento_owned=True`` (see the module docstring)."""
         self.ensure_one()
         maps = self._magento_price_maps() if maps is None else maps
         products = maps.mapped("odoo_product_id")
@@ -396,12 +414,14 @@ class MagentoPriceRule(models.Model):
         now = fields.Datetime.now()
         base = pricelist._compute_price_rule(products, 1.0, date=now)
         Item = self.env["product.pricelist.item"].sudo()
+        owned = self._magento_imported_item_ids()
         desired = {}
         if self.kind == "base":
             key = "base|s%s" % self.effective_store_id
             for product_map in maps:
-                price = base[product_map.odoo_product_id.id][0]
-                desired[(product_map.sku, key)] = self._magento_entry(product_map, key, price)
+                price, rule_id = base[product_map.odoo_product_id.id]
+                desired[(product_map.sku, key)] = self._magento_entry(
+                    product_map, key, price, magento_owned=rule_id in owned)
         elif self.kind == "special":
             key = "special|s%s" % self.effective_store_id
             for product_map in maps:
@@ -413,12 +433,13 @@ class MagentoPriceRule(models.Model):
                     product_map, key, price,
                     price_from=_magento_datetime(item.date_start),
                     price_to=_magento_datetime(item.date_end),
+                    magento_owned=rule_id in owned,
                 )
         elif self.kind == "tier":
-            desired = self._magento_desired_tier_entries(maps, products, base, now)
+            desired = self._magento_desired_tier_entries(maps, products, base, now, owned)
         return desired
 
-    def _magento_desired_tier_entries(self, maps, products, base, now):
+    def _magento_desired_tier_entries(self, maps, products, base, now, owned=frozenset()):
         groups = self._magento_customer_group_codes()
         if not groups:
             return {}
@@ -432,21 +453,26 @@ class MagentoPriceRule(models.Model):
             for qty in {i.min_quantity for i in tier_items if i._is_applicable_for(product, i.min_quantity)}:
                 products_by_qty[qty] |= product
         digits = self._price_digits()
-        prices = {}  # product id -> {qty: price}
+        prices = {}  # product id -> {qty: (price, imported)}
         for qty, qty_products in products_by_qty.items():
             for product_id, (price, rule_id) in pricelist._compute_price_rule(qty_products, qty, date=now).items():
+                if rule_id in owned:
+                    # Came from Magento: keep the key (never withdrawn), never send it.
+                    prices.setdefault(product_id, {})[qty] = (price, True)
+                    continue
                 if not rule_id or Item.browse(rule_id).min_quantity <= 1:
                     continue  # the winning item is not a quantity break
                 if float_compare(price, base[product_id][0], precision_digits=digits) >= 0:
                     continue  # not cheaper than one unit: no tier
-                prices.setdefault(product_id, {})[qty] = price
+                prices.setdefault(product_id, {})[qty] = (price, False)
         desired = {}
         for product_map in maps:
-            for qty, price in sorted(prices.get(product_map.odoo_product_id.id, {}).items()):
+            for qty, (price, imported) in sorted(prices.get(product_map.odoo_product_id.id, {}).items()):
                 for group in groups:
                     key = "tier|w%s|%s|%s" % (self.effective_website_id, group, "%g" % qty)
                     desired[(product_map.sku, key)] = self._magento_entry(
                         product_map, key, price, customer_group=group, quantity=qty,
+                        magento_owned=imported,
                     )
         return desired
 
@@ -555,6 +581,9 @@ class MagentoPriceRule(models.Model):
 
         to_send, to_delete, date_resets = [], [], []
         for key, entry in desired.items():
+            if entry.get("magento_owned"):
+                stats["imported"] += 1  # imported from Magento: not pushed back
+                continue
             state = state_by_key.get(key)
             if state and not force and rule._magento_same(state, entry):
                 stats["unchanged"] += 1
@@ -620,6 +649,8 @@ class MagentoPriceRule(models.Model):
         ]
         if stats["dropped"]:
             parts.append(_("%s base price state(s) dropped", stats["dropped"]))
+        if stats["imported"]:
+            parts.append(_("%s imported from Magento, not pushed back", stats["imported"]))
         if stats["foreign"]:
             parts.append(_("%s special price(s) changed in Magento, left alone", stats["foreign"]))
         if stats["unattributed"]:
