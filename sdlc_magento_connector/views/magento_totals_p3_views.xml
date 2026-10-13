@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ================================================================
+         Totals explanation engine (3.1): "Why does this differ?"
+         Screen shape: Reconcile figures (dense table, tabular numbers,
+         subtotals per category). Standard views only.
+         ================================================================ -->
+
+    <!-- Components: one row per cause, grouped by category with subtotals -->
+    <record id="view_magento_totals_explanation_line_list" model="ir.ui.view">
+        <field name="name">magento.totals.explanation.line.list</field>
+        <field name="model">magento.totals.explanation.line</field>
+        <field name="arch" type="xml">
+            <list string="Difference Components" create="0" edit="0" delete="0"
+                  decoration-danger="category == 'unexplained' and amount != 0"
+                  decoration-muted="negligible">
+                <field name="sale_order_id" optional="show"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="category" widget="badge"
+                       decoration-danger="category == 'unexplained' and amount != 0"
+                       decoration-success="category == 'unexplained' and amount == 0"
+                       decoration-warning="category not in ('unexplained', 'currency_rounding')"
+                       decoration-muted="category == 'currency_rounding'"/>
+                <field name="name"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="negligible" column_invisible="1"/>
+                <field name="amount" sum="Total"/>
+                <field name="evidence" optional="show"/>
+                <field name="fix_type" column_invisible="1"/>
+                <field name="fix_label" optional="show"/>
+                <button name="action_apply_fix" type="object" string="Fix" icon="fa-wrench"
+                        class="btn-link" title="Apply the suggested fix" invisible="not fix_type"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_totals_explanation_line_search" model="ir.ui.view">
+        <field name="name">magento.totals.explanation.line.search</field>
+        <field name="model">magento.totals.explanation.line</field>
+        <field name="arch" type="xml">
+            <search string="Difference Components">
+                <field name="sale_order_id"/>
+                <field name="name"/>
+                <field name="category"/>
+                <filter name="with_fix" string="With a Fix" domain="[('fix_type', '!=', False)]"/>
+                <filter name="unexplained" string="Unexplained"
+                        domain="[('category', '=', 'unexplained'), ('amount', '!=', 0)]"/>
+                <group>
+                    <filter name="group_category" string="Category" context="{'group_by': 'category'}"/>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_order" string="Order" context="{'group_by': 'sale_order_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Explanations -->
+    <record id="view_magento_totals_explanation_list" model="ir.ui.view">
+        <field name="name">magento.totals.explanation.list</field>
+        <field name="model">magento.totals.explanation</field>
+        <field name="arch" type="xml">
+            <list string="Totals Explanations" create="0"
+                  decoration-danger="state == 'unexplained'"
+                  decoration-warning="state == 'partially'">
+                <field name="sale_order_id"/>
+                <field name="magento_increment_id"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="magento_grand_total" sum="Magento"/>
+                <field name="odoo_total" sum="Odoo"/>
+                <field name="difference" sum="Difference"/>
+                <field name="explained_amount" sum="Explained" optional="show"/>
+                <field name="unexplained_amount" sum="Unexplained"/>
+                <field name="component_count" optional="show"/>
+                <field name="date_explained" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'explained'"
+                       decoration-warning="state == 'partially'"
+                       decoration-danger="state == 'unexplained'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_totals_explanation_search" model="ir.ui.view">
+        <field name="name">magento.totals.explanation.search</field>
+        <field name="model">magento.totals.explanation</field>
+        <field name="arch" type="xml">
+            <search string="Totals Explanations">
+                <field name="sale_order_id"/>
+                <field name="magento_increment_id"/>
+                <field name="instance_id"/>
+                <filter name="differs" string="With a Difference" domain="[('matches', '=', False)]"/>
+                <filter name="unexplained_left" string="Unexplained Remainder"
+                        domain="[('unexplained_amount', '!=', 0)]"/>
+                <separator/>
+                <filter name="explained" string="Explained" domain="[('state', '=', 'explained')]"/>
+                <filter name="partially" string="Partially Explained" domain="[('state', '=', 'partially')]"/>
+                <filter name="unexplained" string="Unexplained" domain="[('state', '=', 'unexplained')]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                    <filter name="group_currency" string="Currency" context="{'group_by': 'currency_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_totals_explanation_form" model="ir.ui.view">
+        <field name="name">magento.totals.explanation.form</field>
+        <field name="model">magento.totals.explanation</field>
+        <field name="arch" type="xml">
+            <form string="Why does this differ?" create="0" edit="0">
+                <header>
+                    <button name="action_explain_again" type="object" string="Explain Again"
+                            class="btn-primary"/>
+                    <button name="action_view_components" type="object" string="Components by Category"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_order" type="object" class="oe_stat_button"
+                                icon="fa-shopping-cart">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Order</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" string="Why does this differ?"/>
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <div role="status" class="alert alert-success" invisible="not matches">
+                        The Odoo total equals the Magento grand total.
+                    </div>
+                    <div role="status" class="alert alert-info"
+                         invisible="matches or state != 'explained'">
+                        Every cent of the difference has a cause below. No adjustment line was added.
+                    </div>
+                    <div role="alert" class="alert alert-warning" invisible="state != 'partially'">
+                        Part of the difference is explained; the unexplained remainder is shown as is.
+                    </div>
+                    <div role="alert" class="alert alert-danger" invisible="state != 'unexplained'">
+                        No known cause reproduces the difference. Compare the order with Magento.
+                    </div>
+                    <group>
+                        <group string="Totals">
+                            <field name="currency_id" invisible="1"/>
+                            <field name="matches" invisible="1"/>
+                            <field name="magento_grand_total"/>
+                            <field name="odoo_total"/>
+                            <field name="difference"/>
+                        </group>
+                        <group string="Attribution">
+                            <field name="explained_amount"/>
+                            <field name="unexplained_amount"
+                                   decoration-danger="unexplained_amount != 0"
+                                   decoration-success="unexplained_amount == 0"/>
+                            <field name="state" widget="badge"
+                                   decoration-success="state == 'explained'"
+                                   decoration-warning="state == 'partially'"
+                                   decoration-danger="state == 'unexplained'"/>
+                            <field name="calibration_gap" invisible="calibration_gap == 0"/>
+                            <field name="instance_id"/>
+                            <field name="source"/>
+                            <field name="date_explained"/>
+                        </group>
+                    </group>
+                    <field name="summary_html" nolabel="1" readonly="1"/>
+                    <notebook>
+                        <page string="Components" name="components">
+                            <field name="line_ids" readonly="1">
+                                <list decoration-danger="category == 'unexplained' and amount != 0"
+                                      decoration-muted="negligible">
+                                    <field name="category" widget="badge"
+                                           decoration-danger="category == 'unexplained' and amount != 0"
+                                           decoration-success="category == 'unexplained' and amount == 0"
+                                           decoration-warning="category not in ('unexplained', 'currency_rounding')"
+                                           decoration-muted="category == 'currency_rounding'"/>
+                                    <field name="name"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="negligible" column_invisible="1"/>
+                                    <field name="amount" sum="Difference"/>
+                                    <field name="evidence"/>
+                                    <field name="fix_type" column_invisible="1"/>
+                                    <field name="fix_label"/>
+                                    <button name="action_apply_fix" type="object" string="Fix"
+                                            icon="fa-wrench" class="btn-link"
+                                            title="Apply the suggested fix" invisible="not fix_type"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Magento Order" name="payload" groups="sdlc_magento_connector.group_magento_manager">
+                            <field name="payload" nolabel="1" readonly="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_totals_explanation" model="ir.actions.act_window">
+        <field name="name">Totals Explanations</field>
+        <field name="res_model">magento.totals.explanation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_totals_explanation_search"/>
+        <field name="context">{'search_default_differs': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No totals explained yet</p>
+            <p>Open a Magento order and click "Why does this differ?", or "Explain All" on a
+               reconciliation run. Each difference between the Odoo total and the Magento grand
+               total is split into causes (rounding, tax mode, tax rate, discount tax, FPT,
+               shipping, edited lines), with the evidence and a suggested fix. Whatever no cause
+               reproduces stays visible as the unexplained remainder.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_totals_explanation" name="Totals Explanations"
+              parent="menu_magento_reports" action="action_magento_totals_explanation" sequence="4"/>
+
+    <!-- Sale order: "Why does this differ?" and the smart button -->
+    <record id="sale_order_form_magento_totals_p3" model="ir.ui.view">
+        <field name="name">sale.order.form.magento.totals.p3</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/header" position="inside">
+                <field name="magento_order_id" invisible="1"/>
+                <field name="magento_total_differs" invisible="1"/>
+                <button name="action_magento_explain_totals" type="object"
+                        string="Why does this differ?" class="btn-primary"
+                        groups="sdlc_magento_connector.group_magento_user"
+                        invisible="not magento_order_id or not magento_total_differs"/>
+                <button name="action_magento_explain_totals" type="object"
+                        string="Explain Totals" class="btn-secondary"
+                        groups="sdlc_magento_connector.group_magento_user"
+                        invisible="not magento_order_id or magento_total_differs"/>
+            </xpath>
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <field name="magento_explanation_id" invisible="1"
+                       groups="sdlc_magento_connector.group_magento_user"/>
+                <button name="action_view_magento_explanation" type="object" class="oe_stat_button"
+                        icon="fa-balance-scale" groups="sdlc_magento_connector.group_magento_user"
+                        invisible="not magento_explanation_id">
+                    <div class="o_stat_info">
+                        <span class="o_stat_value">
+                            <field name="magento_explanation_state" readonly="1"/>
+                        </span>
+                        <span class="o_stat_text">Totals</span>
+                    </div>
+                </button>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Reconciliation findings: Explain -->
+    <record id="view_magento_reconciliation_order_list_totals_p3" model="ir.ui.view">
+        <field name="name">magento.reconciliation.order.list.totals.p3</field>
+        <field name="model">magento.reconciliation.order</field>
+        <field name="inherit_id" ref="view_magento_reconciliation_order_list"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_explain" type="object" string="Explain"/>
+            </xpath>
+            <xpath expr="//field[@name='sale_order_id']" position="after">
+                <field name="explanation_state" widget="badge" optional="show"
+                       decoration-success="explanation_state == 'explained'"
+                       decoration-warning="explanation_state == 'partially'"
+                       decoration-danger="explanation_state == 'unexplained'"/>
+                <field name="explanation_unexplained" optional="show"
+                       invisible="not explanation_state"/>
+                <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
+                        class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_magento_reconciliation_order_form_totals_p3" model="ir.ui.view">
+        <field name="name">magento.reconciliation.order.form.totals.p3</field>
+        <field name="model">magento.reconciliation.order</field>
+        <field name="inherit_id" ref="view_magento_reconciliation_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_explain" type="object" string="Explain" class="btn-primary"
+                        invisible="kind != 'mismatch' or not sale_order_id"/>
+            </xpath>
+            <xpath expr="//field[@name='reconciliation_id']" position="before">
+                <field name="explanation_state" widget="badge" invisible="not explanation_state"
+                       decoration-success="explanation_state == 'explained'"
+                       decoration-warning="explanation_state == 'partially'"
+                       decoration-danger="explanation_state == 'unexplained'"/>
+                <field name="explanation_unexplained" invisible="not explanation_state"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Reconciliation run: Explain All -->
+    <record id="view_magento_reconciliation_form_totals_p3" model="ir.ui.view">
+        <field name="name">magento.reconciliation.form.totals.p3</field>
+        <field name="model">magento.reconciliation</field>
+        <field name="inherit_id" ref="view_magento_reconciliation_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header/button[@name='action_reimport_missing']" position="after">
+                <button name="action_explain_all" type="object" string="Explain All Mismatches"
+                        invisible="mismatch_count == 0 or state != 'done'"/>
+            </xpath>
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_explanations" type="object" class="oe_stat_button"
+                        icon="fa-balance-scale" invisible="explanation_count == 0">
+                    <field name="explanation_count" widget="statinfo" string="Explanations"/>
+                </button>
+            </xpath>
+            <xpath expr="//page[@name='findings']/field[@name='finding_ids']/list/field[@name='sale_order_id']"
+                   position="after">
+                <field name="explanation_state" widget="badge" optional="show"
+                       decoration-success="explanation_state == 'explained'"
+                       decoration-warning="explanation_state == 'partially'"
+                       decoration-danger="explanation_state == 'unexplained'"/>
+                <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
+                        class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
