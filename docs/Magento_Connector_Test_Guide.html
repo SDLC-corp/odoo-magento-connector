@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magento Connector Test Guide</title>
+<style>
+  :root {
+    --brand: #eb5202; --brand-dark: #c34706; --chrome: #373330; --ink: #41362f; --ink-dim: #736963;
+    --secondary: #514943; --bg: #f7f3eb; --panel: #ffffff; --panel-2: #fbf8f3; --line: #dad1c8;
+    --ok: #067647; --ok-bg: #e7f4ec; --warn: #8a6100; --warn-bg: #fffbe6; --crit: #b42318; --crit-bg: #fdecea;
+    --info: #007bdb;
+    --display: Rockwell, "Roboto Slab", Georgia, serif;
+    --text: "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system, sans-serif;
+    --shadow: 0 1px 2px rgba(60,40,20,.04), 0 10px 24px -14px rgba(60,40,20,.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--text); }
+  a { color: var(--info); }
+  code, kbd { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  header { background: var(--chrome); color: #fff; padding: 20px 24px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  header .wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .mark { width: 44px; height: 44px; border-radius: 10px; background: var(--brand); display: grid; place-items: center;
+    font: 700 22px/1 var(--display); color: #fff; flex: none; }
+  h1 { font: 700 24px/1.2 var(--display); margin: 0; }
+  header p { margin: 2px 0 0; color: #d9d2cb; font-size: 13px; }
+  .bar { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
+  .bar .wrap { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  .progress { flex: 1 1 260px; min-width: 220px; }
+  .progress-track { height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; display: flex; }
+  .progress-track span { height: 100%; }
+  .seg-pass { background: var(--ok); } .seg-fail { background: var(--crit); } .seg-skip { background: #a79d95; }
+  .counts { font-size: 12px; color: var(--ink-dim); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  select, input[type=search], textarea { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; }
+  .btn { font: 600 13px/1 var(--text); border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 8px;
+    padding: 8px 12px; cursor: pointer; }
+  .btn:hover { border-color: #c3bbb1; }
+  .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn-primary:hover { background: var(--brand-dark); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  main { padding: 20px 0 60px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { font: 700 19px/1.3 var(--display); margin: 0 0 10px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .kv { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .kv b { display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 4px; }
+  .note { border-radius: 10px; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+  .note-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #f1e0a6; }
+  .note-info { background: #eef6fd; color: #0b4f86; border: 1px solid #cfe6fa; }
+  .section-title { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px; }
+  .section-title h2 { font: 700 20px/1.25 var(--display); margin: 0; }
+  .section-title .meta { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  .test { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .test[data-status=pass] { box-shadow: inset 4px 0 0 var(--ok), var(--shadow); }
+  .test[data-status=fail] { box-shadow: inset 4px 0 0 var(--crit), var(--shadow); }
+  .test[data-status=skip] { box-shadow: inset 4px 0 0 #a79d95, var(--shadow); }
+  .test summary { list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: center; padding: 12px 16px; }
+  .test summary::-webkit-details-marker { display: none; }
+  .tid { font: 600 12px/1 Consolas, monospace; color: var(--ink-dim); min-width: 52px; }
+  .ttitle { font-weight: 600; flex: 1; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; font-weight: 600; letter-spacing: .04em; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--secondary); background: var(--panel-2); white-space: nowrap; }
+  .tag-writes { color: var(--warn); background: var(--warn-bg); border-color: #f1e0a6; }
+  .tag-sim { color: #0b4f86; background: #eef6fd; border-color: #cfe6fa; }
+  .badge { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border-radius: 999px; padding: 3px 9px; }
+  .badge-pass { background: var(--ok-bg); color: var(--ok); } .badge-fail { background: var(--crit-bg); color: var(--crit); }
+  .badge-skip { background: #efe9e2; color: var(--secondary); } .badge-todo { background: var(--panel-2); color: var(--ink-dim); border: 1px solid var(--line); }
+  .tbody { padding: 0 16px 16px 78px; }
+  .tbody h4 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); margin: 12px 0 6px; }
+  .tbody ol, .tbody ul { margin: 0; padding-left: 20px; }
+  .tbody li { margin: 3px 0; }
+  .expected li::marker { color: var(--ok); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .actions .btn[aria-pressed=true].r-pass { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .actions .btn[aria-pressed=true].r-fail { background: var(--crit); border-color: var(--crit); color: #fff; }
+  .actions .btn[aria-pressed=true].r-skip { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+  .actions textarea { flex: 1 1 100%; min-height: 54px; resize: vertical; }
+  footer { color: var(--ink-dim); font-size: 12px; text-align: center; padding: 20px 16px 40px; }
+  @media (max-width: 640px) { .tbody { padding-left: 16px; } .tid { min-width: 0; } h1 { font-size: 20px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media print { .bar, .actions .btn, #filters { display: none; } .test { break-inside: avoid; } details { display: block; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="mark" aria-hidden="true">M</div>
+    <div>
+      <h1>Magento Connector Test Guide</h1>
+      <p>Odoo 19 ↔ Magento 2.4.9 · <code style="background:transparent;border-color:#5b5652;color:#fff">sdlc_magento_connector</code> · Phases 0–3 · branch <code style="background:transparent;border-color:#5b5652;color:#fff">feature/phase3-differentiators</code></p>
+    </div>
+  </div>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="progress">
+      <div class="progress-track" role="img" aria-label="Test progress"><span class="seg-pass" id="segPass"></span><span class="seg-fail" id="segFail"></span><span class="seg-skip" id="segSkip"></span></div>
+      <div class="counts" id="counts"></div>
+    </div>
+    <div id="filters" style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="fSection" aria-label="Filter by section"><option value="">All sections</option></select>
+      <select id="fStatus" aria-label="Filter by result">
+        <option value="">All results</option><option value="todo">Not run</option><option value="pass">Passed</option>
+        <option value="fail">Failed</option><option value="skip">Skipped</option>
+      </select>
+      <input type="search" id="fText" placeholder="Search tests…" aria-label="Search tests">
+    </div>
+    <button class="btn btn-primary" id="btnExport">Export results</button>
+    <button class="btn" id="btnReset">Reset</button>
+  </div>
+</div>
+
+<main class="wrap">
+  <section class="card">
+    <h2>Before you start</h2>
+    <div class="grid2">
+      <div class="kv"><b>Odoo</b><a href="http://127.0.0.1:8669" target="_blank" rel="noopener">http://127.0.0.1:8669</a><br>login <code>admin</code> / <code>admin</code></div>
+      <div class="kv"><b>Magento storefront</b><a href="https://magento.test" target="_blank" rel="noopener">https://magento.test</a><br>accept the local certificate warning</div>
+      <div class="kv"><b>Magento admin</b><a href="https://magento.test/admin" target="_blank" rel="noopener">https://magento.test/admin</a><br>login <code>john.smith</code> / <code>password123</code></div>
+      <div class="kv"><b>Restricted Odoo user</b><code>mguser</code> / <code>mguser</code><br>role: Magento / User</div>
+    </div>
+    <div class="note note-info"><b>Start Magento:</b> open <b>Ubuntu 24.04 LTS</b> from the Start menu and keep the window open (Windows stops Ubuntu when no window is open). If <code>https://magento.test</code> does not load, type <code>cd ~/Sites/magento &amp;&amp; bin/start</code> in Ubuntu and wait one minute.</div>
+    <div class="note note-info"><b>Start Odoo</b> (if <code>127.0.0.1:8669</code> does not load), in PowerShell:<br>
+      <code>Start-Process -FilePath "C:\Odoo19\venv\Scripts\python.exe" -ArgumentList "C:\Odoo19\odoo\odoo-bin","-c","C:\Odoo19\odoo-magento.conf" -WorkingDirectory "C:\Odoo19" -WindowStyle Hidden</code></div>
+    <div class="note note-warn"><b>Background jobs:</b> syncs and pushes run as jobs. After clicking a sync button, open <b>Magento → Logs → Job Queue</b> and refresh until the job is <i>Done</i> (usually under 1–2 minutes).</div>
+    <div class="note note-warn"><b>Tests marked <span class="tag tag-writes">writes to Magento</span></b> change data in the local test store. Each says how to restore it. Never change Magento orders <b>#000000001</b> and <b>#000000002</b>: they are the reference orders.</div>
+    <p style="margin:8px 0 0;font-size:13px;color:var(--ink-dim)">Your results are saved in this browser automatically. Use <b>Export results</b> to download a report (Markdown) to share.</p>
+  </section>
+
+  <div id="tests"></div>
+</main>
+
+<footer>Magento Connector Test Guide · generated for the local test environment (Odoo 19 on port 8669, Magento 2.4.9 at magento.test).</footer>
+
+<script>
+const SECTIONS = [
+  {id: "S1", name: "Setup & connection", tests: [
+    {id: "1.1", title: "Open the Magento app in Odoo", phase: "P0", steps: [
+      "Log in to Odoo as admin.", "Open the app menu and click <b>Magento</b>."],
+      expected: ["Top menu shows <b>Console, Operations, Catalog, Logs, Configuration</b>.", "The Console opens without an error popup."]},
+    {id: "1.2", title: "Instance status and Test Connection", phase: "P0", steps: [
+      "Go to <b>Configuration → Instances → Local Magento</b>.", "Click <b>Test Connection</b>."],
+      expected: ["Status bar (top right) shows <b>Connected</b>.", "Green notice <b>Connection successful</b>.", "Smart buttons at the top show counts (Orders, Products, Customers…)."]},
+    {id: "1.3", title: "Diagnose Access (OAuth 1.0a)", phase: "P1", steps: [
+      "On the instance, open the <b>Connection</b> tab.", "Check <b>Authentication = OAuth 1.0a</b>; the 4 key fields are masked.", "Click <b>Diagnose Access</b>."],
+      expected: ["A table with 9 rows (Stores, Products, Categories, Customers, Orders, Invoices, Shipments, Credit memos, Inventory sources), all <b>OK</b>."]},
+    {id: "1.4", title: "Store views discovered", phase: "P2", steps: [
+      "Open the instance <b>Stores</b> tab (or <b>Configuration → Store Views</b>).", "Compare with Magento admin <b>Stores → All Stores</b>."],
+      expected: ["1 website <b>Main Website</b>, 2 store views: <b>Default Store View (default)</b> and <b>French (fr)</b>.", "Same as Magento."]},
+    {id: "1.5", title: "Setup wizard (read-only walkthrough)", phase: "P2", steps: [
+      "On the instance form click <b>Setup Wizard</b> (it resumes the existing instance).",
+      "Step 1 Store URL: <b>Check address</b>. Step 2 Credentials: <b>Diagnose</b>. Step 3 Stores. Step 4 Mappings (proposals). Step 5 <b>Catalog check</b>.",
+      "Step 6 Go live: do <b>not</b> click <i>Run first sync</i>; close the wizard."],
+      expected: ["Each step shows a status badge; errors appear as text, never as a crash.", "Mappings propose <code>checkmo</code>, <code>flatrate</code> and the Magento tax rates.", "Catalog check lists counts (configurable / bundle / grouped) and any SKU problems."]},
+  ]},
+  {id: "S2", name: "Console", tests: [
+    {id: "2.1", title: "KPI rail and drill-down", phase: "UI", steps: [
+      "Open <b>Magento → Console</b>.", "Click the <b>Orders</b> tile."],
+      expected: ["Tiles: Orders, Revenue, Unconfirmed, Conflicts, Open issues, Queue, Products (≈2,040).", "Clicking a tile opens the matching records (e.g. the Magento orders list)."]},
+    {id: "2.2", title: "Filters and panels", phase: "UI", steps: [
+      "Click period chips <b>7 / 30 / 90 days</b> and the <b>Local Magento</b> instance chip.", "Scroll: Revenue & Orders chart, Needs action, Net profit, Error center by entity, Order status, Top categories, Top countries."],
+      expected: ["Numbers update with the period.", "Every panel renders; empty panels show a short message instead of breaking.", "No browser console errors (F12 → Console)."]},
+  ]},
+  {id: "S3", name: "Catalog import", tests: [
+    {id: "3.1", title: "Product count", phase: "P1", steps: ["Open <b>Catalog → Products</b>, switch to List view."],
+      expected: ["About <b>2,040</b> product bindings (1,891 simple, 147 configurable, 1 bundle, 1 grouped) + any test products."]},
+    {id: "3.2", title: "Configurable product with variants (MH01)", phase: "P2", steps: [
+      "Search <code>MH01</code>, open <b>Chaz Kangeroo Hoodie</b> (type configurable) and its Odoo product.",
+      "Compare with Magento admin: Catalog → Products → MH01 → <i>Configurations</i>."],
+      expected: ["One product template with <b>15 variants</b> (sizes XS–XL × colours Black, Gray, Orange).", "Category <b>Default Category / Men / Tops / Hoodies &amp; Sweatshirts</b>, price 52.00.", "No duplicate standalone products for the variants."]},
+    {id: "3.3", title: "Variant is a stockable product", phase: "P2", steps: ["Open variant <code>MH01-XS-Black</code> (Inventory → Products → Product Variants)."],
+      expected: ["<b>Track Inventory</b> is on (stockable), SKU <code>MH01-XS-Black</code>."]},
+    {id: "3.4", title: "Bundle and grouped products", phase: "P2", steps: [
+      "Search <code>24-WG080</code> (Sprite Yoga Companion Kit, bundle).", "Filter type = grouped and open the grouped product."],
+      expected: ["Bundle shows its components (24-WG081-…, 24-WG084, 24-WG085, 24-WG088).", "Grouped product shows its linked products."]},
+    {id: "3.5", title: "Categories and attributes", phase: "P2", steps: ["Open <b>Catalog → Categories</b> and <b>Catalog → Attributes</b>."],
+      expected: ["About 39 categories (Men, Women, Gear, Bags…) each linked to an Odoo product category.", "Attributes such as size and color with their options."]},
+  ]},
+  {id: "S4", name: "Incremental sync & job queue", tests: [
+    {id: "4.1", title: "Only changed records are synced", phase: "P1", writes: true, steps: [
+      "Magento admin: Catalog → Products → <code>24-MB01</code> → append <code> TEST</code> to the name → Save.",
+      "Odoo instance → <b>Sync Products</b> → note the <i>Queued</i> notice.",
+      "Logs → Job Queue: wait until <i>Done</i>. Then open Logs → Sync Reports (latest product report).",
+      "Restore: remove <code> TEST</code> in Magento and sync products again."],
+      expected: ["Odoo product name ends with TEST.", "Sync report notes show few <b>records seen</b> (not 2,040) and the watermark moving forward.", "After restoring, the name is back to normal in Odoo."]},
+    {id: "4.2", title: "Double click does not duplicate jobs", phase: "P1", steps: ["Click <b>Sync Products</b> twice quickly."],
+      expected: ["Second click says <b>Already queued</b>; only one job in Job Queue."]},
+    {id: "4.3", title: "Paged sync survives Odoo's 120 s job limit", phase: "P1", steps: ["Logs → Job Queue: look at earlier product sync jobs."],
+      expected: ["Large syncs show as many jobs named <i>…, page N</i>, all <i>Done</i>; none <i>Failed</i> for time limits."]},
+  ]},
+  {id: "S5", name: "Odoo → Magento pushes", tests: [
+    {id: "5.1", title: "Price edit is pushed", phase: "P0", writes: true, steps: [
+      "Odoo: Catalog → Products → <code>24-MB04</code> → change the price (note the original) → Save.",
+      "Wait ~1 minute (Job Queue: push job <i>Done</i>).", "Magento admin: open 24-MB04.", "Restore the original price in Odoo."],
+      expected: ["Magento shows the new price; after restoring, the original price.", "Editing in Odoo works even if Magento is slow (the push is a background job)."]},
+    {id: "5.2", title: "French translation is pushed to the fr store view", phase: "P2", writes: true, steps: [
+      "Configuration → Store Views: French row has language <b>French</b> (click <i>Install Language</i> if needed).",
+      "Open the Odoo product of <code>24-MB04</code>, click the language icon next to the name, set the French name, save.",
+      "Magento admin: product 24-MB04 → switch scope (top left) to <b>French</b>."],
+      expected: ["French store view shows the French name; <b>Default Store View</b> name is unchanged."]},
+    {id: "5.3", title: "Images & translations tab", phase: "P2", steps: ["Open the binding of <code>24-MB04</code> → tab <b>Images &amp; Translations</b> → <b>Pull</b>."],
+      expected: ["Gallery rows match the number of images in Magento (24-MB04 has 2)."]},
+  ]},
+  {id: "S6", name: "Customers", tests: [
+    {id: "6.1", title: "Customer linked to one Odoo contact", phase: "P2", steps: ["Catalog → Customers → <b>Veronica Costello</b> → open the linked contact."],
+      expected: ["One contact with tag <b>Magento: General</b>.", "Child addresses: one invoice and one delivery address (6146 Honey Bluff Parkway, Calder MI).", "Contact form has a <b>Magento</b> tab."]},
+    {id: "6.2", title: "Customer groups", phase: "P2", steps: ["Configuration → Customer Groups."],
+      expected: ["4 groups (NOT LOGGED IN, General, Wholesale, Retailer)."]},
+  ]},
+  {id: "S7", name: "Orders & totals", tests: [
+    {id: "7.1", title: "Reference orders match Magento", phase: "P2", steps: ["Operations → Orders."],
+      expected: ["#000000001 → <b>36.39</b>, Sales Order, invoiced, paid.", "#000000002 → <b>39.64</b>, Sales Order, invoiced, fully delivered (refunded in Magento).", "Agent test orders (#3, #4, …) as imported."]},
+    {id: "7.2", title: "Order lines, tax and shipping", phase: "P2", steps: ["Open the order of #000000001."],
+      expected: ["Lines: <code>WS03-XS-Red</code> 29.00 with tax <b>Magento … 8.25%</b>, and <b>Magento Shipping</b> 5.00.", "Totals box: Untaxed 34.00, <b>Tax 8.25%</b> 2.39, <b>Total 36.39</b> = Magento Grand Total in the Magento section."]},
+    {id: "7.3", title: "Invoices, payments, credit note", phase: "P2", steps: ["On #000000002 click the <b>Invoices</b> smart button."],
+      expected: ["Customer invoice 39.64 <b>Paid</b> and a credit note 39.64 (Magento refund)."]},
+    {id: "7.4", title: "Explain totals", phase: "P3", steps: ["On #000000001 click <b>Explain Totals</b> (or <i>Why does this differ?</i>)."],
+      expected: ["Explanation: Magento 36.39, Odoo 36.39, difference <b>0.00</b>, state <b>explained</b>, unexplained 0.00."]},
+    {id: "7.5", title: "Order configuration", phase: "P2", steps: ["Configuration → Orders → Order Workflows, Tax Mapping, Payment Methods, Carriers."],
+      expected: ["5 default workflow rules (pending, processing + paid, complete, closed, canceled).", "Tax map row for the Magento 8.25% rate; payment method <code>checkmo</code>; carrier <code>flatrate</code>."]},
+  ]},
+  {id: "S8", name: "New order end to end", tests: [
+    {id: "8.1", title: "Place an order in the storefront", phase: "P2", writes: true, steps: [
+      "Open <a href='https://magento.test' target='_blank' rel='noopener'>magento.test</a>, add <b>Joust Duffle Bag</b> to the cart.",
+      "Checkout as guest, email <code>tester@example.com</code>, any US address, <b>Flat Rate</b>, <b>Check / Money order</b> → Place Order. Note the order number."],
+      expected: ["Magento confirms the order (status <i>Pending</i>)."]},
+    {id: "8.2", title: "Order arrives in Odoo with exact totals", phase: "P2", steps: [
+      "Odoo instance → <b>Sync Orders</b> → wait for the job.", "Operations → Orders → open the new order."],
+      expected: ["Total equals Magento's grand total (item + 5.00 shipping + tax).", "State <b>Quotation</b> (unpaid check order; default workflow confirms only paid orders)."]},
+    {id: "8.3", title: "Invoice in Magento → workflow in Odoo", phase: "P2", writes: true, steps: [
+      "Magento admin: Sales → Orders → open the order → <b>Invoice</b> → Submit Invoice.",
+      "Odoo: on the order click <b>Pull from Magento</b>."],
+      expected: ["Order becomes <b>Sales Order</b>; one invoice imported (not duplicated), registered as paid.", "No duplicate invoice in Magento."]},
+    {id: "8.4", title: "Ship from Odoo with tracking", phase: "P2", writes: true, steps: [
+      "Odoo: open the order's <b>Delivery</b>, enter a tracking number (e.g. <code>TEST123</code>) in the Magento tracking field, <b>Validate</b>.",
+      "Magento admin: the order's <b>Shipments</b> tab."],
+      expected: ["Magento shows one shipment with tracking <code>TEST123</code>; order status <b>Complete</b>.", "Re-validating or pulling again creates no second shipment."]},
+  ]},
+  {id: "S9", name: "Returns & refunds", tests: [
+    {id: "9.1", title: "Return in Odoo → credit memo in Magento", phase: "P3", writes: true, steps: [
+      "On the delivered order from 8.4: Delivery → <b>Return</b> (qty 1, pick a reason) → Validate.",
+      "Invoices → open the invoice → <b>Credit Note</b> → full refund → Post."],
+      expected: ["Magento order shows a <b>Credit Memo</b> with the refunded amount and the return reason as comment.", "Magento stock for the product goes up by 1 (returned to stock)."]},
+    {id: "9.2", title: "Refund in Magento → credit note + receipt in Odoo", phase: "P3", writes: true, steps: [
+      "Place and invoice + ship a second storefront order (as in 8.1–8.4).",
+      "Instance → <b>Returns</b> tab: set restock policy to <b>always</b> (Magento's API does not expose the restock flag without the add-on).",
+      "Magento admin: order → <b>Credit Memo</b> → tick Return to Stock, Adjustment Fee 2 → Refund Offline.",
+      "Odoo: <b>Pull from Magento</b> on that order."],
+      expected: ["Odoo credit note total equals Magento's credit memo, with a <b>Return fee</b> line of -2.00.", "A receipt from the customer into the return location (Configuration → Returns → Return Locations)."]},
+  ]},
+  {id: "S10", name: "Cancel, hold & conflicts", tests: [
+    {id: "10.1", title: "Hold, release and cancel from Odoo", phase: "P2", writes: true, steps: [
+      "Place a new storefront order and sync it (do not invoice).",
+      "On the Odoo order: <b>Hold in Magento</b>, then <b>Release hold</b>, then <b>Cancel</b>."],
+      expected: ["Magento status follows: On Hold → Pending → Canceled.", "Chatter notes for each action; holding twice does nothing extra."]},
+    {id: "10.2", title: "Conflict when Magento changes a confirmed order", phase: "P3", writes: true, steps: [
+      "Place a new storefront order, sync, and <b>Confirm</b> it in Odoo.",
+      "Magento admin: open the order → edit the <b>Shipping Address</b> → Save.",
+      "Odoo: <b>Pull from Magento</b> → Operations → <b>Conflicts</b> → open the row → <b>Apply new address</b>."],
+      expected: ["A conflict of type address changed appears (with Odoo / Magento diff).", "After applying, the order's delivery address and the delivery picking use the new address; the conflict closes."]},
+    {id: "10.3", title: "Status history", phase: "P3", steps: ["On the order from 10.2 open the <b>Magento Status History</b> tab."],
+      expected: ["Every status change is listed in order (also quick changes that end where they started)."]},
+  ]},
+  {id: "S11", name: "Stock & prices", tests: [
+    {id: "11.1", title: "Stock push after a quantity change", phase: "P2", writes: true, steps: [
+      "Instance → Catalog tab → Stock &amp; Bulk: tick <b>Stock Push Enabled</b>, basis <b>Free</b>, MSI source <code>default</code>.",
+      "Note Magento's quantity for <code>24-MB01</code>. Odoo: Inventory → Physical Inventory → set 24-MB01 to <b>7</b> → Apply.",
+      "Wait ~1–2 minutes; check Magento admin product Quantity.", "Restore Magento's original quantity, then untick Stock Push Enabled."],
+      expected: ["Magento quantity becomes 7 (in stock); only that product is pushed.", "Setting 0 makes it Out of Stock."]},
+    {id: "11.2", title: "Price export rule", phase: "P2", writes: true, steps: [
+      "Configuration → Price Export → New: a pricelist with a fixed price for one product, kind <b>base</b>.",
+      "<b>Push prices now</b>, then check the price in Magento. Restore with <b>Remove from Magento</b> / original price."],
+      expected: ["Magento price changes; a second push reports prices <i>unchanged</i>."]},
+    {id: "11.3", title: "Tier price import", phase: "P3", writes: true, steps: [
+      "Magento admin: product <code>24-WB04</code> → Advanced Pricing → add tier Qty 5, Price 40 → Save.",
+      "Odoo instance → <b>Import Tier Prices</b> → Catalog → Tier Prices.",
+      "Remove the tier in Magento, import again."],
+      expected: ["Pricelist item qty 5 → 40 appears; after removal it is deleted in Odoo.", "The price export never pushes the imported tier back."]},
+  ]},
+  {id: "S12", name: "Reliability tools", tests: [
+    {id: "12.1", title: "Error Center and retry", phase: "P1", writes: true, steps: [
+      "In Ubuntu: <code>cd ~/Sites/magento &amp;&amp; bin/stop</code>.",
+      "Odoo instance → <b>Sync Products</b>; wait for the job. Open Logs → <b>Error Center</b>.",
+      "Ubuntu: <code>bin/start</code>, wait 1 minute. In the Error Center select the issue → <b>Retry</b>."],
+      expected: ["An issue <i>product / list</i> appears with a clear connection message (Console shows Open issues 1).", "After Magento is back and the retry runs, the issue becomes <b>Resolved</b>."]},
+    {id: "12.2", title: "Reconciliation", phase: "P1", steps: [
+      "Logs → Reconciliation → New: period covering the last days → <b>Run</b> (longer ranges run in the background).",
+      "If there are mismatches, click <b>Explain All Mismatches</b>."],
+      expected: ["Magento and Odoo order counts per day; reference orders <b>matched</b>.", "Any mismatch has an explanation (Logs → Totals Explanations)."]},
+    {id: "12.3", title: "Dry-run preview writes nothing", phase: "P3", steps: [
+      "Configuration → Dry-run Preview → entity Products, limit 20 → <b>Preview</b>."],
+      expected: ["Rows with action <i>no change</i> (or <i>update</i> with a field diff).", "No product changes in Odoo and no request written to Magento."]},
+    {id: "12.4", title: "Data ownership blocks pushes", phase: "P3", steps: [
+      "Instance → <b>Data Ownership</b> tab: set Products to <b>Magento → Odoo</b>.",
+      "Edit an Odoo product name, then check Logs → Job Queue.", "Set Products back to <b>Two-way</b>."],
+      expected: ["No push job is queued while products are Magento → Odoo."]},
+    {id: "12.5", title: "Field mapping transform", phase: "P3", steps: [
+      "Configuration → Field Mapping → Product Mapping: open a mapping, set transform <code>upper(value)</code> → <b>Live Test</b>.",
+      "Try an invalid expression such as <code>env</code>."],
+      expected: ["Live test shows input → UPPERCASE output.", "Invalid expression is refused with a clear message."]},
+  ]},
+  {id: "S13", name: "Insights & settings", tests: [
+    {id: "13.1", title: "Daily digest", phase: "P3", steps: [
+      "Instance → <b>Digest</b> tab: add yourself as recipient → <b>Send Digest Now</b>.", "Logs → Daily Digests → open it."],
+      expected: ["A digest with orders, revenue, refunds, issues and queue figures; each figure is a link that opens the matching records."]},
+    {id: "13.2", title: "Net profit", phase: "P3", steps: ["Operations → <b>Net Profit</b> (pivot / list)."],
+      expected: ["Revenue minus refunds, cost of goods, shipping (estimated if no carrier cost) and fees, per order and month."]},
+    {id: "13.3", title: "Settings export contains no secrets", phase: "P3", steps: [
+      "Instance → <b>Export Settings</b> → download the JSON and open it in a text editor.", "Search for <i>secret</i>, <i>token</i>, <i>consumer</i>."],
+      expected: ["Mappings and options are present; no keys, tokens or passwords."]},
+  ]},
+  {id: "S14", name: "Real-time add-on (advanced, optional)", tests: [
+    {id: "14.1", title: "Magento change reaches Odoo without a manual sync", phase: "P3", writes: true, steps: [
+      "Make Odoo reachable from Magento: in <code>C:\\Odoo19\\odoo-magento.conf</code> set <code>http_interface = 0.0.0.0</code> and restart Odoo. In Ubuntu run <code>ip route | awk '/default/ {print $3}'</code> to get the Windows host IP.",
+      "Odoo instance → <b>Real-time</b> tab: enable webhooks; set the public Odoo URL to <code>http://&lt;host-ip&gt;:8669</code>; copy the webhook URL and secret.",
+      "Magento admin: Stores → Configuration → Services → <b>Odoo Connector</b>: enable, paste URL and secret, Save.",
+      "Rename a product in Magento, then in Ubuntu run <code>bin/magento sdlc:odoo:outbox:flush</code> (the local container has no cron).",
+      "Afterwards: disable the add-on in Magento and set <code>http_interface</code> back to <code>127.0.0.1</code>."],
+      expected: ["Logs → <b>Real-time Events</b> lists the event; the Odoo product is renamed within about a minute.", "A wrong secret is rejected (401) and Magento retries later."]},
+  ]},
+  {id: "S15", name: "Security", tests: [
+    {id: "15.1", title: "Restricted Magento user", phase: "P0", steps: [
+      "In a private browser window log in as <code>mguser</code> / <code>mguser</code>.", "Open the Magento app and the instance."],
+      expected: ["<b>Configuration</b> menu is hidden; the instance shows no keys and no Test Connection button.", "Operations, Catalog and Logs work; Error Center <b>Retry</b> is allowed; Job Queue <i>Run Now</i> is refused."]},
+  ]},
+  {id: "S16", name: "Adobe Commerce only (simulated)", tests: [
+    {id: "16.1", title: "Detect B2B on Magento Open Source", phase: "P3", sim: true, steps: [
+      "Instance → <b>Adobe Commerce</b> tab: tick B2B → <b>Detect B2B</b> → then untick B2B."],
+      expected: ["Message <b>B2B not available</b> (the local store is Magento Open Source).", "B2B and Adobe Cloud features are verified only with simulated Adobe responses; a live Adobe Commerce store is needed for real testing."]},
+  ]},
+];
+
+const STORE_KEY = "mg-test-guide-results-v1";
+let results = {};
+try { results = JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; } catch (e) { results = {}; }
+const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(results)); } catch (e) { /* storage unavailable: results kept for this session */ } };
+
+const allTests = SECTIONS.flatMap(s => s.tests.map(t => ({...t, section: s})));
+const container = document.getElementById("tests");
+const fSection = document.getElementById("fSection");
+SECTIONS.forEach(s => { const o = document.createElement("option"); o.value = s.id; o.textContent = s.name; fSection.appendChild(o); });
+
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const badge = (st) => st ? `<span class="badge badge-${st}">${st === "pass" ? "Passed" : st === "fail" ? "Failed" : "Skipped"}</span>` : `<span class="badge badge-todo">Not run</span>`;
+
+function render() {
+  container.innerHTML = "";
+  SECTIONS.forEach(s => {
+    const head = document.createElement("div");
+    head.className = "section-title"; head.dataset.section = s.id;
+    head.innerHTML = `<h2>${esc(s.name)}</h2><span class="meta"></span>`;
+    container.appendChild(head);
+    s.tests.forEach(t => {
+      const r = results[t.id] || {};
+      const el = document.createElement("details");
+      el.className = "test"; el.dataset.id = t.id; el.dataset.section = s.id; el.dataset.status = r.status || "todo";
+      el.innerHTML = `
+        <summary>
+          <span class="tid">${esc(t.id)}</span>
+          <span class="ttitle">${esc(t.title)}</span>
+          <span class="tags">
+            <span class="tag">${esc(t.phase)}</span>
+            ${t.writes ? '<span class="tag tag-writes">writes to Magento</span>' : ""}
+            ${t.sim ? '<span class="tag tag-sim">simulated only</span>' : ""}
+          </span>
+          <span class="st">${badge(r.status)}</span>
+        </summary>
+        <div class="tbody">
+          <h4>Steps</h4><ol>${t.steps.map(x => `<li>${x}</li>`).join("")}</ol>
+          <h4>Expected result</h4><ul class="expected">${t.expected.map(x => `<li>${x}</li>`).join("")}</ul>
+          <div class="actions" role="group" aria-label="Result for test ${esc(t.id)}">
+            <button class="btn r-pass" data-r="pass" aria-pressed="${r.status === "pass"}">Pass</button>
+            <button class="btn r-fail" data-r="fail" aria-pressed="${r.status === "fail"}">Fail</button>
+            <button class="btn r-skip" data-r="skip" aria-pressed="${r.status === "skip"}">Skip</button>
+            <textarea placeholder="Notes: what you saw, order numbers, error text…" aria-label="Notes for test ${esc(t.id)}">${esc(r.note || "")}</textarea>
+          </div>
+        </div>`;
+      el.querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", () => {
+        const cur = (results[t.id] || {}).status;
+        const next = cur === b.dataset.r ? undefined : b.dataset.r;
+        results[t.id] = {...(results[t.id] || {}), status: next, at: new Date().toISOString()};
+        save(); updateTest(el, t.id); updateCounts();
+      }));
+      el.querySelector("textarea").addEventListener("input", (e) => {
+        results[t.id] = {...(results[t.id] || {}), note: e.target.value}; save();
+      });
+      container.appendChild(el);
+    });
+  });
+  applyFilters(); updateCounts();
+}
+
+function updateTest(el, id) {
+  const st = (results[id] || {}).status;
+  el.dataset.status = st || "todo";
+  el.querySelector(".st").innerHTML = badge(st);
+  el.querySelectorAll("[data-r]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.r === st)));
+  applyFilters();
+}
+
+function updateCounts() {
+  const n = allTests.length;
+  const c = {pass: 0, fail: 0, skip: 0};
+  allTests.forEach(t => { const st = (results[t.id] || {}).status; if (st) c[st]++; });
+  const done = c.pass + c.fail + c.skip;
+  document.getElementById("segPass").style.width = (c.pass / n * 100) + "%";
+  document.getElementById("segFail").style.width = (c.fail / n * 100) + "%";
+  document.getElementById("segSkip").style.width = (c.skip / n * 100) + "%";
+  document.getElementById("counts").textContent = `${done} of ${n} run · ${c.pass} passed · ${c.fail} failed · ${c.skip} skipped`;
+  SECTIONS.forEach(s => {
+    const meta = container.querySelector(`.section-title[data-section="${s.id}"] .meta`);
+    if (!meta) return;
+    const d = s.tests.filter(t => (results[t.id] || {}).status).length;
+    meta.textContent = `${d}/${s.tests.length}`;
+  });
+}
+
+function applyFilters() {
+  const sec = fSection.value, st = document.getElementById("fStatus").value, q = document.getElementById("fText").value.trim().toLowerCase();
+  container.querySelectorAll(".test").forEach(el => {
+    const t = allTests.find(x => x.id === el.dataset.id);
+    const status = (results[t.id] || {}).status || "todo";
+    const text = (t.id + " " + t.title + " " + t.steps.join(" ") + " " + t.expected.join(" ")).toLowerCase();
+    el.hidden = (sec && t.section.id !== sec) || (st && status !== st) || (q && !text.includes(q));
+  });
+  container.querySelectorAll(".section-title").forEach(h => {
+    h.hidden = ![...container.querySelectorAll(`.test[data-section="${h.dataset.section}"]`)].some(el => !el.hidden);
+  });
+}
+
+["fSection", "fStatus"].forEach(id => document.getElementById(id).addEventListener("change", applyFilters));
+document.getElementById("fText").addEventListener("input", applyFilters);
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (!confirm("Clear all results and notes?")) return;
+  results = {}; save(); render();
+});
+
+document.getElementById("btnExport").addEventListener("click", () => {
+  const strip = (h) => h.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  const c = {pass: 0, fail: 0, skip: 0, todo: 0};
+  allTests.forEach(t => c[(results[t.id] || {}).status || "todo"]++);
+  let md = `# Magento Connector test results\n\nDate: ${new Date().toLocaleString()}\n\n`;
+  md += `Passed ${c.pass} · Failed ${c.fail} · Skipped ${c.skip} · Not run ${c.todo} (of ${allTests.length})\n\n`;
+  SECTIONS.forEach(s => {
+    md += `## ${s.name}\n\n| Test | Result | Notes |\n|---|---|---|\n`;
+    s.tests.forEach(t => {
+      const r = results[t.id] || {};
+      md += `| ${t.id} ${strip(t.title)} | ${r.status ? r.status.toUpperCase() : "not run"} | ${(r.note || "").replace(/\n/g, " ").replace(/\|/g, "/")} |\n`;
+    });
+    md += "\n";
+  });
+  const blob = new Blob([md], {type: "text/markdown"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `magento-connector-test-results-${new Date().toISOString().slice(0, 10)}.md`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+render();
+</script>
+</body>
+</html>
