@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 3 (3.6 / 3.9): Adobe Commerce B2B and Adobe Commerce as a
+         Cloud Service. Standard views only (house style: odoo-trs-ui).
+         Both features are opt-in and inert while off.
+         ============================================================ -->
+
+    <!-- Instance: Adobe Commerce tab -->
+    <record id="view_magento_instance_form_adobe_p3" model="ir.ui.view">
+        <field name="name">magento.instance.form.adobe.p3</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <div name="button_box" position="inside">
+                <button name="action_view_b2b_companies" type="object" class="oe_stat_button"
+                        icon="fa-building" invisible="not b2b_enabled">
+                    <field name="b2b_company_count" widget="statinfo" string="B2B Companies"/>
+                </button>
+                <button name="action_view_b2b_quotes" type="object" class="oe_stat_button"
+                        icon="fa-handshake-o" invisible="not b2b_enabled">
+                    <field name="b2b_quote_count" widget="statinfo" string="Negotiable Quotes"/>
+                </button>
+            </div>
+            <field name="access_token" position="attributes">
+                <attribute name="invisible">auth_method == 'ims'</attribute>
+                <attribute name="required">auth_method != 'ims'</attribute>
+            </field>
+            <xpath expr="//page[@name='connection']/group[@name='authentication']" position="after">
+                <div class="alert alert-info mb-3" role="status" invisible="auth_method != 'ims'">
+                    Adobe IMS credentials, the tenant ID and the token status are on the
+                    <b>Adobe Commerce</b> tab.
+                </div>
+            </xpath>
+            <page name="connection" position="after">
+                <page string="Adobe Commerce" name="adobe_commerce">
+                    <group>
+                        <group string="Platform">
+                            <field name="platform" widget="radio"/>
+                            <field name="accs_tenant_id" invisible="platform != 'accs'"
+                                   required="platform == 'accs'" placeholder="AbCYab34cdEfGHiJ27123"/>
+                        </group>
+                        <group string="Adobe IMS (server-to-server)" invisible="auth_method != 'ims'"
+                               groups="sdlc_magento_connector.group_magento_manager">
+                            <field name="ims_client_id" password="True" required="auth_method == 'ims'"/>
+                            <field name="ims_client_secret" password="True" required="auth_method == 'ims'"/>
+                            <field name="ims_org_id"/>
+                            <field name="ims_scopes"/>
+                            <field name="ims_token_url"/>
+                            <field name="ims_token_expires_at"/>
+                            <div class="o_row" colspan="2">
+                                <button name="action_ims_fetch_token" type="object" string="Fetch IMS Token"
+                                        icon="fa-key" class="btn-secondary"/>
+                                <span class="text-muted">Checks the Developer Console credential.</span>
+                            </div>
+                        </group>
+                    </group>
+                    <div class="alert alert-warning mb-3" role="status" invisible="platform != 'accs'">
+                        <strong>Adobe Commerce as a Cloud Service.</strong>
+                        Requests go to <code>&lt;base URL&gt;/&lt;tenant&gt;/V1/…</code> (no <code>/rest</code>,
+                        store scope in the <code>Store</code> header) with an Adobe IMS bearer token.
+                        Validated against Adobe's documented API with simulated responses; not yet tested
+                        against a live ACCS tenant.
+                    </div>
+                    <group string="Capabilities on this platform" invisible="platform != 'accs'">
+                        <field name="accs_capability_html" nolabel="1" colspan="2"/>
+                    </group>
+
+                    <group>
+                        <group string="Adobe Commerce B2B">
+                            <field name="b2b_enabled" widget="boolean_toggle"/>
+                            <field name="b2b_status" widget="badge"
+                                   decoration-success="b2b_status == 'present'"
+                                   decoration-warning="b2b_status == 'absent'"
+                                   decoration-danger="b2b_status == 'error'"/>
+                            <field name="b2b_status_message" invisible="not b2b_status_message"/>
+                            <field name="b2b_checked_at" invisible="not b2b_checked_at"/>
+                            <div class="o_row" colspan="2">
+                                <button name="action_b2b_detect" type="object" string="Detect B2B"
+                                        icon="fa-search" class="btn-secondary"
+                                        groups="sdlc_magento_connector.group_magento_manager"/>
+                                <span class="text-muted">Probes <code>/V1/company</code>; nothing is written.</span>
+                            </div>
+                        </group>
+                        <group string="B2B Sync" invisible="not b2b_enabled">
+                            <field name="b2b_credit_payment_term_id"/>
+                            <field name="b2b_quotes_watermark"/>
+                            <div class="o_row" colspan="2">
+                                <button name="action_b2b_import_companies" type="object" string="Import Companies"
+                                        icon="fa-building" class="btn-secondary"/>
+                                <button name="action_b2b_import_shared_catalogs" type="object"
+                                        string="Import Shared Catalogs" icon="fa-book" class="btn-secondary"/>
+                                <button name="action_b2b_import_quotes" type="object" string="Import Quotes"
+                                        icon="fa-handshake-o" class="btn-secondary"/>
+                            </div>
+                        </group>
+                    </group>
+                    <div class="alert alert-info mb-0" role="status">
+                        Requires Adobe Commerce with B2B. Validated against Adobe's documented API with
+                        simulated responses; not yet tested against a live Adobe Commerce store.
+                    </div>
+                </page>
+            </page>
+        </field>
+    </record>
+
+    <!-- Partner: Magento company tab -->
+    <record id="view_partner_form_magento_b2b_p3" model="ir.ui.view">
+        <field name="name">res.partner.form.magento.b2b.p3</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Magento Company" name="magento_b2b_company"
+                      invisible="not is_company"
+                      groups="sdlc_magento_connector.group_magento_user">
+                    <div class="alert alert-info mb-3" role="status">
+                        Requires Adobe Commerce with B2B. Validated against Adobe's documented API with
+                        simulated responses; not yet tested against a live Adobe Commerce store.
+                    </div>
+                    <group>
+                        <group string="Binding">
+                            <field name="magento_company_instance_id" options="{'no_create': True}"/>
+                            <field name="magento_company_id" readonly="1"/>
+                            <field name="magento_company_status" readonly="1"
+                                   invisible="not magento_company_id"/>
+                            <field name="magento_b2b_export"/>
+                            <field name="magento_company_admin_id" options="{'no_create': True}"/>
+                            <field name="magento_shared_catalog_id" options="{'no_create': True}"/>
+                        </group>
+                        <group string="Company Details">
+                            <field name="magento_company_legal_name"/>
+                            <field name="magento_company_vat"/>
+                            <field name="magento_company_reseller_id"/>
+                            <field name="magento_company_group_id" readonly="1"
+                                   invisible="not magento_company_id"/>
+                        </group>
+                        <group string="Company Credit (informational)" invisible="not magento_company_id">
+                            <field name="magento_company_credit_limit"/>
+                            <field name="magento_company_credit_balance"/>
+                            <field name="magento_company_credit_available"/>
+                            <field name="magento_company_credit_currency"/>
+                        </group>
+                    </group>
+                    <div class="o_row">
+                        <button name="action_magento_b2b_export" type="object" string="Export to Magento"
+                                icon="fa-upload" class="btn-secondary"
+                                invisible="not magento_b2b_export or not magento_company_instance_id"/>
+                        <button name="action_magento_b2b_pull" type="object" string="Re-sync from Magento"
+                                icon="fa-refresh" class="btn-secondary" invisible="not magento_company_id"/>
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Companies -->
+    <record id="view_magento_b2b_company_list" model="ir.ui.view">
+        <field name="name">res.partner.list.magento.b2b</field>
+        <field name="model">res.partner</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <list string="B2B Companies" create="0">
+                <field name="name"/>
+                <field name="magento_company_id"/>
+                <field name="magento_company_legal_name" optional="show"/>
+                <field name="vat" optional="show"/>
+                <field name="email" optional="hide"/>
+                <field name="city" optional="show"/>
+                <field name="country_id" optional="show"/>
+                <field name="magento_company_status" widget="badge"
+                       decoration-success="magento_company_status == '1'"
+                       decoration-warning="magento_company_status == '0'"
+                       decoration-danger="magento_company_status in ('2', '3')"/>
+                <field name="magento_company_admin_id" optional="show"/>
+                <field name="magento_shared_catalog_id" optional="show"/>
+                <field name="magento_company_credit_limit" optional="show"/>
+                <field name="magento_company_instance_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_magento_b2b_company" model="ir.actions.act_window">
+        <field name="name">B2B Companies</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('magento_company_instance_id', '!=', False)]</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_magento_b2b_company_list')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('base.view_partner_form')})]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Adobe Commerce B2B company yet</p>
+            <p>Use <b>Import Companies</b> on the instance's Adobe Commerce tab. Requires Adobe Commerce
+               with B2B. Validated against Adobe's documented API with simulated responses; not yet
+               tested against a live Adobe Commerce store.</p>
+        </field>
+    </record>
+
+    <!-- Shared catalogs -->
+    <record id="view_magento_shared_catalog_list" model="ir.ui.view">
+        <field name="name">magento.shared.catalog.list</field>
+        <field name="model">magento.shared.catalog</field>
+        <field name="arch" type="xml">
+            <list string="Shared Catalogs" create="0">
+                <field name="magento_catalog_id"/>
+                <field name="name"/>
+                <field name="catalog_type" widget="badge"/>
+                <field name="customer_group_rec_id" optional="show"/>
+                <field name="pricelist_id"/>
+                <field name="product_count"/>
+                <field name="company_partner_count"/>
+                <field name="last_import_at" optional="show"/>
+                <field name="last_export_at" optional="show"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_shared_catalog_form" model="ir.ui.view">
+        <field name="name">magento.shared.catalog.form</field>
+        <field name="model">magento.shared.catalog</field>
+        <field name="arch" type="xml">
+            <form string="Shared Catalog" create="0">
+                <header>
+                    <button name="action_import" type="object" string="Import from Magento" class="btn-primary"/>
+                    <button name="action_export" type="object" string="Export Pricelist to Magento"
+                            invisible="not pricelist_id"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_pricelist_items" type="object" class="oe_stat_button"
+                                icon="fa-tags">
+                            <field name="pricelist_item_count" widget="statinfo" string="Imported Prices"/>
+                        </button>
+                    </div>
+                    <div class="alert alert-info mb-3" role="status">
+                        <field name="b2b_notice" readonly="1"/>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Magento">
+                            <field name="instance_id" readonly="1"/>
+                            <field name="magento_catalog_id"/>
+                            <field name="catalog_type"/>
+                            <field name="customer_group_id"/>
+                            <field name="customer_group_rec_id"/>
+                            <field name="tax_class_id"/>
+                        </group>
+                        <group string="Odoo">
+                            <field name="pricelist_id"/>
+                            <field name="product_count"/>
+                            <field name="last_import_at"/>
+                            <field name="last_export_at"/>
+                            <field name="last_result"/>
+                        </group>
+                    </group>
+                    <field name="description" readonly="1" invisible="not description"/>
+                    <separator string="Companies"/>
+                    <field name="company_partner_ids" readonly="1">
+                        <list>
+                            <field name="name"/>
+                            <field name="magento_company_id"/>
+                            <field name="city"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_shared_catalog" model="ir.actions.act_window">
+        <field name="name">Shared Catalogs</field>
+        <field name="res_model">magento.shared.catalog</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No shared catalog yet</p>
+            <p>Use <b>Import Shared Catalogs</b> on the instance's Adobe Commerce tab. Each catalog maps to
+               an Odoo pricelist. Requires Adobe Commerce with B2B. Validated against Adobe's documented
+               API with simulated responses; not yet tested against a live Adobe Commerce store.</p>
+        </field>
+    </record>
+
+    <!-- Negotiable quotes -->
+    <record id="view_magento_negotiable_quote_list" model="ir.ui.view">
+        <field name="name">sale.order.list.magento.negotiable</field>
+        <field name="model">sale.order</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <list string="Negotiable Quotes" create="0">
+                <field name="name"/>
+                <field name="magento_quote_id"/>
+                <field name="magento_quote_name" optional="show"/>
+                <field name="partner_id"/>
+                <field name="magento_quote_status" widget="badge"
+                       decoration-info="magento_quote_status in ('created', 'submitted_by_customer', 'processing_by_admin')"
+                       decoration-warning="magento_quote_status in ('submitted_by_admin', 'processing_by_customer')"
+                       decoration-success="magento_quote_status == 'ordered'"
+                       decoration-muted="magento_quote_status in ('expired', 'declined', 'closed')"/>
+                <field name="magento_quote_expiration" optional="show"/>
+                <field name="magento_quote_original_total" optional="show"/>
+                <field name="amount_untaxed" sum="Total"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" optional="hide"/>
+                <field name="magento_quote_instance_id" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_magento_negotiable_quote" model="ir.actions.act_window">
+        <field name="name">Negotiable Quotes</field>
+        <field name="res_model">sale.order</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('magento_quote_id', '!=', False)]</field>
+        <field name="context">{'create': False}</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_magento_negotiable_quote_list')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('sale.view_order_form')})]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No negotiable quote yet</p>
+            <p>Use <b>Import Quotes</b> on the instance's Adobe Commerce tab. Each Magento negotiable quote
+               becomes an Odoo quotation you can answer with a price proposal. Requires Adobe Commerce with
+               B2B. Validated against Adobe's documented API with simulated responses; not yet tested against
+               a live Adobe Commerce store.</p>
+        </field>
+    </record>
+
+    <record id="view_order_form_magento_b2b_p3" model="ir.ui.view">
+        <field name="name">sale.order.form.magento.b2b.p3</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <field name="magento_quote_seller_turn" invisible="1"/>
+                <button name="action_magento_quote_wizard" type="object" string="Send Proposal to Magento"
+                        class="btn-primary" context="{'magento_quote_mode': 'proposal'}"
+                        invisible="not magento_quote_seller_turn"
+                        groups="sdlc_magento_connector.group_magento_user"/>
+                <button name="action_magento_quote_wizard" type="object" string="Decline in Magento"
+                        context="{'magento_quote_mode': 'decline'}"
+                        invisible="not magento_quote_seller_turn"
+                        groups="sdlc_magento_connector.group_magento_user"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Magento Negotiation" name="magento_negotiation"
+                      invisible="not magento_quote_id and not magento_source_quotation_id"
+                      groups="sdlc_magento_connector.group_magento_user">
+                    <div class="alert alert-info mb-3" role="status">
+                        Requires Adobe Commerce with B2B. Validated against Adobe's documented API with
+                        simulated responses; not yet tested against a live Adobe Commerce store.
+                        Magento negotiates one price for the whole quote: Odoo sends a percentage when every
+                        line has the same discount, otherwise the proposed untaxed total.
+                    </div>
+                    <group invisible="not magento_quote_id">
+                        <group string="Negotiable Quote">
+                            <field name="magento_quote_instance_id"/>
+                            <field name="magento_quote_id"/>
+                            <field name="magento_quote_name"/>
+                            <field name="magento_quote_status" widget="badge"/>
+                            <field name="magento_quote_expiration"/>
+                            <field name="magento_quote_proposal_sent_at"/>
+                        </group>
+                        <group string="Prices in Magento">
+                            <field name="magento_quote_original_total"/>
+                            <field name="magento_quote_negotiated_type"/>
+                            <field name="magento_quote_negotiated_value"/>
+                            <field name="magento_quote_negotiated_total"/>
+                        </group>
+                    </group>
+                    <div class="o_row" invisible="not magento_quote_id">
+                        <button name="action_magento_quote_resync" type="object" string="Re-sync from Magento"
+                                icon="fa-refresh" class="btn-secondary"/>
+                    </div>
+                    <group invisible="not magento_source_quotation_id">
+                        <field name="magento_source_quotation_id"/>
+                    </group>
+                    <field name="magento_placed_order_ids" invisible="not magento_placed_order_ids" readonly="1">
+                        <list>
+                            <field name="name"/>
+                            <field name="magento_increment_id"/>
+                            <field name="amount_total"/>
+                            <field name="currency_id" column_invisible="1"/>
+                            <field name="state"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_magento_b2b_quote_wizard_form" model="ir.ui.view">
+        <field name="name">magento.b2b.quote.wizard.form</field>
+        <field name="model">magento.b2b.quote.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Magento Negotiable Quote">
+                <field name="order_id" invisible="1"/>
+                <field name="mode" invisible="1"/>
+                <div class="alert alert-info mb-3" role="status" invisible="mode != 'proposal'">
+                    <field name="summary" readonly="1"/>
+                </div>
+                <group>
+                    <field name="comment" placeholder="Message shown to the buyer in Magento"
+                           required="mode == 'decline'"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object" string="Send Proposal" class="btn-primary"
+                            invisible="mode != 'proposal'"/>
+                    <button name="action_confirm" type="object" string="Decline Quote" class="btn-primary"
+                            invisible="mode != 'decline'"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Menus: hidden while no instance has B2B on (magento.instance._magento_b2b_sync_menus) -->
+    <menuitem id="menu_magento_b2b" name="B2B" parent="sdlc_magento_connector.menu_magento_root" sequence="25"/>
+    <menuitem id="menu_magento_b2b_companies" name="Companies" parent="menu_magento_b2b"
+              action="action_magento_b2b_company" sequence="1"/>
+    <menuitem id="menu_magento_b2b_shared_catalogs" name="Shared Catalogs" parent="menu_magento_b2b"
+              action="action_magento_shared_catalog" sequence="2"/>
+    <menuitem id="menu_magento_b2b_quotes" name="Negotiable Quotes" parent="menu_magento_b2b"
+              action="action_magento_negotiable_quote" sequence="3"/>
+
+    <function model="magento.instance" name="_magento_b2b_sync_menus"/>
+</odoo>

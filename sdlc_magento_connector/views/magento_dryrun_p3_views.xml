@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 3.8: Data Ownership, dry-run preview, mapping transforms
+         ============================================================ -->
+
+    <!-- Instance: "Data Ownership" tab (per-entity direction + can-update guard) -->
+    <record id="view_magento_instance_form_ownership" model="ir.ui.view">
+        <field name="name">magento.instance.form.ownership</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_dryruns" type="object" class="oe_stat_button" icon="fa-eye"
+                        groups="sdlc_magento_connector.group_magento_user">
+                    <field name="dryrun_count" widget="statinfo" string="Previews"/>
+                </button>
+            </xpath>
+            <xpath expr="//page[@name='catalog']" position="after">
+                <page string="Data Ownership" name="data_ownership">
+                    <p class="text-muted mb-3">
+                        Choose which side owns each kind of data. <strong>Magento → Odoo</strong>
+                        imports and never pushes Odoo edits back, <strong>Odoo → Magento</strong>
+                        pushes and skips the import, <strong>Off</strong> does neither.
+                        <strong>Create only</strong> creates what is missing but never overwrites
+                        an existing record on the receiving side. Skipped records appear in the
+                        sync reports with the reason.
+                    </p>
+                    <group name="ownership_grid" class="o_mg_ownership">
+                        <span class="text-uppercase small fw-semibold text-muted"
+                              style="letter-spacing: .07em;">Entity</span>
+                        <div class="o_row text-uppercase small fw-semibold text-muted"
+                             style="letter-spacing: .07em;">
+                            <span class="w-50">Direction</span>
+                            <span class="w-50">Existing records</span>
+                        </div>
+                        <label for="ownership_product_direction" string="Products"/>
+                        <div class="o_row">
+                            <field name="ownership_product_direction" widget="selection_badge"/>
+                            <field name="ownership_product_update" widget="selection_badge"/>
+                        </div>
+                        <label for="ownership_category_direction" string="Categories"/>
+                        <div class="o_row">
+                            <field name="ownership_category_direction" widget="selection_badge"/>
+                            <field name="ownership_category_update" widget="selection_badge"/>
+                        </div>
+                        <label for="ownership_customer_direction" string="Customers"/>
+                        <div class="o_row">
+                            <field name="ownership_customer_direction" widget="selection_badge"/>
+                            <field name="ownership_customer_update" widget="selection_badge"/>
+                        </div>
+                        <label for="ownership_order_direction" string="Orders"/>
+                        <div class="o_row">
+                            <field name="ownership_order_direction" widget="selection_badge"/>
+                            <field name="ownership_order_update" widget="selection_badge"/>
+                        </div>
+                        <label for="ownership_stock_direction" string="Stock"/>
+                        <div class="o_row">
+                            <field name="ownership_stock_direction" widget="selection_badge"/>
+                            <field name="ownership_stock_update" widget="selection_badge"/>
+                        </div>
+                        <label for="ownership_price_direction" string="Prices"/>
+                        <div class="o_row">
+                            <field name="ownership_price_direction" widget="selection_badge"/>
+                            <field name="ownership_price_update" widget="selection_badge"/>
+                        </div>
+                    </group>
+                    <p class="text-muted small">
+                        Stock and prices travel with products: their direction decides whether a
+                        product import takes Magento's quantity and price, and whether stock and
+                        price pushes run. Create only there means "first value only".
+                    </p>
+                    <button name="action_open_dryrun" type="object" string="Preview a sync (dry run)"
+                            icon="fa-eye" class="btn-secondary"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Field mapping: transform expression + live test -->
+    <record id="view_magento_field_mapping_form_transform" model="ir.ui.view">
+        <field name="name">magento.field.mapping.form.transform</field>
+        <field name="model">magento.field.mapping</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_field_mapping_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/group" position="after">
+                <group string="Transform" name="transform">
+                    <field name="transform_expr" class="font-monospace"
+                           placeholder="e.g. upper(strip(value)) · round(float(value) * 1.2, 2) · default(value, 'n/a')"/>
+                    <field name="transform_direction" widget="radio" options="{'horizontal': true}"
+                           invisible="not transform_expr"/>
+                    <div colspan="2" class="text-muted small" invisible="transform_expr">
+                        Optional. Available: <code>value</code>, <code>record</code> and
+                        <code>upper</code>, <code>lower</code>, <code>strip</code>,
+                        <code>replace(value, old, new)</code>, <code>default(value, fallback)</code>,
+                        <code>round</code>, <code>int</code>, <code>float</code>, <code>str</code>.
+                    </div>
+                    <div colspan="2" invisible="not transform_expr">
+                        <button name="action_live_test_transform" type="object" string="Live Test"
+                                icon="fa-flask" class="btn-secondary"/>
+                        <span class="text-muted small ms-2">Runs the transform on a live sample record.</span>
+                    </div>
+                </group>
+                <group string="Live Test Result" name="transform_test"
+                       invisible="not transform_test_status or not transform_expr">
+                    <field name="transform_test_status" widget="badge"
+                           decoration-success="transform_test_status == 'ok'"
+                           decoration-danger="transform_test_status == 'error'"/>
+                    <field name="transform_test_source"/>
+                    <field name="transform_test_input" class="font-monospace"/>
+                    <field name="transform_test_output" class="font-monospace"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_magento_field_mapping_list_transform" model="ir.ui.view">
+        <field name="name">magento.field.mapping.list.transform</field>
+        <field name="model">magento.field.mapping</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_field_mapping_list"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='magento_field_id']" position="after">
+                <field name="transform_expr" string="Transform" optional="show" class="font-monospace"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Dry-run preview rows -->
+    <record id="view_magento_dryrun_line_list" model="ir.ui.view">
+        <field name="name">magento.dryrun.line.list</field>
+        <field name="model">magento.dryrun.line</field>
+        <field name="arch" type="xml">
+            <list string="Preview" create="0" edit="0" import="0"
+                  decoration-danger="action == 'error'"
+                  decoration-muted="action in ('unchanged', 'skip')">
+                <header>
+                    <button name="action_apply_lines" type="object" string="Apply Selected"
+                            class="btn-primary" groups="sdlc_magento_connector.group_magento_manager"/>
+                </header>
+                <field name="dryrun_id" optional="hide"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="entity" optional="hide"/>
+                <field name="magento_ref"/>
+                <field name="name"/>
+                <field name="action" widget="badge"
+                       decoration-success="action == 'create'"
+                       decoration-warning="action == 'update'"
+                       decoration-muted="action == 'unchanged'"
+                       decoration-info="action == 'skip'"
+                       decoration-danger="action == 'error'"/>
+                <field name="change_count" optional="show"/>
+                <field name="changed_fields" optional="show"/>
+                <field name="target_name" optional="show"/>
+                <field name="message" optional="show"/>
+                <field name="job_state" optional="hide" widget="badge"/>
+                <button name="action_apply_lines" type="object" string="Apply" icon="fa-play"
+                        invisible="action not in ('create', 'update')"
+                        groups="sdlc_magento_connector.group_magento_manager"/>
+                <button name="action_open_target" type="object" string="Open" icon="fa-external-link"
+                        invisible="not target_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_dryrun_line_form" model="ir.ui.view">
+        <field name="name">magento.dryrun.line.form</field>
+        <field name="model">magento.dryrun.line</field>
+        <field name="arch" type="xml">
+            <form string="Preview Row" create="0" edit="0">
+                <header>
+                    <button name="action_apply_lines" type="object" string="Apply" class="btn-primary"
+                            invisible="action not in ('create', 'update')"
+                            groups="sdlc_magento_connector.group_magento_manager"/>
+                    <button name="action_open_target" type="object" string="Open Odoo Record"
+                            invisible="not target_id"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <span class="text-uppercase small fw-semibold text-muted" style="letter-spacing: .07em;">
+                            <field name="entity" readonly="1"/> · <field name="magento_ref" readonly="1"/>
+                        </span>
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="action" widget="badge"
+                                   decoration-success="action == 'create'"
+                                   decoration-warning="action == 'update'"
+                                   decoration-info="action == 'skip'"
+                                   decoration-danger="action == 'error'"/>
+                            <field name="target_name"/>
+                            <field name="target_model" groups="base.group_no_one"/>
+                            <field name="target_id" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="dryrun_id"/>
+                            <field name="change_count"/>
+                            <field name="job_id" invisible="not job_id"/>
+                            <field name="job_state" invisible="not job_id" widget="badge"/>
+                        </group>
+                    </group>
+                    <div role="status" class="alert alert-warning" invisible="not message">
+                        <field name="message" nolabel="1" readonly="1" class="d-block"/>
+                    </div>
+                    <notebook>
+                        <page string="Field Changes" name="diff">
+                            <field name="diff_html" nolabel="1" readonly="1"
+                                   placeholder="No field change."/>
+                        </page>
+                        <page string="Technical" name="technical" groups="base.group_no_one">
+                            <field name="diff_json" nolabel="1" readonly="1" class="font-monospace"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_dryrun_line_search" model="ir.ui.view">
+        <field name="name">magento.dryrun.line.search</field>
+        <field name="model">magento.dryrun.line</field>
+        <field name="arch" type="xml">
+            <search string="Preview Rows">
+                <field name="magento_ref"/>
+                <field name="name"/>
+                <field name="changed_fields"/>
+                <field name="message"/>
+                <field name="dryrun_id"/>
+                <filter name="action_create" string="Creates" domain="[('action', '=', 'create')]"/>
+                <filter name="action_update" string="Updates" domain="[('action', '=', 'update')]"/>
+                <filter name="action_unchanged" string="No Change" domain="[('action', '=', 'unchanged')]"/>
+                <filter name="action_skip" string="Skips" domain="[('action', '=', 'skip')]"/>
+                <filter name="action_error" string="Errors" domain="[('action', '=', 'error')]"/>
+                <separator/>
+                <filter name="has_changes" string="With Changes" domain="[('change_count', '>', 0)]"/>
+                <filter name="applied" string="Applied" domain="[('job_id', '!=', False)]"/>
+                <group>
+                    <filter name="group_action" string="Action" context="{'group_by': 'action'}"/>
+                    <filter name="group_entity" string="Entity" context="{'group_by': 'entity'}"/>
+                    <filter name="group_dryrun" string="Preview" context="{'group_by': 'dryrun_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_dryrun_line" model="ir.actions.act_window">
+        <field name="name">Preview Rows</field>
+        <field name="res_model">magento.dryrun.line</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_dryrun_line_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No preview rows</p>
+            <p>Run a dry-run preview to see what a sync would create, update or skip.</p>
+        </field>
+    </record>
+
+    <!-- Dry-run previews -->
+    <record id="view_magento_dryrun_list" model="ir.ui.view">
+        <field name="name">magento.dryrun.list</field>
+        <field name="model">magento.dryrun</field>
+        <field name="arch" type="xml">
+            <list string="Dry-run Previews">
+                <field name="name"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="entity"/>
+                <field name="previewed_at"/>
+                <field name="create_count" string="Creates"/>
+                <field name="update_count" string="Updates"/>
+                <field name="unchanged_count" string="No Change" optional="show"/>
+                <field name="skip_count" string="Skips" optional="show"/>
+                <field name="error_count" string="Errors"
+                       decoration-danger="error_count &gt; 0"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'previewed'"
+                       decoration-success="state == 'applied'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_dryrun_search" model="ir.ui.view">
+        <field name="name">magento.dryrun.search</field>
+        <field name="model">magento.dryrun</field>
+        <field name="arch" type="xml">
+            <search string="Dry-run Previews">
+                <field name="instance_id"/>
+                <field name="entity"/>
+                <filter name="draft" string="Draft" domain="[('state', '=', 'draft')]"/>
+                <filter name="previewed" string="Previewed" domain="[('state', '=', 'previewed')]"/>
+                <filter name="applied" string="Applied" domain="[('state', '=', 'applied')]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_entity" string="Entity" context="{'group_by': 'entity'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_dryrun_form" model="ir.ui.view">
+        <field name="name">magento.dryrun.form</field>
+        <field name="model">magento.dryrun</field>
+        <field name="arch" type="xml">
+            <form string="Dry-run Preview">
+                <header>
+                    <button name="action_preview" type="object" string="Preview" class="btn-primary"
+                            invisible="state != 'draft'"/>
+                    <button name="action_preview" type="object" string="Preview Again"
+                            invisible="state == 'draft'"/>
+                    <button name="action_apply" type="object" string="Apply" class="btn-primary"
+                            invisible="state != 'previewed' or create_count + update_count == 0"
+                            confirm="Queue the real import of every record this preview would create or update?"/>
+                    <button name="action_apply_full_sync" type="object" string="Apply Full Sync"
+                            invisible="state == 'draft'"
+                            confirm="Queue the regular sync of the whole entity (not only the previewed records)?"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,previewed,applied"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_lines" type="object" class="oe_stat_button"
+                                icon="fa-plus-circle" context="{'dryrun_action': 'create'}"
+                                invisible="state == 'draft'">
+                            <field name="create_count" widget="statinfo" string="Creates"/>
+                        </button>
+                        <button name="action_view_lines" type="object" class="oe_stat_button"
+                                icon="fa-pencil" context="{'dryrun_action': 'update'}"
+                                invisible="state == 'draft'">
+                            <field name="update_count" widget="statinfo" string="Updates"/>
+                        </button>
+                        <button name="action_view_lines" type="object" class="oe_stat_button"
+                                icon="fa-check" context="{'dryrun_action': 'unchanged'}"
+                                invisible="state == 'draft'">
+                            <field name="unchanged_count" widget="statinfo" string="No Change"/>
+                        </button>
+                        <button name="action_view_lines" type="object" class="oe_stat_button"
+                                icon="fa-forward" context="{'dryrun_action': 'skip'}"
+                                invisible="state == 'draft'">
+                            <field name="skip_count" widget="statinfo" string="Skips"/>
+                        </button>
+                        <button name="action_view_lines" type="object" class="oe_stat_button text-danger"
+                                icon="fa-exclamation-triangle" context="{'dryrun_action': 'error'}"
+                                invisible="state == 'draft' or error_count == 0">
+                            <field name="error_count" widget="statinfo" string="Errors"/>
+                        </button>
+                        <button name="action_view_jobs" type="object" class="oe_stat_button"
+                                icon="fa-tasks" invisible="job_count == 0">
+                            <field name="job_count" widget="statinfo" string="Apply Jobs"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <span class="text-uppercase small fw-semibold text-muted" style="letter-spacing: .07em;">
+                            Dry-run preview
+                        </span>
+                        <h1><field name="name" readonly="1" placeholder="New preview"/></h1>
+                    </div>
+                    <div role="status" class="alert alert-info" invisible="state != 'draft'">
+                        <strong>Nothing is written.</strong> The preview reads Magento and runs the
+                        real import of each record inside a transaction that is always rolled back;
+                        writes to Magento are blocked. Review the rows, then Apply.
+                    </div>
+                    <group>
+                        <group string="Scope">
+                            <field name="instance_id" options="{'no_create': True}"
+                                   readonly="state != 'draft'"/>
+                            <field name="entity" widget="radio" options="{'horizontal': true}"
+                                   readonly="state != 'draft'"/>
+                            <field name="limit"/>
+                            <field name="magento_refs" placeholder="e.g. 24-MB01, 24-MB04"/>
+                            <field name="updated_since" invisible="entity == 'category'"/>
+                        </group>
+                        <group string="Result">
+                            <field name="summary" invisible="not summary"/>
+                            <field name="previewed_at" invisible="not previewed_at"/>
+                            <field name="previewed_by" invisible="not previewed_by"/>
+                            <field name="applied_at" invisible="not applied_at"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Preview" name="lines">
+                            <field name="line_ids" readonly="1"
+                                   context="{'list_view_ref': 'sdlc_magento_connector.view_magento_dryrun_line_list'}">
+                                <list decoration-danger="action == 'error'"
+                                      decoration-muted="action in ('unchanged', 'skip')">
+                                    <field name="magento_ref"/>
+                                    <field name="name"/>
+                                    <field name="action" widget="badge"
+                                           decoration-success="action == 'create'"
+                                           decoration-warning="action == 'update'"
+                                           decoration-info="action == 'skip'"
+                                           decoration-danger="action == 'error'"/>
+                                    <field name="change_count" string="Changes"/>
+                                    <field name="changed_fields" optional="show"/>
+                                    <field name="target_name" optional="show"/>
+                                    <field name="message" optional="show"/>
+                                    <field name="job_state" optional="hide" widget="badge"/>
+                                    <field name="target_id" column_invisible="1"/>
+                                    <button name="action_apply_lines" type="object" string="Apply"
+                                            icon="fa-play" invisible="action not in ('create', 'update')"
+                                            groups="sdlc_magento_connector.group_magento_manager"/>
+                                    <button name="action_open_target" type="object" string="Open"
+                                            icon="fa-external-link" invisible="not target_id"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_dryrun" model="ir.actions.act_window">
+        <field name="name">Dry-run Preview</field>
+        <field name="res_model">magento.dryrun</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_dryrun_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Preview a sync before running it</p>
+            <p>Pick an entity and Preview: every record Magento would send is imported in a
+               transaction that is rolled back, and you see what would be created, updated
+               (field by field), skipped or rejected. Nothing is written to Odoo or Magento
+               until you Apply.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_dryrun" name="Dry-run Preview" parent="menu_magento_configuration"
+              action="action_magento_dryrun" sequence="15"/>
+</odoo>

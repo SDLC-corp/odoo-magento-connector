@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Global area: storefront checkout, admin, REST/GraphQL and CLI saves all notify Odoo.
+ * Every observer only records a tiny outbox row after the transaction commits; it never
+ * calls Odoo and never throws, so checkout is never blocked or slowed.
+ *
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_save_after">
+        <observer name="sdlc_odoo_connector_order" instance="SDLC\OdooConnector\Observer\OrderSaveObserver"/>
+    </event>
+    <event name="sales_order_invoice_save_after">
+        <observer name="sdlc_odoo_connector_invoice" instance="SDLC\OdooConnector\Observer\InvoiceSaveObserver"/>
+    </event>
+    <event name="sales_order_shipment_save_after">
+        <observer name="sdlc_odoo_connector_shipment" instance="SDLC\OdooConnector\Observer\ShipmentSaveObserver"/>
+    </event>
+    <event name="sales_order_creditmemo_save_after">
+        <observer name="sdlc_odoo_connector_creditmemo" instance="SDLC\OdooConnector\Observer\CreditmemoSaveObserver"/>
+    </event>
+    <event name="catalog_product_save_after">
+        <observer name="sdlc_odoo_connector_product_save" instance="SDLC\OdooConnector\Observer\ProductSaveObserver"/>
+    </event>
+    <event name="catalog_product_delete_after">
+        <observer name="sdlc_odoo_connector_product_delete" instance="SDLC\OdooConnector\Observer\ProductDeleteObserver"/>
+    </event>
+    <event name="customer_save_after">
+        <observer name="sdlc_odoo_connector_customer" instance="SDLC\OdooConnector\Observer\CustomerSaveObserver"/>
+    </event>
+    <event name="cataloginventory_stock_item_save_after">
+        <observer name="sdlc_odoo_connector_stock_item" instance="SDLC\OdooConnector\Observer\StockItemSaveObserver"/>
+    </event>
+</config>

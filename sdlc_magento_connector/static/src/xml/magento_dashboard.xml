@@ -1,223 +1,325 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
-    <t t-name="sdlc_magento_connector.MagentoDashboard">
-        <div class="o_magento_dash_shell o_action_delegate_scroll">
-            <div class="o_magento_dash_scroll">
-                <div class="o_magento_dash_root">
-            <div class="o_magento_dash_header">
-                <div class="o_magento_dash_title_wrap">
-                    <div class="o_magento_dash_title_row">
-                        <h1>Magento Dashboard</h1>
-                        <span class="o_magento_live_badge">
-                            <i class="o_magento_live_dot"/> LIVE
-                        </span>
-                    </div>
-                </div>
-                <div class="o_magento_dash_controls">
-                    <select
-                        class="o_magento_dash_select"
-                        t-att-value="state.instanceId || ''"
-                        t-on-change="onInstanceChange"
-                    >
-                        <option value="">All Instances</option>
-                        <t t-foreach="instances" t-as="instance" t-key="instance.id">
-                            <option t-att-value="instance.id"><t t-esc="instance.name"/></option>
-                        </t>
-                    </select>
-                    <select
-                        class="o_magento_dash_select"
-                        t-att-value="state.days"
-                        t-on-change="onPeriodChange"
-                    >
-                        <option value="8">Last 8 Days</option>
-                        <option value="14">Last 14 Days</option>
-                        <option value="30">Last 30 Days</option>
-                        <option value="60">Last 60 Days</option>
-                    </select>
-                    <button class="o_magento_dash_refresh" t-on-click="onRefreshClick">Refresh</button>
-                </div>
-            </div>
 
-            <t t-if="state.loading">
-                <div class="o_magento_dash_placeholder">Loading live dashboard data...</div>
-            </t>
-            <t t-elif="state.error">
-                <div class="o_magento_dash_error">
-                    <span class="fa fa-exclamation-circle me-2"/> <t t-esc="state.error"/>
-                </div>
-            </t>
-            <t t-elif="hasData">
-                <div class="o_magento_dash_grid o_magento_dash_kpi_grid">
-                    <div class="o_magento_dash_card o_magento_kpi_card o_magento_kpi_primary">
-                        <span class="o_magento_kpi_label">Total Amount</span>
-                        <strong><t t-esc="formatCurrency(kpis.total_sales)"/></strong>
-                        <span class="o_magento_kpi_sub">
-                            Pending Amount: <t t-esc="formatCurrency(kpis.pending_amount)"/>
-                        </span>
-                    </div>
+<t t-name="sdlc_magento_connector.MagentoConsole">
+  <div class="mg-console">
 
-                    <div class="o_magento_dash_card o_magento_kpi_card">
-                        <span class="o_magento_kpi_label">Total Orders</span>
-                        <strong><t t-esc="formatNumber(kpis.total_orders)"/></strong>
-                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.orders_change)}">
-                        </span>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_kpi_card">
-                        <span class="o_magento_kpi_label">Delivered Orders</span>
-                        <strong><t t-esc="formatNumber(kpis.delivered_orders)"/></strong>
-                        <span class="o_magento_delta o_magento_delta_up">
-                        </span>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_kpi_card">
-                        <span class="o_magento_kpi_label">Not Delivered Orders</span>
-                        <strong><t t-esc="formatNumber(kpis.not_delivered_orders)"/></strong>
-                        <span class="o_magento_delta o_magento_delta_down">
-                            <t t-esc="formatNumber(kpis.not_delivered_orders)"/> pending fulfillment
-                        </span>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_kpi_card">
-                        <span class="o_magento_kpi_label">Total Customers</span>
-                        <strong><t t-esc="formatNumber(kpis.total_customers)"/></strong>
-                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.customers_change)}">
-                            <t t-esc="formatPercent(kpis.customers_change)"/> vs previous period
-                        </span>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_kpi_card">
-                        <span class="o_magento_kpi_label">Total Products</span>
-                        <strong><t t-esc="formatNumber(kpis.total_products)"/></strong>
-                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.products_change)}">
-                            <t t-esc="formatPercent(kpis.products_change)"/> vs previous period
-                        </span>
-                    </div>
-                </div>
-
-                <div class="o_magento_dash_grid o_magento_dash_main_grid">
-                    <div class="o_magento_dash_card o_magento_chart_card">
-                        <div class="o_magento_card_head">
-                            <h2>Revenue Analytics</h2>
-                            <span class="o_magento_chip"><t t-esc="state.days"/> days</span>
-                        </div>
-                        <svg viewBox="0 0 560 220" class="o_magento_chart_svg">
-                            <path class="o_magento_sales_area" t-att-d="salesAreaPath"/>
-                            <polyline class="o_magento_sales_line" t-att-points="salesPolyline"/>
-                            <polyline class="o_magento_orders_line" t-att-points="ordersPolyline"/>
-                        </svg>
-                        <div class="o_magento_chart_legend">
-                            <span><i class="o_magento_dot o_magento_dot_sales"/> Revenue</span>
-                            <span><i class="o_magento_dot o_magento_dot_orders"/> Orders</span>
-                        </div>
-                        <div class="o_magento_x_axis">
-                            <t t-foreach="chartLabels" t-as="label" t-key="label">
-                                <span><t t-esc="label"/></span>
-                            </t>
-                        </div>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_target_card">
-                         <div class="o_magento_card_head">
-                            <h2>Order Status Mix</h2>
-                        </div>
-                        <t t-if="orderStatus.length">
-                            <t t-foreach="orderStatus" t-as="row" t-key="row.label">
-                                <div class="o_magento_status_row">
-                                    <span class="o_magento_status_name"><t t-esc="row.label"/></span>
-                                    <span class="o_magento_status_count"><t t-esc="formatNumber(row.count)"/></span>
-                                    <div class="o_magento_status_track">
-                                        <span class="o_magento_status_fill" t-att-style="barWidthStyle(row.share)"/>
-                                    </div>
-                                </div>
-                            </t>
-                        </t>
-                    </div>
-
-                    <div class="o_magento_dash_card o_magento_categories_card">
-                        <div class="o_magento_card_head">
-                            <h2>Top Categories</h2>
-                        </div>
-                        <div class="o_magento_donut_wrap">
-                            <div class="o_magento_donut" t-att-style="categoryDonutStyle">
-                                <div class="o_magento_donut_center">
-                                    <span>Total</span>
-                                    <strong><t t-esc="formatNumber(totalCategoryValue)"/></strong>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="o_magento_category_list">
-                            <t t-foreach="topCategoriesStyled" t-as="row" t-key="row.name">
-                                <div class="o_magento_category_item">
-                                    <span class="o_magento_category_name">
-                                        <i class="o_magento_category_swatch" t-attf-style="background: #{row.color};"/>
-                                        <t t-esc="row.name"/>
-                                    </span>
-                                    <span class="o_magento_category_value"><t t-esc="formatNumber(row.value)"/></span>
-                                </div>
-                            </t>
-                        </div>
-                    </div>
-                </div>
-
-                <div t-attf-class="o_magento_dash_grid o_magento_dash_bottom_grid #{topCountries.length ? '' : 'o_magento_dash_bottom_grid_single'}">
-                    <t t-if="topCountries.length">
-                        <div class="o_magento_dash_card">
-                            <div class="o_magento_card_head">
-                                <h2>Top Countries</h2>
-                            </div>
-                            <t t-foreach="topCountries" t-as="row" t-key="row.name">
-                                <div class="o_magento_progress_row">
-                                    <div class="o_magento_progress_head">
-                                        <span><t t-esc="row.name"/></span>
-                                        <span><t t-esc="formatPercent(row.share)"/></span>
-                                    </div>
-                                    <div class="o_magento_progress_track">
-                                        <span class="o_magento_progress_fill" t-att-style="barWidthStyle(row.share)"/>
-                                    </div>
-                                </div>
-                            </t>
-                        </div>
-                    </t>
-
-                    <div t-attf-class="o_magento_dash_card #{topCountries.length ? '' : 'o_magento_dash_card_full'}">
-                        <div class="o_magento_card_head">
-                            <h2>Sync Health</h2>
-                        </div>
-                        <div class="o_magento_sync_stats">
-                            <div>
-                                <span>Manual Runs</span>
-                                <strong><t t-esc="formatNumber(syncHealth.manual_runs)"/></strong>
-                            </div>
-                            <div>
-                                <span>Cron Runs</span>
-                                <strong><t t-esc="formatNumber(syncHealth.cron_runs)"/></strong>
-                            </div>
-                            <div>
-                                <span>Success Records</span>
-                                <strong><t t-esc="formatNumber(syncHealth.success_records)"/></strong>
-                            </div>
-                            <div>
-                                <span>Error Records</span>
-                                <strong><t t-esc="formatNumber(syncHealth.error_records)"/></strong>
-                            </div>
-                        </div>
-                        <div class="o_magento_sync_last">
-                            Last sync: <t t-esc="formatDateTime(syncHealth.last_sync_at)"/>
-                        </div>
-                        <div class="o_magento_sync_tail">
-                            Avg Order Value: <strong><t t-esc="formatCurrency(kpis.avg_order_value)"/></strong>
-                            <span class="ms-3">Delivered Rate: <strong><t t-esc="formatPercent(kpis.delivered_rate)"/></strong></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="o_magento_dash_footer">
-                    Last refreshed at <t t-esc="formatDateTime(data.generated_at)"/>
-                </div>
-            </t>
-                </div>
-            </div>
+    <!-- 1. Masthead -->
+    <header class="mg-masthead">
+      <div class="mg-masthead__id">
+        <img class="mg-masthead__mark" src="/sdlc_magento_connector/static/src/img/magento_mark.svg" alt=""/>
+        <div class="mg-masthead__text">
+          <h1 class="mg-masthead__title">Magento Console</h1>
+          <ul class="mg-conn" t-if="data and scopedInstances.length" aria-label="Connection status">
+            <li t-foreach="scopedInstances" t-as="inst" t-key="inst.id"
+                t-attf-class="mg-conn__item mg-conn__item--{{ connectionTone(inst) }}"
+                t-att-title="inst.message or inst.state_label">
+              <i class="mg-conn__dot" aria-hidden="true"/>
+              <span class="mg-conn__name" t-esc="inst.name"/>
+              <span class="mg-conn__state" t-esc="inst.state_label"/>
+              <span class="mg-conn__sync" t-att-title="lastSyncTitle(inst)" t-esc="lastSync(inst)"/>
+              <button t-if="inst.open_issues" type="button" class="mg-conn__issues"
+                      t-att-title="'Open the Error Center for ' + inst.name"
+                      t-on-click="() => this.open(inst.issues_drill)">
+                <i class="fa fa-exclamation-circle" aria-hidden="true"/>
+                <t t-esc="issuesLabel(inst)"/>
+              </button>
+            </li>
+          </ul>
+          <p t-else="" class="mg-masthead__sub">Magento 2 orders, catalog and sync health</p>
         </div>
+      </div>
+      <div class="mg-masthead__actions">
+        <button t-if="data and data.instances.length" type="button" class="mg-digest"
+                t-att-class="{'mg-digest--none': !data.last_digest}"
+                t-att-title="lastDigestTitle"
+                t-att-disabled="!data.last_digest"
+                t-on-click="() => this.open(data.last_digest and data.last_digest.drill)">
+          <i class="fa fa-envelope-o" aria-hidden="true"/>
+          <span t-esc="lastDigestLabel"/>
+        </button>
+        <button type="button" class="mg-btn" t-on-click="() => this.load()" t-att-disabled="state.loading">
+          <i class="fa fa-refresh" t-att-class="{'mg-btn__spin': state.loading}" aria-hidden="true"/>
+          <t t-if="state.loading">Refreshing</t>
+          <t t-else="">Refresh</t>
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. Grouped nav pills -->
+    <nav class="mg-nav" t-if="state.navLinks.length" aria-label="Go to">
+      <div t-foreach="state.navLinks" t-as="grp" t-key="grp.group" class="mg-nav__group">
+        <span class="mg-nav__heading" t-esc="grp.group"/>
+        <div class="mg-nav__row">
+          <button type="button" t-foreach="grp.links" t-as="link" t-key="link.xml_id"
+                  class="mg-nav__btn" t-att-title="link.hint"
+                  t-on-click="() => this.openAction(link.xml_id)">
+            <i t-attf-class="fa {{ link.icon }}" aria-hidden="true"/>
+            <span t-esc="link.label"/>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 3 + 4. Filters -->
+    <div class="mg-filters" t-if="data and data.instances.length">
+      <div class="mg-chips" role="group" aria-label="Filter by Magento instance">
+        <span class="mg-chips__label">Instance</span>
+        <button type="button" class="mg-chip"
+                t-att-class="{'mg-chip--active': !state.selectedIds.length}"
+                t-att-aria-pressed="state.selectedIds.length ? 'false' : 'true'"
+                t-on-click="() => this.clearInstances()">
+          All
+          <span class="mg-chip__count" t-esc="data.instances.length"/>
+        </button>
+        <button type="button" t-foreach="data.instances" t-as="inst" t-key="inst.id"
+                class="mg-chip"
+                t-att-class="{'mg-chip--active': isSelected(inst.id)}"
+                t-att-aria-pressed="isSelected(inst.id) ? 'true' : 'false'"
+                t-att-title="data.company_count > 1 ? inst.company : inst.state_label"
+                t-on-click="() => this.toggleInstance(inst.id)">
+          <img t-if="inst.has_logo" class="mg-chip__logo"
+               t-attf-src="/web/image/magento.instance/{{ inst.id }}/logo" alt=""/>
+          <i t-else="" class="mg-chip__dot" aria-hidden="true"
+             t-attf-style="background: {{ dotColor(inst.id) }}"/>
+          <span t-esc="inst.name"/>
+          <i t-if="inst.state === 'error'" class="mg-chip__flag" title="Connection error" aria-label="Connection error"/>
+        </button>
+      </div>
+
+      <div class="mg-chips" role="group" aria-label="Period">
+        <span class="mg-chips__label">Period</span>
+        <button type="button" t-foreach="data.periods" t-as="days" t-key="days"
+                class="mg-chip mg-chip--compact"
+                t-att-class="{'mg-chip--active': state.days === days}"
+                t-att-aria-pressed="state.days === days ? 'true' : 'false'"
+                t-on-click="() => this.setPeriod(days)">
+          <t t-esc="days"/> days
+        </button>
+      </div>
+    </div>
+
+    <!-- 5. Notices -->
+    <div t-if="state.error" class="mg-notice mg-notice--error" role="alert">
+      <strong>Console unavailable.</strong>
+      <span t-esc="state.error"/>
+    </div>
+
+    <div t-elif="state.loading and !data" class="mg-notice" role="status">Loading Magento figures…</div>
+
+    <t t-elif="data">
+      <div t-if="!data.instances.length" class="mg-notice mg-notice--warn">
+        <strong t-if="data.instances_elsewhere">No Magento instance in the companies you have open.</strong>
+        <strong t-else="">No Magento instance yet.</strong>
+        <span t-if="data.instances_elsewhere">
+          <t t-esc="data.instances_elsewhere"/> instance(s) belong to other companies. Switch company from the top bar to see them.
+        </span>
+        <span t-else="">Connect a Magento 2 store to start importing orders, products and customers.</span>
+        <button type="button" class="mg-link"
+                t-on-click="() => this.openAction('sdlc_magento_connector.action_magento_instance')">Open instances</button>
+      </div>
+
+      <t t-else="">
+        <div t-if="data.orders_hidden" class="mg-notice mg-notice--warn">
+          <strong>Order figures are hidden.</strong>
+          <span>Your access rights do not include Sales orders, so revenue, order status and countries are not shown.</span>
+        </div>
+
+        <!-- 6. KPI rail -->
+        <section class="mg-rail" aria-label="Key figures">
+          <div t-foreach="data.kpis" t-as="kpi" t-key="kpi.key"
+               t-attf-class="mg-rail__cell {{ kpi.tone ? 'mg-rail__cell--' + kpi.tone : '' }}"
+               role="link" tabindex="0" t-att-title="kpi.hint"
+               t-on-click="() => this.open(kpi.drill)"
+               t-on-keydown="(ev) => this.onKeyOpen(ev, kpi.drill)">
+            <span class="mg-rail__label">
+              <t t-esc="kpi.label"/>
+              <span class="mg-rail__note" t-if="kpi.note" t-esc="kpi.note"/>
+            </span>
+            <span class="mg-rail__value" t-esc="figure(kpi)"/>
+          </div>
+        </section>
+
+        <!-- 7. Panels -->
+        <div class="mg-grid" t-att-class="{'mg-grid--single': data.orders_hidden}">
+
+          <section class="mg-panel mg-panel--chart" t-if="!data.orders_hidden">
+            <div class="mg-panel__head">
+              <h2 class="mg-panel__title">Revenue &amp; orders</h2>
+              <p class="mg-panel__hint">
+                <t t-esc="periodLabel"/> · <t t-esc="data.currency.name"/>
+              </p>
+            </div>
+            <p t-if="!hasOrders" class="mg-empty">No Magento orders dated in this period.</p>
+            <div t-else="" class="mg-chart">
+              <canvas t-ref="trendCanvas" role="img" aria-label="Daily revenue and order count"/>
+            </div>
+          </section>
+
+          <section class="mg-panel">
+            <div class="mg-panel__head">
+              <h2 class="mg-panel__title">Needs action</h2>
+              <p class="mg-panel__hint" t-if="data.attention.length">
+                <t t-esc="data.attention.length"/> open
+              </p>
+            </div>
+            <p t-if="!data.attention.length" class="mg-empty mg-empty--ok">
+              <i class="fa fa-check" aria-hidden="true"/> Nothing needs attention. Orders and syncs are clean.
+            </p>
+            <ul t-else="" class="mg-list">
+              <li t-foreach="data.attention" t-as="item" t-key="item.key"
+                  class="mg-list__row" role="link" tabindex="0"
+                  t-on-click="() => this.open(item.drill)"
+                  t-on-keydown="(ev) => this.onKeyOpen(ev, item.drill)">
+                <span t-attf-class="mg-pill mg-pill--{{ item.tone }}" t-esc="item.pill"/>
+                <span class="mg-list__name">
+                  <span t-esc="item.label"/>
+                  <small t-esc="item.detail"/>
+                </span>
+                <span class="mg-num mg-list__count" t-if="item.count" t-esc="count(item.count)"/>
+                <i t-else="" class="fa fa-angle-right mg-list__go" aria-hidden="true"/>
+              </li>
+            </ul>
+          </section>
+
+          <div class="mg-flow" t-if="data.net_profit or !data.orders_hidden or !data.issues_hidden">
+            <!-- Net profit (period): a panel, the KPI rail is full (see magento_dashboard.py). -->
+            <section class="mg-panel mg-panel--profit" t-if="data.net_profit">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Net profit (period)</h2>
+                <p class="mg-panel__hint">
+                  <t t-esc="periodLabel"/> · <t t-esc="data.currency.name"/> · excl. tax
+                </p>
+              </div>
+              <p t-if="!data.net_profit.orders" class="mg-empty">No Magento orders dated in this period.</p>
+              <t t-else="">
+                <div t-attf-class="mg-profit__total {{ data.net_profit.tone ? 'mg-profit__total--' + data.net_profit.tone : '' }}"
+                     role="link" tabindex="0" title="Open the net profit report"
+                     t-on-click="() => this.open(data.net_profit.drill)"
+                     t-on-keydown="(ev) => this.onKeyOpen(ev, data.net_profit.drill)">
+                  <span class="mg-profit__value" t-esc="money(data.net_profit.net)"/>
+                  <span class="mg-profit__meta">
+                    <span t-if="marginLabel" t-esc="marginLabel"/>
+                    <span><t t-esc="count(data.net_profit.orders)"/> orders</span>
+                  </span>
+                </div>
+                <ul class="mg-profit">
+                  <li t-foreach="data.net_profit.rows" t-as="row" t-key="row.key"
+                      class="mg-profit__row" role="link" tabindex="0" t-att-title="row.hint"
+                      t-att-class="{'mg-profit__row--minus': row.sign &lt; 0}"
+                      t-on-click="() => this.open(row.drill)"
+                      t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                    <span class="mg-profit__label" t-esc="row.label"/>
+                    <span class="mg-num" t-esc="signedMoney(row)"/>
+                  </li>
+                </ul>
+                <button t-if="data.net_profit.estimated_orders" type="button" class="mg-profit__note"
+                        t-on-click="() => this.open(data.net_profit.estimated_drill)">
+                  <i class="fa fa-info-circle" aria-hidden="true"/>
+                  Shipping estimated on <t t-esc="count(data.net_profit.estimated_orders)"/> order(s): no carrier cost known.
+                </button>
+              </t>
+            </section>
+
+            <section class="mg-panel" t-if="!data.issues_hidden">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Error center by entity</h2>
+                <p class="mg-panel__hint">Open issues</p>
+              </div>
+              <p t-if="!data.by_entity.length" class="mg-empty mg-empty--ok">
+                <i class="fa fa-check" aria-hidden="true"/> No open sync issues.
+              </p>
+              <ul t-else="" class="mg-bars">
+                <li t-foreach="data.by_entity" t-as="row" t-key="row.key"
+                    t-attf-class="mg-bars__row mg-bars__row--{{ row.tone }}" role="link" tabindex="0"
+                    t-att-title="entityDetail(row)"
+                    t-on-click="() => this.open(row.drill)"
+                    t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                  <span class="mg-bars__label">
+                    <t t-esc="row.label"/><small t-esc="entityTag(row)"/>
+                  </span>
+                  <span class="mg-bars__track">
+                    <span t-attf-class="mg-bars__fill mg-bars__fill--{{ row.tone }}"
+                          t-attf-style="width: {{ share(row.count, data.by_entity, 'count') }}%"/>
+                  </span>
+                  <span class="mg-num" t-esc="count(row.count)"/>
+                </li>
+              </ul>
+            </section>
+
+            <t t-if="!data.orders_hidden">
+            <section class="mg-panel">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Order status</h2>
+                <p class="mg-panel__hint">Magento status · orders</p>
+              </div>
+              <p t-if="!data.by_status.length" class="mg-empty">No orders in this period.</p>
+              <ul t-else="" class="mg-bars">
+                <li t-foreach="data.by_status" t-as="row" t-key="row.key"
+                    class="mg-bars__row" role="link" tabindex="0"
+                    t-on-click="() => this.open(row.drill)"
+                    t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                  <span class="mg-bars__label" t-esc="row.label"/>
+                  <span class="mg-bars__track">
+                    <span class="mg-bars__fill mg-bars__fill--alt"
+                          t-attf-style="width: {{ share(row.count, data.by_status, 'count') }}%"/>
+                  </span>
+                  <span class="mg-num" t-esc="count(row.count)"/>
+                </li>
+              </ul>
+            </section>
+
+            <section class="mg-panel">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Top categories</h2>
+                <p class="mg-panel__hint">Line revenue · <t t-esc="data.currency.name"/></p>
+              </div>
+              <p t-if="!data.by_category.length" class="mg-empty">
+                No order lines linked to Magento categories in this period.
+              </p>
+              <ul t-else="" class="mg-bars">
+                <li t-foreach="data.by_category" t-as="row" t-key="row.id"
+                    class="mg-bars__row" role="link" tabindex="0"
+                    t-on-click="() => this.open(row.drill)"
+                    t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                  <span class="mg-bars__label" t-att-title="row.name" t-esc="row.name"/>
+                  <span class="mg-bars__track">
+                    <span class="mg-bars__fill"
+                          t-attf-style="width: {{ share(row.revenue, data.by_category, 'revenue') }}%"/>
+                  </span>
+                  <span class="mg-num" t-esc="money(row.revenue)"/>
+                </li>
+              </ul>
+            </section>
+
+            <section class="mg-panel">
+              <div class="mg-panel__head">
+                <h2 class="mg-panel__title">Top countries</h2>
+                <p class="mg-panel__hint">Shipping country · <t t-esc="data.currency.name"/></p>
+              </div>
+              <p t-if="!data.by_country.length" class="mg-empty">No shipped-to countries in this period.</p>
+              <ul t-else="" class="mg-bars">
+                <li t-foreach="data.by_country" t-as="row" t-key="row.id"
+                    class="mg-bars__row" role="link" tabindex="0"
+                    t-on-click="() => this.open(row.drill)"
+                    t-on-keydown="(ev) => this.onKeyOpen(ev, row.drill)">
+                  <span class="mg-bars__label" t-att-title="row.name">
+                    <t t-esc="row.name"/><small><t t-esc="count(row.orders)"/> orders</small>
+                  </span>
+                  <span class="mg-bars__track">
+                    <span class="mg-bars__fill"
+                          t-attf-style="width: {{ share(row.revenue, data.by_country, 'revenue') }}%"/>
+                  </span>
+                  <span class="mg-num" t-esc="money(row.revenue)"/>
+                </li>
+              </ul>
+            </section>
+            </t>
+          </div>
+        </div>
+      </t>
     </t>
+  </div>
+</t>
+
 </templates>

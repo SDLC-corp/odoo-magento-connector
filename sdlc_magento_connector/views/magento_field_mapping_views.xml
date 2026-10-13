@@ -6,9 +6,16 @@
             <field name="model">magento.field.mapping</field>
             <field name="arch" type="xml">
                 <search string="Magento Field Mapping">
+                    <field name="odoo_field"/>
+                    <field name="magento_field_id"/>
                     <field name="mapping_type"/>
                     <field name="instance_id"/>
                     <filter name="active" string="Active" domain="[('active', '=', True)]"/>
+                    <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
+                    <group>
+                        <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                        <filter name="group_mapping_type" string="Mapping Type" context="{'group_by': 'mapping_type'}"/>
+                    </group>
                 </search>
             </field>
         </record>
@@ -29,6 +36,10 @@ action = env['magento.field.mapping'].with_context(
             <field name="res_model">magento.field.mapping</field>
             <field name="view_mode">list,form</field>
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Map an Odoo field to a Magento field</p>
+                <p>Click <b>Load New Fields</b> to read the fields your Magento store exposes, then pair each one with an Odoo field. Mappings apply in both directions on the next sync.</p>
+            </field>
         </record>
 
         <record id="action_magento_field_mapping_product" model="ir.actions.act_window">
@@ -38,6 +49,10 @@ action = env['magento.field.mapping'].with_context(
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'product')]</field>
             <field name="context">{'default_mapping_type': 'product'}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Map an Odoo field to a Magento field</p>
+                <p>Click <b>Load New Fields</b> to read the fields your Magento store exposes, then pair each one with an Odoo field. Mappings apply in both directions on the next sync.</p>
+            </field>
         </record>
 
         <record id="action_magento_field_mapping_customer" model="ir.actions.act_window">
@@ -47,6 +62,10 @@ action = env['magento.field.mapping'].with_context(
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'customer')]</field>
             <field name="context">{'default_mapping_type': 'customer'}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Map an Odoo field to a Magento field</p>
+                <p>Click <b>Load New Fields</b> to read the fields your Magento store exposes, then pair each one with an Odoo field. Mappings apply in both directions on the next sync.</p>
+            </field>
         </record>
 
         <record id="action_magento_field_mapping_category" model="ir.actions.act_window">
@@ -56,6 +75,10 @@ action = env['magento.field.mapping'].with_context(
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'category')]</field>
             <field name="context">{'default_mapping_type': 'category'}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Map an Odoo field to a Magento field</p>
+                <p>Click <b>Load New Fields</b> to read the fields your Magento store exposes, then pair each one with an Odoo field. Mappings apply in both directions on the next sync.</p>
+            </field>
         </record>
 
         <record id="view_magento_mapping_report_search" model="ir.ui.view">
@@ -71,6 +94,14 @@ action = env['magento.field.mapping'].with_context(
                     <field name="record_name"/>
                     <filter name="status_success" string="Success" domain="[('status', '=', 'success')]"/>
                     <filter name="status_failed" string="Failed" domain="[('status', '=', 'failed')]"/>
+                    <separator/>
+                    <filter name="create_date" string="Date" date="create_date"/>
+                    <group>
+                        <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                        <filter name="group_mapping_type" string="Mapping Type" context="{'group_by': 'mapping_type'}"/>
+                        <filter name="group_direction" string="Direction" context="{'group_by': 'direction'}"/>
+                        <filter name="group_status" string="Status" context="{'group_by': 'status'}"/>
+                    </group>
                 </search>
             </field>
         </record>
@@ -79,14 +110,17 @@ action = env['magento.field.mapping'].with_context(
             <field name="name">magento.mapping.report.list</field>
             <field name="model">magento.mapping.report</field>
             <field name="arch" type="xml">
-                <list string="Magento Mapping Report" create="0" edit="0" delete="0" import="0">
-                    <field name="instance_id"/>
-                    <field name="mapping_type"/>
-                    <field name="direction"/>
-                    <field name="source_action"/>
-                    <field name="status"/>
-                    <field name="record_name"/>
+                <list string="Magento Mapping Report" create="0" edit="0" delete="0" import="0"
+                      decoration-danger="status == 'failed'">
                     <field name="create_date"/>
+                    <field name="record_name"/>
+                    <field name="instance_id" optional="show"/>
+                    <field name="mapping_type" optional="show"/>
+                    <field name="direction" optional="show"/>
+                    <field name="source_action" optional="hide"/>
+                    <field name="status" widget="badge"
+                           decoration-success="status == 'success'"
+                           decoration-danger="status == 'failed'"/>
                 </list>
             </field>
         </record>
@@ -102,7 +136,9 @@ action = env['magento.field.mapping'].with_context(
                             <field name="mapping_type" readonly="1"/>
                             <field name="direction" readonly="1"/>
                             <field name="source_action" readonly="1"/>
-                            <field name="status" readonly="1"/>
+                            <field name="status" readonly="1" widget="badge"
+                                   decoration-success="status == 'success'"
+                                   decoration-danger="status == 'failed'"/>
                             <field name="record_name" readonly="1"/>
                         </group>
                         <notebook>
@@ -138,6 +174,10 @@ action = env['magento.field.mapping'].with_context(
             <field name="context">{}</field>
             <field name="search_view_id" ref="view_magento_mapping_report_search"/>
             <field name="views" eval="[(ref('view_magento_mapping_report_list'), 'list'), (ref('view_magento_mapping_report_form'), 'form')]"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">No mapping activity yet</p>
+                <p>Each time a field mapping is tested or applied, a report lands here with the old and new value of every mapped field.</p>
+            </field>
         </record>
 
         <record id="view_magento_field_mapping_list" model="ir.ui.view">
@@ -156,13 +196,19 @@ action = env['magento.field.mapping'].with_context(
                                 string="Load New Fields"
                                 class="btn-success"
                                 display="always"/>
+                        <!-- Acts on the selected mappings. -->
+                        <button name="action_apply_to_existing"
+                                type="object"
+                                string="Apply to Existing Records"
+                                groups="sdlc_magento_connector.group_magento_manager"
+                                confirm="This pushes mapped values of every record of this instance to Magento. Continue?"/>
                     </header>
-                    <field name="mapping_type" readonly="1"/>
-                    <field name="instance_id"/>
+                    <field name="mapping_type" readonly="1" optional="show"/>
+                    <field name="instance_id" optional="show"/>
                     <field name="odoo_field" domain="[('model_id', '=', odoo_model_id)]"/>
                     <field name="magento_field_id"
                            domain="[('instance_id', '=', instance_id), ('mapping_type', '=', mapping_type)]"/>
-                    <field name="active"/>
+                    <field name="active" widget="boolean_toggle" optional="show"/>
                 </list>
             </field>
         </record>
@@ -177,6 +223,11 @@ action = env['magento.field.mapping'].with_context(
                                 type="object"
                                 string="Test Mapping"
                                 class="btn-primary"/>
+                        <button name="action_apply_to_existing"
+                                type="object"
+                                string="Apply to Existing Records"
+                                groups="sdlc_magento_connector.group_magento_manager"
+                                confirm="This pushes mapped values of every record of this instance to Magento. Continue?"/>
                     </header>
                     <sheet>
                         <group>
@@ -201,23 +252,6 @@ action = env['magento.field.mapping'].with_context(
                                 type="object"
                                 string="Test Mapping"
                                 class="btn-primary"/>
-                        <button special="cancel" string="Close" class="btn-secondary"/>
-                    </footer>
-                </form>
-            </field>
-        </record>
-
-        <record id="view_magento_mapping_test_wizard_form" model="ir.ui.view">
-            <field name="name">magento.mapping.test.wizard.form</field>
-            <field name="model">magento.mapping.test.wizard</field>
-            <field name="arch" type="xml">
-                <form string="Mapping Test Result">
-                    <sheet>
-                        <group>
-                            <field name="message" nolabel="1" readonly="1" widget="text"/>
-                        </group>
-                    </sheet>
-                    <footer>
                         <button special="cancel" string="Close" class="btn-secondary"/>
                     </footer>
                 </form>

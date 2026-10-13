@@ -1,24 +1,32 @@
 <odoo>
     <!--
-      Mark as noupdate so module upgrades don't try to rewrite cron records.
-      This avoids upgrade failures when a cron is currently running/locked.
+      The old static crons called model.sync_products() / model.sync_orders() on an
+      empty recordset, so they never synced anything. Remove them on upgrade (they
+      were noupdate, so the XML loader would otherwise keep them forever). Searching
+      by code keeps a fresh install free of "missing XML ID" warnings.
+    -->
+    <data>
+        <delete model="ir.cron" search="[('model_id.model', '=', 'magento.instance'), ('code', 'in', ['model.sync_products()', 'model.sync_orders()'])]"/>
+    </data>
+
+    <!--
+      Scheduling is per instance: enabling "Auto Sync" on an instance creates its own
+      timezone-aware cron (magento.instance._apply_auto_sync_cron).
+
+      This global job is an opt-in fallback that syncs every active instance WITHOUT
+      its own auto-sync schedule (instances with one are skipped, never run twice).
+      It ships inactive so upgrading does not suddenly start hitting Magento.
+      noupdate: an administrator's activation/interval survives upgrades.
     -->
     <data noupdate="1">
-        <record id="cron_magento_product_sync" model="ir.cron">
-            <field name="name">Magento Product Sync</field>
+        <record id="cron_magento_sync_all" model="ir.cron">
+            <field name="name">Magento: Sync All Instances</field>
             <field name="model_id" ref="model_magento_instance"/>
             <field name="state">code</field>
-            <field name="code">model.sync_products()</field>
-            <field name="interval_number">10</field>
-            <field name="interval_type">minutes</field>
-        </record>
-        <record id="cron_magento_order_sync" model="ir.cron">
-            <field name="name">Magento Order Sync</field>
-            <field name="model_id" ref="model_magento_instance"/>
-            <field name="state">code</field>
-            <field name="code">model.sync_orders()</field>
-            <field name="interval_number">10</field>
-            <field name="interval_type">minutes</field>
+            <field name="code">model._cron_sync_all()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="False"/>
         </record>
     </data>
 </odoo>

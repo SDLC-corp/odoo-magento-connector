@@ -7,6 +7,9 @@ class MagentoSyncReport(models.Model):
     _order = "synced_at desc, id desc"
 
     instance_id = fields.Many2one("magento.instance", required=True, ondelete="cascade")
+    company_id = fields.Many2one(
+        related="instance_id.company_id", store=True, index=True, readonly=True
+    )
     synced_at = fields.Datetime(default=fields.Datetime.now, required=True)
     sync_type = fields.Selection(
         [
@@ -28,6 +31,7 @@ class MagentoSyncReport(models.Model):
     total_records = fields.Integer(default=0)
     success = fields.Integer(default=0)
     errors = fields.Integer(default=0)
+    skipped = fields.Integer(default=0)
     start_time = fields.Datetime()
     end_time = fields.Datetime()
     categories_created = fields.Integer(default=0)

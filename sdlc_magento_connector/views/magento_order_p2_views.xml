@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ================================================================
+         Order fidelity (2.4) and auto-workflow (2.5): mappings, instance
+         options, sale order total-difference flag.
+         ================================================================ -->
+
+    <!-- Tax mapping -->
+    <record id="view_magento_tax_map_list" model="ir.ui.view">
+        <field name="name">magento.tax.map.list</field>
+        <field name="model">magento.tax.map</field>
+        <field name="arch" type="xml">
+            <list string="Tax Mapping" editable="bottom" decoration-danger="not tax_id"
+                  decoration-muted="not active">
+                <field name="instance_id" options="{'no_create': True}"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="magento_code"/>
+                <field name="magento_title" optional="show"/>
+                <field name="percent" class="o_magento_num"/>
+                <field name="price_include" widget="boolean_toggle"/>
+                <field name="tax_id" options="{'no_create': True}"/>
+                <field name="auto_created" optional="show" readonly="1"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_tax_map_search" model="ir.ui.view">
+        <field name="name">magento.tax.map.search</field>
+        <field name="model">magento.tax.map</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="magento_code"/>
+                <field name="magento_title"/>
+                <field name="tax_id"/>
+                <field name="instance_id"/>
+                <filter name="unmapped" string="Not mapped" domain="[('tax_id', '=', False)]"/>
+                <filter name="auto" string="Auto-created" domain="[('auto_created', '=', True)]"/>
+                <separator/>
+                <filter name="archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_tax_map" model="ir.actions.act_window">
+        <field name="name">Tax Mapping</field>
+        <field name="res_model">magento.tax.map</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_tax_map_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Magento tax rate met yet</p>
+            <p>Every Magento tax rate (code and percentage) used by an imported order is listed
+               here with the Odoo tax it maps to. Unmapped rates are created automatically
+               unless the instance says otherwise.</p>
+        </field>
+    </record>
+
+    <!-- Payment methods -->
+    <record id="view_magento_payment_map_list" model="ir.ui.view">
+        <field name="name">magento.payment.map.list</field>
+        <field name="model">magento.payment.map</field>
+        <field name="arch" type="xml">
+            <list string="Payment Methods" editable="bottom" decoration-muted="not active">
+                <field name="instance_id" options="{'no_create': True}"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="magento_method"/>
+                <field name="name" optional="show"/>
+                <field name="journal_id" options="{'no_create': True}"
+                       placeholder="Instance default"/>
+                <field name="payment_method_line_id" options="{'no_create': True}" optional="show"/>
+                <field name="refund_method_line_id" options="{'no_create': True}" optional="show"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_payment_map_search" model="ir.ui.view">
+        <field name="name">magento.payment.map.search</field>
+        <field name="model">magento.payment.map</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="magento_method"/>
+                <field name="journal_id"/>
+                <field name="instance_id"/>
+                <filter name="unmapped" string="Using instance default" domain="[('journal_id', '=', False)]"/>
+                <separator/>
+                <filter name="archived" string="Archived" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_payment_map" model="ir.actions.act_window">
+        <field name="name">Payment Methods</field>
+        <field name="res_model">magento.payment.map</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_payment_map_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Magento payment method met yet</p>
+            <p>Map each Magento payment method (checkmo, banktransfer, paypal_express...) to the
+               journal that receives its payments. Methods without a journal use the instance
+               default payment journal.</p>
+        </field>
+    </record>
+
+    <!-- Carriers -->
+    <record id="view_magento_carrier_map_list" model="ir.ui.view">
+        <field name="name">magento.carrier.map.list</field>
+        <field name="model">magento.carrier.map</field>
+        <field name="arch" type="xml">
+            <list string="Carriers" editable="bottom" decoration-muted="not active">
+                <field name="instance_id" options="{'no_create': True}"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="magento_code"/>
+                <field name="name" optional="show"/>
+                <field name="carrier_ref" options="{'no_create': True}"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_magento_carrier_map" model="ir.actions.act_window">
+        <field name="name">Carriers</field>
+        <field name="res_model">magento.carrier.map</field>
+        <field name="view_mode">list</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Magento shipping method met yet</p>
+            <p>Magento shipping methods (flatrate_flatrate, ups_GND...) are listed as orders are
+               imported. With the Delivery app installed, map each one to an Odoo delivery
+               method.</p>
+        </field>
+    </record>
+
+    <!-- Order workflows -->
+    <record id="view_magento_order_workflow_list" model="ir.ui.view">
+        <field name="name">magento.order.workflow.list</field>
+        <field name="model">magento.order.workflow</field>
+        <field name="arch" type="xml">
+            <list string="Order Workflows" decoration-muted="not active">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
+                <field name="magento_states"/>
+                <field name="magento_statuses" optional="hide"/>
+                <field name="payment_methods" optional="show"/>
+                <field name="payment_condition"/>
+                <field name="cancel_order" widget="boolean_toggle" optional="show"/>
+                <field name="confirm_order" widget="boolean_toggle"/>
+                <field name="create_invoice" widget="boolean_toggle"/>
+                <field name="post_invoice" widget="boolean_toggle"/>
+                <field name="register_payment" widget="boolean_toggle"/>
+                <field name="validate_delivery" widget="boolean_toggle"/>
+                <field name="lock_order" widget="boolean_toggle"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_order_workflow_form" model="ir.ui.view">
+        <field name="name">magento.order.workflow.form</field>
+        <field name="model">magento.order.workflow</field>
+        <field name="arch" type="xml">
+            <form string="Order Workflow">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-secondary"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Processing and paid"/></h1>
+                    </div>
+                    <group>
+                        <group string="When the Magento order is">
+                            <field name="instance_id" options="{'no_create': True}"/>
+                            <field name="company_id" invisible="1"/>
+                            <field name="magento_states" placeholder="e.g. processing"/>
+                            <field name="magento_statuses" placeholder="any status"/>
+                            <field name="payment_methods" placeholder="any payment method"/>
+                            <field name="payment_condition"/>
+                            <field name="sequence"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                        <group string="Then, in this order">
+                            <field name="cancel_order"/>
+                            <field name="confirm_order" invisible="cancel_order"/>
+                            <field name="create_invoice" invisible="cancel_order"/>
+                            <field name="post_invoice" invisible="cancel_order"/>
+                            <field name="register_payment" invisible="cancel_order"/>
+                            <field name="validate_delivery" invisible="cancel_order"/>
+                            <field name="lock_order" invisible="cancel_order"/>
+                        </group>
+                    </group>
+                    <div class="text-muted small">
+                        The first active rule (by sequence) matching the order applies. Invoices,
+                        payments and credit memos that already exist in Magento are imported and
+                        reused, never pushed back. A failing step stops the following ones and opens
+                        an issue in the Error Center; the imported order is kept.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_order_workflow_search" model="ir.ui.view">
+        <field name="name">magento.order.workflow.search</field>
+        <field name="model">magento.order.workflow</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="magento_states"/>
+                <field name="instance_id"/>
+                <filter name="archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_order_workflow" model="ir.actions.act_window">
+        <field name="name">Order Workflows</field>
+        <field name="res_model">magento.order.workflow</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_order_workflow_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No order workflow</p>
+            <p>Rules that confirm, invoice, pay, deliver or cancel imported orders according to
+               their Magento state and payment method.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_order_config" name="Orders" parent="menu_magento_configuration"
+              sequence="30"/>
+    <menuitem id="menu_magento_order_workflow" name="Order Workflows" parent="menu_magento_order_config"
+              action="action_magento_order_workflow" sequence="10"/>
+    <menuitem id="menu_magento_tax_map" name="Tax Mapping" parent="menu_magento_order_config"
+              action="action_magento_tax_map" sequence="20"/>
+    <menuitem id="menu_magento_payment_map" name="Payment Methods" parent="menu_magento_order_config"
+              action="action_magento_payment_map" sequence="30"/>
+    <menuitem id="menu_magento_carrier_map" name="Carriers" parent="menu_magento_order_config"
+              action="action_magento_carrier_map" sequence="40"/>
+
+    <!-- Instance form: Orders & Payments tab -->
+    <record id="view_magento_instance_form_p2_orders" model="ir.ui.view">
+        <field name="name">magento.instance.form.p2.orders</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='orders_payments']/group" position="after">
+                <group name="order_import">
+                    <group string="Order Lines">
+                        <field name="shipping_product_id" options="{'no_create': True}"
+                               placeholder="Created on first use"/>
+                        <field name="discount_product_id" options="{'no_create': True}"
+                               placeholder="Created on first use"/>
+                        <field name="fpt_product_id" options="{'no_create': True}"
+                               placeholder="Created on first use"/>
+                    </group>
+                    <group string="Taxes">
+                        <field name="auto_create_taxes"/>
+                        <field name="prices_include_tax"/>
+                        <field name="shipping_includes_tax"/>
+                        <field name="tax_after_discount"/>
+                        <label for="tax_rounding_method"/>
+                        <div class="o_row">
+                            <field name="tax_rounding_method"/>
+                            <button name="action_apply_tax_rounding_to_company" type="object"
+                                    string="Apply to Company" class="btn-link"
+                                    invisible="not tax_rounding_differs"
+                                    confirm="This changes the tax rounding of every document of the company. Continue?"/>
+                        </div>
+                        <field name="company_tax_rounding_method" readonly="1"
+                               decoration-warning="tax_rounding_differs"/>
+                        <field name="tax_rounding_differs" invisible="1"/>
+                    </group>
+                </group>
+                <div class="alert alert-warning mb-2" role="alert" invisible="not tax_rounding_differs">
+                    The company rounds taxes differently from this Magento store: imported order
+                    totals may differ from Magento by a cent. Use <strong>Apply to Company</strong>
+                    to align them.
+                </div>
+                <separator string="Order Workflows"/>
+                <field name="order_workflow_ids" context="{'default_instance_id': id}">
+                    <list editable="bottom">
+                        <field name="sequence" widget="handle"/>
+                        <field name="name"/>
+                        <field name="magento_states"/>
+                        <field name="payment_methods" optional="hide"/>
+                        <field name="payment_condition"/>
+                        <field name="cancel_order" widget="boolean_toggle"/>
+                        <field name="confirm_order" widget="boolean_toggle"/>
+                        <field name="create_invoice" widget="boolean_toggle"/>
+                        <field name="post_invoice" widget="boolean_toggle"/>
+                        <field name="register_payment" widget="boolean_toggle"/>
+                        <field name="validate_delivery" widget="boolean_toggle"/>
+                        <field name="lock_order" widget="boolean_toggle"/>
+                    </list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Sale order form: Magento totals, coupon and the total-difference flag -->
+    <record id="sale_order_form_magento_p2" model="ir.ui.view">
+        <field name="name">sale.order.form.magento.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_order_form_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/sheet/div[hasclass('oe_title')]" position="before">
+                <div class="alert alert-warning" role="alert" invisible="not magento_total_differs">
+                    <strong>Total differs from Magento.</strong>
+                    The Odoo total is off by
+                    <field name="magento_total_difference" class="fw-bold" readonly="1"/>
+                    (Magento grand total
+                    <field name="magento_grand_total" readonly="1"/>).
+                    No adjustment line was added: the breakdown is in the chatter.
+                </div>
+            </xpath>
+            <xpath expr="//group[@name='magento_info']/group[1]" position="inside">
+                <field name="magento_state" readonly="1"/>
+                <field name="magento_workflow_id" readonly="1" options="{'no_open': True}"/>
+                <field name="magento_payment_method" readonly="1"/>
+                <field name="magento_shipping_description" readonly="1"/>
+                <field name="magento_coupon_code" readonly="1" invisible="not magento_coupon_code"/>
+                <field name="magento_discount_description" readonly="1"
+                       invisible="not magento_discount_description"/>
+            </xpath>
+            <xpath expr="//group[@name='magento_info']/group[2]" position="inside">
+                <field name="magento_grand_total" readonly="1"/>
+                <field name="magento_total_differs" invisible="1"/>
+                <field name="magento_total_difference" readonly="1"
+                       invisible="not magento_total_differs" decoration-warning="1"/>
+                <field name="magento_refund_state" readonly="1" widget="badge"
+                       invisible="not magento_refund_state or magento_refund_state == 'none'"
+                       decoration-info="magento_refund_state == 'partial'"
+                       decoration-muted="magento_refund_state == 'refunded'"/>
+                <field name="magento_total_refunded" readonly="1"
+                       invisible="not magento_total_refunded"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Magento orders list: difference column -->
+    <record id="view_sale_order_tree_magento_only_p2" model="ir.ui.view">
+        <field name="name">sale.order.tree.magento.only.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="view_sale_order_tree_magento_only"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="decoration-warning">magento_total_differs and not magento_sync_conflict</attribute>
+            </xpath>
+            <xpath expr="//field[@name='amount_total']" position="after">
+                <field name="magento_total_differs" column_invisible="1"/>
+                <field name="magento_total_difference" string="Diff. Magento" optional="show"
+                       invisible="not magento_total_differs" decoration-warning="1"/>
+            </xpath>
+            <xpath expr="//field[@name='magento_status']" position="after">
+                <field name="magento_coupon_code" optional="hide"/>
+                <field name="magento_payment_method" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Magento orders search: "Total differs from Magento" -->
+    <record id="view_sale_order_search_magento_p2" model="ir.ui.view">
+        <field name="name">sale.order.search.magento.p2</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="view_sale_order_search_magento"/>
+        <field name="arch" type="xml">
+            <filter name="magento_conflict" position="after">
+                <filter name="magento_total_differs" string="Total differs from Magento"
+                        domain="[('magento_total_differs', '=', True)]"/>
+            </filter>
+            <xpath expr="//field[@name='magento_customer_email']" position="after">
+                <field name="magento_coupon_code"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Default workflow rules for instances created before Phase 2 (idempotent). -->
+    <function model="magento.instance" name="_magento_init_default_order_workflows"/>
+</odoo>

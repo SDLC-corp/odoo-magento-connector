@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.playwright-mcp/
+research_notes/
+.claude/
+reports/

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_magento_instance_form_auth" model="ir.ui.view">
+        <field name="name">magento.instance.form.auth</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='connection']/group" position="before">
+                <group name="authentication" string="Authentication">
+                    <field name="auth_method" widget="radio" options="{'horizontal': true}" required="1"/>
+                </group>
+            </xpath>
+
+            <xpath expr="//field[@name='access_token']" position="after">
+                <field name="consumer_key" password="True"
+                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
+                       groups="sdlc_magento_connector.group_magento_manager"/>
+                <field name="consumer_secret" password="True"
+                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
+                       groups="sdlc_magento_connector.group_magento_manager"/>
+                <field name="access_token_secret" password="True"
+                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
+                       groups="sdlc_magento_connector.group_magento_manager"/>
+                <field name="oauth_signature_method"
+                       invisible="auth_method != 'oauth1'"
+                       groups="sdlc_magento_connector.group_magento_manager"/>
+            </xpath>
+
+            <xpath expr="//page[@name='connection']/group[not(@name)]" position="after">
+                <div class="alert alert-info mb-3" role="status" invisible="auth_method != 'oauth1'"
+                     groups="sdlc_magento_connector.group_magento_manager">
+                    <strong>Where to find the four OAuth values:</strong>
+                    in Magento Admin go to <em>System &gt; Extensions &gt; Integrations</em>, open (or add
+                    and activate) the integration, and copy its Consumer Key, Consumer Secret, Access Token
+                    and Access Token Secret. Grant the integration the API resources the diagnosis lists.
+                </div>
+                <div class="alert alert-warning mb-3" role="status" invisible="auth_method != 'bearer'"
+                     groups="sdlc_magento_connector.group_magento_manager">
+                    Bearer tokens are rejected by Magento 2.4.4+ unless
+                    <em>Allow OAuth Access Tokens to be used as standalone Bearer tokens</em> is enabled.
+                    OAuth 1.0a is recommended.
+                </div>
+                <group name="access_diagnostics_group" string="API Access">
+                    <div class="o_row" colspan="2">
+                        <button name="action_diagnose_access" type="object" string="Diagnose Access"
+                                icon="fa-stethoscope" class="btn-secondary"
+                                groups="sdlc_magento_connector.group_magento_manager"/>
+                        <span class="text-muted">Checks each Magento API resource the connector reads.</span>
+                    </div>
+                    <field name="access_diagnostics" nolabel="1" colspan="2"
+                           invisible="not access_diagnostics"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

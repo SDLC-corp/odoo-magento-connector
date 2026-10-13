@@ -1,0 +1,33 @@
+{
+    "sdlc_odoo_event_outbox": {
+        "column": {
+            "outbox_id": true,
+            "event_uuid": true,
+            "entity_type": true,
+            "entity_id": true,
+            "entity_ref": true,
+            "order_id": true,
+            "return_to_stock_items": true,
+            "event_type": true,
+            "dedupe_key": true,
+            "status": true,
+            "attempts": true,
+            "next_attempt_at": true,
+            "last_http_status": true,
+            "last_error": true,
+            "claim_token": true,
+            "created_at": true,
+            "updated_at": true,
+            "sent_at": true
+        },
+        "index": {
+            "SDLC_ODOO_EVENT_OUTBOX_STATUS_NEXT_ATTEMPT_AT": true,
+            "SDLC_ODOO_EVENT_OUTBOX_CLAIM_TOKEN": true,
+            "SDLC_ODOO_EVENT_OUTBOX_CREATED_AT": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "SDLC_ODOO_EVENT_OUTBOX_DEDUPE_KEY": true
+        }
+    }
+}

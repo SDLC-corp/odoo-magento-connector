@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="sdlc_odoo_connector">
+        <!-- Push pending outbox rows to Odoo (batched, signed, retried with backoff). -->
+        <job name="sdlc_odoo_connector_send_outbox" instance="SDLC\OdooConnector\Cron\SendOutbox" method="execute">
+            <schedule>* * * * *</schedule>
+        </job>
+        <!-- Delete delivered rows after the retention period, failed rows after 30 days. -->
+        <job name="sdlc_odoo_connector_clean_outbox" instance="SDLC\OdooConnector\Cron\CleanOutbox" method="execute">
+            <schedule>17 3 * * *</schedule>
+        </job>
+    </group>
+</config>

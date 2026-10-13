@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="module_category_magento" model="ir.module.category">
+        <field name="name">Magento Connector</field>
+        <field name="sequence">60</field>
+    </record>
+
+    <record id="res_groups_privilege_magento" model="res.groups.privilege">
+        <field name="name">Magento</field>
+        <field name="category_id" ref="module_category_magento"/>
+    </record>
+
+    <!--
+        Runs syncs and works the records; cannot see credentials or change instances.
+        Order/invoice/shipment syncs create sale orders, invoices and pickings, and the
+        Operations menus open those models, so the operator also needs the standard
+        Sales (all documents), Inventory user and Invoicing rights.
+    -->
+    <record id="group_magento_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_magento"/>
+        <field name="implied_ids" eval="[
+            (4, ref('base.group_user')),
+            (4, ref('sales_team.group_sale_salesman_all_leads')),
+            (4, ref('stock.group_stock_user')),
+            (4, ref('account.group_account_invoice')),
+        ]"/>
+    </record>
+
+    <!-- Configures instances, credentials, mappings and schedules. -->
+    <record id="group_magento_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="res_groups_privilege_magento"/>
+        <field name="implied_ids" eval="[(4, ref('group_magento_user'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
+    <!--
+        Multi-company record rules. Global (no groups) so they bind every user,
+        managers included; a user only sees Magento data of the companies
+        currently selected in the company switcher.
+    -->
+    <record id="rule_magento_instance_company" model="ir.rule">
+        <field name="name">Magento instance: multi-company</field>
+        <field name="model_id" ref="model_magento_instance"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_map_company" model="ir.rule">
+        <field name="name">Magento product binding: multi-company</field>
+        <field name="model_id" ref="model_magento_product_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_customer_company" model="ir.rule">
+        <field name="name">Magento customer binding: multi-company</field>
+        <field name="model_id" ref="model_magento_customer"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_category_company" model="ir.rule">
+        <field name="name">Magento category binding: multi-company</field>
+        <field name="model_id" ref="model_magento_category"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_sync_report_company" model="ir.rule">
+        <field name="name">Magento sync report: multi-company</field>
+        <field name="model_id" ref="model_magento_sync_report"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <!-- Instance-scoped models without their own company_id follow their instance. -->
+    <record id="rule_magento_attribute_set_company" model="ir.rule">
+        <field name="name">Magento attribute set: multi-company</field>
+        <field name="model_id" ref="model_magento_attribute_set"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_field_mapping_company" model="ir.rule">
+        <field name="name">Magento field mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_field_mapping"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_available_field_company" model="ir.rule">
+        <field name="name">Magento available field: multi-company</field>
+        <field name="model_id" ref="model_magento_available_field"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_mapping_report_company" model="ir.rule">
+        <field name="name">Magento mapping report: multi-company</field>
+        <field name="model_id" ref="model_magento_mapping_report"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <!-- Jobs not bound to an instance (company_id empty) stay visible. -->
+    <record id="rule_magento_job_company" model="ir.rule">
+        <field name="name">Magento job: multi-company</field>
+        <field name="model_id" ref="model_magento_job"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_sync_issue_company" model="ir.rule">
+        <field name="name">Magento sync issue: multi-company</field>
+        <field name="model_id" ref="model_magento_sync_issue"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_bulk_operation_company" model="ir.rule">
+        <field name="name">Magento bulk operation: multi-company</field>
+        <field name="model_id" ref="model_magento_bulk_operation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_reconciliation_company" model="ir.rule">
+        <field name="name">Magento reconciliation: multi-company</field>
+        <field name="model_id" ref="model_magento_reconciliation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_reconciliation_line_company" model="ir.rule">
+        <field name="name">Magento reconciliation line: multi-company</field>
+        <field name="model_id" ref="model_magento_reconciliation_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_reconciliation_order_company" model="ir.rule">
+        <field name="name">Magento reconciliation finding: multi-company</field>
+        <field name="model_id" ref="model_magento_reconciliation_order"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_customer_group_company" model="ir.rule">
+        <field name="name">Magento customer group: multi-company</field>
+        <field name="model_id" ref="model_magento_customer_group"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_stock_source_map_company" model="ir.rule">
+        <field name="name">Magento MSI source mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_stock_source_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_stock_dirty_company" model="ir.rule">
+        <field name="name">Magento stock change: multi-company</field>
+        <field name="model_id" ref="model_magento_stock_dirty"/>
+        <field name="domain_force">[('instance_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_tax_map_company" model="ir.rule">
+        <field name="name">Magento tax mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_tax_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_payment_map_company" model="ir.rule">
+        <field name="name">Magento payment mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_payment_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_carrier_map_company" model="ir.rule">
+        <field name="name">Magento carrier mapping: multi-company</field>
+        <field name="model_id" ref="model_magento_carrier_map"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_order_workflow_company" model="ir.rule">
+        <field name="name">Magento order workflow: multi-company</field>
+        <field name="model_id" ref="model_magento_order_workflow"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_attribute_company" model="ir.rule">
+        <field name="name">Magento product attribute: multi-company</field>
+        <field name="model_id" ref="model_magento_product_attribute"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_attribute_option_company" model="ir.rule">
+        <field name="name">Magento product attribute option: multi-company</field>
+        <field name="model_id" ref="model_magento_product_attribute_option"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_link_company" model="ir.rule">
+        <field name="name">Magento product link: multi-company</field>
+        <field name="model_id" ref="model_magento_product_link"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_price_rule_company" model="ir.rule">
+        <field name="name">Magento price rule: multi-company</field>
+        <field name="model_id" ref="model_magento_price_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_price_push_state_company" model="ir.rule">
+        <field name="name">Magento pushed price: multi-company</field>
+        <field name="model_id" ref="model_magento_price_push_state"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_website_company" model="ir.rule">
+        <field name="name">Magento website: multi-company</field>
+        <field name="model_id" ref="model_magento_website"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_store_group_company" model="ir.rule">
+        <field name="name">Magento store: multi-company</field>
+        <field name="model_id" ref="model_magento_store_group"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_store_view_company" model="ir.rule">
+        <field name="name">Magento store view: multi-company</field>
+        <field name="model_id" ref="model_magento_store_view"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_product_media_company" model="ir.rule">
+        <field name="name">Magento product image: multi-company</field>
+        <field name="model_id" ref="model_magento_product_media"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_order_conflict_company" model="ir.rule">
+        <field name="name">Magento order conflict: multi-company</field>
+        <field name="model_id" ref="model_magento_order_conflict"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_order_status_event_company" model="ir.rule">
+        <field name="name">Magento order status event: multi-company</field>
+        <field name="model_id" ref="model_magento_order_status_event"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_totals_explanation_company" model="ir.rule">
+        <field name="name">Magento totals explanation: multi-company</field>
+        <field name="model_id" ref="model_magento_totals_explanation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_totals_explanation_line_company" model="ir.rule">
+        <field name="name">Magento totals explanation component: multi-company</field>
+        <field name="model_id" ref="model_magento_totals_explanation_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_return_reason_company" model="ir.rule">
+        <field name="name">Magento return reason: multi-company</field>
+        <field name="model_id" ref="model_magento_return_reason"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_return_location_rule_company" model="ir.rule">
+        <field name="name">Magento return location rule: multi-company</field>
+        <field name="model_id" ref="model_magento_return_location_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_webhook_event_company" model="ir.rule">
+        <field name="name">Magento real-time event: multi-company</field>
+        <field name="model_id" ref="model_magento_webhook_event"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_tier_price_import_company" model="ir.rule">
+        <field name="name">Magento imported tier price: multi-company</field>
+        <field name="model_id" ref="model_magento_tier_price_import"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_shared_catalog_company" model="ir.rule">
+        <field name="name">Magento shared catalog: multi-company</field>
+        <field name="model_id" ref="model_magento_shared_catalog"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_dryrun_company" model="ir.rule">
+        <field name="name">Magento dry-run preview: multi-company</field>
+        <field name="model_id" ref="model_magento_dryrun"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_dryrun_line_company" model="ir.rule">
+        <field name="name">Magento dry-run preview row: multi-company</field>
+        <field name="model_id" ref="model_magento_dryrun_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_digest_company" model="ir.rule">
+        <field name="name">Magento daily digest: multi-company</field>
+        <field name="model_id" ref="model_magento_digest"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_digest_link_company" model="ir.rule">
+        <field name="name">Magento digest link: multi-company</field>
+        <field name="model_id" ref="model_magento_digest_link"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_net_profit_company" model="ir.rule">
+        <field name="name">Magento net profit: multi-company</field>
+        <field name="model_id" ref="model_magento_net_profit"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+</odoo>

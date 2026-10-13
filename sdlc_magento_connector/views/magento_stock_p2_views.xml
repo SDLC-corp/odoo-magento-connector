@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         MSI source mapping (Magento source_code -> Odoo locations)
+         ============================================================ -->
+    <record id="view_magento_stock_source_map_list" model="ir.ui.view">
+        <field name="name">magento.stock.source.map.list</field>
+        <field name="model">magento.stock.source.map</field>
+        <field name="arch" type="xml">
+            <list string="MSI Source Mapping" editable="bottom" decoration-muted="not active">
+                <field name="sequence" widget="handle"/>
+                <field name="instance_id" column_invisible="context.get('default_instance_id')"
+                       options="{'no_create': True}"/>
+                <field name="company_id" column_invisible="True"/>
+                <field name="source_code" placeholder="e.g. default"/>
+                <field name="location_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                <field name="active" widget="boolean_toggle" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_stock_source_map_search" model="ir.ui.view">
+        <field name="name">magento.stock.source.map.search</field>
+        <field name="model">magento.stock.source.map</field>
+        <field name="arch" type="xml">
+            <search string="MSI Source Mapping">
+                <field name="source_code"/>
+                <field name="instance_id"/>
+                <field name="location_ids"/>
+                <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_stock_source_map" model="ir.actions.act_window">
+        <field name="name">MSI Sources</field>
+        <field name="res_model">magento.stock.source.map</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_magento_stock_source_map_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No MSI source mapped yet</p>
+            <p>Map each Magento inventory source to the Odoo locations that feed it. Without a
+               mapping, the instance's stock locations are pushed to its single MSI source code.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_stock_source_map" name="MSI Sources" parent="menu_magento_configuration"
+              action="action_magento_stock_source_map" sequence="30"/>
+
+    <!-- ============================================================
+         Stock push: per-product view opened from the instance "Stock" button
+         ============================================================ -->
+    <record id="view_magento_stock_push_list" model="ir.ui.view">
+        <field name="name">magento.product.map.stock.push.list</field>
+        <field name="model">magento.product.map</field>
+        <field name="priority">30</field>
+        <field name="arch" type="xml">
+            <list string="Stock Push" create="0" import="0" edit="0"
+                  decoration-info="stock_push_pending">
+                <field name="sku"/>
+                <field name="name" string="Product"/>
+                <field name="odoo_product_id" optional="show"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="quantity" string="Magento Qty (last import)" optional="show"/>
+                <field name="last_pushed_qty" sum="Total pushed"/>
+                <field name="last_stock_push_at"/>
+                <field name="magento_backorders" widget="badge" optional="show"
+                       decoration-info="magento_backorders in ('1', '2')"/>
+                <field name="stock_push_pending" string="Change Waiting" widget="boolean" optional="show"/>
+                <field name="stock_status" widget="badge" optional="hide"
+                       decoration-success="stock_status == 'in_stock'"
+                       decoration-danger="stock_status == 'out_of_stock'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_magento_stock_push_maps" model="ir.actions.act_window">
+        <field name="name">Stock Push</field>
+        <field name="res_model">magento.product.map</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="view_magento_stock_push_list"/>
+        <field name="search_view_id" ref="view_magento_product_map_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No product to push stock for</p>
+            <p>Stock is pushed for mapped simple products with a SKU and an Odoo product.</p>
+        </field>
+    </record>
+
+    <record id="view_magento_product_map_search_stock" model="ir.ui.view">
+        <field name="name">magento.product.map.search.stock</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_search"/>
+        <field name="arch" type="xml">
+            <filter name="out_of_stock" position="after">
+                <separator/>
+                <filter name="stock_push_pending" string="Stock change waiting"
+                        domain="[('stock_push_pending', '=', True)]"/>
+                <filter name="never_pushed" string="Stock never pushed"
+                        domain="[('last_stock_push_at', '=', False)]"/>
+                <filter name="backorders" string="Backorders allowed"
+                        domain="[('magento_backorders', 'in', ('1', '2'))]"/>
+            </filter>
+        </field>
+    </record>
+
+    <!-- Last pushed quantity / time as optional columns on the product and inventory lists. -->
+    <record id="view_magento_product_map_list_stock" model="ir.ui.view">
+        <field name="name">magento.product.map.list.stock</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_list"/>
+        <field name="arch" type="xml">
+            <field name="stock_status" position="after">
+                <field name="last_pushed_qty" optional="hide"/>
+                <field name="last_stock_push_at" optional="hide"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_magento_inventory_list_stock" model="ir.ui.view">
+        <field name="name">magento.inventory.list.stock</field>
+        <field name="model">magento.product.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_inventory_list"/>
+        <field name="arch" type="xml">
+            <field name="quantity" position="after">
+                <field name="last_pushed_qty" optional="show"/>
+                <field name="last_stock_push_at" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         Instance form: stock push options in the "Stock & Bulk" group
+         ============================================================ -->
+    <record id="view_magento_instance_form_stock_p2" model="ir.ui.view">
+        <field name="name">magento.instance.form.stock.p2</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form_bulk"/>
+        <field name="arch" type="xml">
+            <button name="action_view_bulk_operations" position="before">
+                <button name="action_view_stock_maps" type="object"
+                        class="oe_stat_button" icon="fa-cubes"
+                        invisible="stock_map_count == 0">
+                    <field name="stock_map_count" widget="statinfo" string="Stock"/>
+                </button>
+            </button>
+            <field name="stock_location_id" position="after">
+                <field name="stock_location_ids" widget="many2many_tags"
+                       options="{'no_create': True}"/>
+            </field>
+            <group name="stock_bulk" position="after">
+                <group name="stock_push" string="Stock Push">
+                    <group>
+                        <field name="stock_push_enabled" widget="boolean_toggle"/>
+                        <field name="stock_qty_basis" widget="radio"/>
+                    </group>
+                    <group>
+                        <field name="stock_safety_buffer"/>
+                        <field name="stock_dirty_count" readonly="1"
+                               invisible="not stock_push_enabled and not stock_dirty_count"/>
+                    </group>
+                </group>
+                <div class="alert alert-info" role="status"
+                     invisible="stock_push_enabled or not id">
+                    Automatic stock push is off: stock reaches Magento only with
+                    <strong>Push Stock Now</strong>. Turn it on to push each stock change about a
+                    minute after it happens (and to allow the nightly reconcile).
+                </div>
+                <group name="stock_sources" string="MSI Source Mapping"
+                       invisible="stock_push_mode != 'msi'">
+                    <field name="stock_source_map_ids" nolabel="1" colspan="2"
+                           context="{'default_instance_id': id}">
+                        <list editable="bottom" decoration-muted="not active">
+                            <field name="sequence" widget="handle"/>
+                            <field name="source_code" placeholder="e.g. default"/>
+                            <field name="location_ids" widget="many2many_tags"
+                                   options="{'no_create': True}"
+                                   domain="[('usage', '=', 'internal'), ('company_id', 'in', [parent.company_id, False])]"/>
+                            <field name="active" widget="boolean_toggle"/>
+                        </list>
+                    </field>
+                </group>
+            </group>
+        </field>
+    </record>
+
+</odoo>

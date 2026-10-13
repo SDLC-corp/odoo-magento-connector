@@ -15,7 +15,7 @@
             </header>
 
             <xpath expr="//sheet" position="inside">
-                <group string="Magento Shipment" modifiers="{'invisible': [('magento_order_id','=',False)]}">
+                <group string="Magento Shipment" invisible="not magento_order_id">
                     <field name="magento_order_id" readonly="1"/>
                     <field name="magento_increment_id" readonly="1"/>
                     <field name="magento_shipment_increment_id" readonly="1"/>

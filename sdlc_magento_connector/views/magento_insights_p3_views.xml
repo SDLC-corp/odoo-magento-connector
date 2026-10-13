@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 3.10: daily digest, net profit, settings export/import
+         ============================================================ -->
+
+    <!-- Payment fees on the payment method mapping -->
+    <record id="view_magento_payment_map_list_insights" model="ir.ui.view">
+        <field name="name">magento.payment.map.list.insights</field>
+        <field name="model">magento.payment.map</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_payment_map_list"/>
+        <field name="arch" type="xml">
+            <field name="refund_method_line_id" position="after">
+                <field name="fee_percent" optional="show"/>
+                <field name="fee_fixed" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- Instance form: digest settings, Send Digest Now, Export/Import settings -->
+    <record id="view_magento_instance_form_insights" model="ir.ui.view">
+        <field name="name">magento.instance.form.insights</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_send_digest_now" type="object" string="Send Digest Now"
+                        groups="sdlc_magento_connector.group_magento_manager"
+                        help="Queue today's digest e-mail for this instance, even on a quiet day."/>
+                <button name="action_export_settings" type="object" string="Export Settings"
+                        groups="sdlc_magento_connector.group_magento_manager"
+                        help="Download this instance's configuration as JSON. Tokens and secrets are never exported."/>
+                <button name="action_import_settings" type="object" string="Import Settings"
+                        groups="sdlc_magento_connector.group_magento_manager"
+                        help="Preview and apply a settings file exported from another instance."/>
+            </xpath>
+            <div name="button_box" position="inside">
+                <button name="action_open_net_profit" type="object" class="oe_stat_button"
+                        icon="fa-line-chart" string="Net Profit"/>
+                <button name="action_view_digests" type="object" class="oe_stat_button"
+                        icon="fa-envelope-o" invisible="not digest_count">
+                    <field name="digest_count" widget="statinfo" string="Digests"/>
+                </button>
+            </div>
+            <xpath expr="//notebook" position="inside">
+                <page string="Digest" name="digest">
+                    <group>
+                        <group string="Daily digest">
+                            <field name="digest_enabled"/>
+                            <field name="digest_always_send"/>
+                            <field name="digest_last_sent_at"/>
+                        </group>
+                        <group string="Recipients">
+                            <field name="alert_user_ids" widget="many2many_tags" readonly="1"
+                                   string="Alert Users"/>
+                            <field name="digest_partner_ids" widget="many2many_tags"
+                                   options="{'no_create': True}"/>
+                        </group>
+                    </group>
+                    <div class="text-muted small">
+                        The scheduled action "Magento: Daily Digest" is inactive by default: activate it
+                        in Settings &gt; Technical &gt; Scheduled Actions. Each figure of the e-mail opens
+                        the records behind it in Odoo.
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ===================== Digests ===================== -->
+    <record id="view_magento_digest_list" model="ir.ui.view">
+        <field name="name">magento.digest.list</field>
+        <field name="model">magento.digest</field>
+        <field name="arch" type="xml">
+            <list string="Daily Digests" create="0" edit="0">
+                <field name="sent_at"/>
+                <field name="instance_id"/>
+                <field name="day"/>
+                <field name="orders_yesterday" string="Orders"/>
+                <field name="revenue_yesterday" string="Revenue"/>
+                <field name="recipient_ids" widget="many2many_tags" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_digest_form" model="ir.ui.view">
+        <field name="name">magento.digest.form</field>
+        <field name="model">magento.digest</field>
+        <field name="arch" type="xml">
+            <form string="Daily Digest" create="0" edit="0">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_mail" type="object" class="oe_stat_button"
+                                icon="fa-paper-plane-o" string="Outgoing Mail" invisible="not mail_id"
+                                groups="base.group_system"/>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="instance_id"/>
+                            <field name="day"/>
+                        </group>
+                        <group>
+                            <field name="sent_at"/>
+                            <field name="recipient_ids" widget="many2many_tags"/>
+                            <field name="mail_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="body_html" widget="html" readonly="1" nolabel="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_digest_search" model="ir.ui.view">
+        <field name="name">magento.digest.search</field>
+        <field name="model">magento.digest</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="instance_id"/>
+                <field name="day"/>
+                <group>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_digest" model="ir.actions.act_window">
+        <field name="name">Daily Digests</field>
+        <field name="res_model">magento.digest</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_digest_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No digest sent yet</p>
+            <p>Activate the scheduled action "Magento: Daily Digest", or use Send Digest Now on an
+                instance. Each digest e-mails yesterday's and the last 7 days' orders, refunds, net,
+                top products and sync health.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_digest" name="Daily Digests" parent="menu_magento_reports"
+              action="action_magento_digest" sequence="40"/>
+
+    <!-- ===================== Net profit ===================== -->
+    <record id="view_magento_net_profit_pivot" model="ir.ui.view">
+        <field name="name">magento.net.profit.pivot</field>
+        <field name="model">magento.net.profit</field>
+        <field name="arch" type="xml">
+            <pivot string="Net Profit" sample="1">
+                <field name="date_order" interval="month" type="row"/>
+                <field name="order_count" type="measure"/>
+                <field name="revenue_untaxed" type="measure"/>
+                <field name="refund_amount" type="measure"/>
+                <field name="cogs" type="measure"/>
+                <field name="shipping_cost" type="measure"/>
+                <field name="payment_fee" type="measure"/>
+                <field name="net_profit" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_magento_net_profit_graph" model="ir.ui.view">
+        <field name="name">magento.net.profit.graph</field>
+        <field name="model">magento.net.profit</field>
+        <field name="arch" type="xml">
+            <graph string="Net Profit" type="bar" sample="1">
+                <field name="date_order" interval="month"/>
+                <field name="net_profit" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_magento_net_profit_list" model="ir.ui.view">
+        <field name="name">magento.net.profit.list</field>
+        <field name="model">magento.net.profit</field>
+        <field name="arch" type="xml">
+            <list string="Net Profit" create="0" edit="0" delete="0">
+                <field name="date_order"/>
+                <field name="order_id"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="website_id" optional="hide"/>
+                <field name="partner_id" optional="hide"/>
+                <field name="payment_method" optional="show"/>
+                <field name="product_id" optional="show"/>
+                <field name="categ_id" optional="hide"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="order_count" sum="Orders" optional="hide"/>
+                <field name="revenue_total" sum="Total" optional="hide"/>
+                <field name="revenue_untaxed" sum="Total"/>
+                <field name="refund_amount" sum="Total"/>
+                <field name="cogs" sum="Total"/>
+                <field name="cost_source" optional="hide"/>
+                <field name="shipping_cost" sum="Total"/>
+                <field name="shipping_estimated" optional="show" widget="boolean"/>
+                <field name="payment_fee" sum="Total"/>
+                <field name="net_profit" sum="Total"
+                       decoration-danger="net_profit &lt; 0" decoration-bf="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_net_profit_search" model="ir.ui.view">
+        <field name="name">magento.net.profit.search</field>
+        <field name="model">magento.net.profit</field>
+        <field name="arch" type="xml">
+            <search string="Net Profit">
+                <field name="order_id"/>
+                <field name="product_id"/>
+                <field name="partner_id"/>
+                <field name="instance_id"/>
+                <field name="payment_method"/>
+                <filter name="date_order" string="Order Date" date="date_order"/>
+                <separator/>
+                <filter name="loss" string="Loss" domain="[('net_profit', '&lt;', 0)]"/>
+                <filter name="refunded" string="Refunded" domain="[('refund_amount', '!=', 0)]"/>
+                <filter name="shipping_estimated" string="Shipping estimated"
+                        domain="[('shipping_estimated', '=', True)]"/>
+                <filter name="no_cost" string="No product cost" domain="[('cost_source', '=', 'none'), ('product_id', '!=', False)]"/>
+                <group>
+                    <filter name="group_month" string="Month" context="{'group_by': 'date_order:month'}"/>
+                    <filter name="group_order" string="Order" context="{'group_by': 'order_id'}"/>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_website" string="Website" context="{'group_by': 'website_id'}"/>
+                    <filter name="group_payment" string="Payment Method" context="{'group_by': 'payment_method'}"/>
+                    <filter name="group_category" string="Product Category" context="{'group_by': 'categ_id'}"/>
+                    <filter name="group_product" string="Product" context="{'group_by': 'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_magento_net_profit" model="ir.actions.act_window">
+        <field name="name">Net Profit</field>
+        <field name="res_model">magento.net.profit</field>
+        <field name="view_mode">pivot,graph,list</field>
+        <field name="search_view_id" ref="view_magento_net_profit_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No Magento order yet</p>
+            <p>Net profit of every Magento order: revenue excluding tax, minus refunds, cost of
+                goods, shipping cost (estimated from the shipping charged when no carrier cost is
+                known) and payment fees (set them on the payment method mappings).</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_net_profit" name="Net Profit" parent="menu_magento_sales"
+              action="action_magento_net_profit" sequence="80"/>
+
+    <!-- ===================== Settings export / import ===================== -->
+    <record id="view_magento_settings_transfer_form" model="ir.ui.view">
+        <field name="name">magento.settings.transfer.form</field>
+        <field name="model">magento.settings.transfer</field>
+        <field name="arch" type="xml">
+            <form string="Settings Export/Import">
+                <field name="state" invisible="1"/>
+                <div class="alert alert-info" role="status" invisible="state != 'start'">
+                    <strong>Export</strong> downloads the instance's configuration (settings, tax,
+                    payment and carrier mappings, order workflows, return reasons and rules, field
+                    mappings, price rules, customer groups, stock sources) as a JSON file. Access
+                    tokens, OAuth keys and the webhook secret are never exported.
+                    <strong>Import</strong> reads such a file into the instance below: preview first,
+                    then apply. Re-importing the same file changes nothing.
+                </div>
+                <group>
+                    <group>
+                        <field name="instance_id" options="{'no_create': True}"
+                               readonly="state != 'start'"/>
+                        <field name="import_file" filename="import_filename"
+                               invisible="state == 'done'" readonly="state != 'start'"/>
+                        <field name="import_filename" invisible="1"/>
+                    </group>
+                    <group invisible="state == 'start'">
+                        <field name="source_label"/>
+                        <field name="create_count" string="To create" invisible="state != 'preview'"/>
+                        <field name="create_count" string="Created" invisible="state != 'done'"/>
+                        <field name="update_count" string="To update" invisible="state != 'preview'"/>
+                        <field name="update_count" string="Updated" invisible="state != 'done'"/>
+                        <field name="unchanged_count" string="Unchanged"/>
+                        <field name="unresolved_count" string="With unresolved references"
+                               decoration-warning="unresolved_count &gt; 0"/>
+                        <field name="error_count" string="Cannot import"
+                               decoration-danger="error_count &gt; 0"/>
+                    </group>
+                </group>
+                <div class="alert alert-warning" role="alert" invisible="not note">
+                    <field name="note" nolabel="1"/>
+                </div>
+                <field name="line_ids" invisible="state == 'start'" nolabel="1" readonly="1">
+                    <list decoration-success="action == 'create'" decoration-info="action == 'update'"
+                          decoration-muted="action == 'unchanged'" decoration-danger="action == 'error'">
+                        <field name="section" width="150px"/>
+                        <field name="name" width="200px"/>
+                        <field name="action" width="110px"/>
+                        <field name="changes"/>
+                        <field name="unresolved" width="220px" decoration-warning="unresolved"/>
+                    </list>
+                </field>
+                <footer>
+                    <button name="action_export" type="object" string="Export to JSON" class="btn-primary"
+                            invisible="state != 'start'"/>
+                    <button name="action_preview" type="object" string="Preview Import" class="btn-secondary"
+                            invisible="state != 'start'"/>
+                    <button name="action_apply" type="object" string="Apply Import" class="btn-primary"
+                            invisible="state != 'preview'"
+                            confirm="Apply these changes to the instance?"/>
+                    <button name="action_back" type="object" string="Back" invisible="state != 'preview'"/>
+                    <button string="Close" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_settings_transfer" model="ir.actions.act_window">
+        <field name="name">Settings Export/Import</field>
+        <field name="res_model">magento.settings.transfer</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="group_ids" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
+    </record>
+
+    <menuitem id="menu_magento_settings_transfer" name="Settings Export/Import"
+              parent="menu_magento_configuration" action="action_magento_settings_transfer" sequence="90"/>
+</odoo>

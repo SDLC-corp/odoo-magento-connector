@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         Connect a Magento store: the onboarding stepper (2.10 / U6)
+         ============================================================ -->
+    <record id="view_magento_setup_wizard_form" model="ir.ui.view">
+        <field name="name">magento.setup.wizard.form</field>
+        <field name="model">magento.setup.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Connect a Magento store">
+                <field name="current_step" invisible="1"/>
+                <field name="is_first_step" invisible="1"/>
+                <field name="is_last_step" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <field name="ssl_problem" invisible="1"/>
+                <field name="discovery_available" invisible="1"/>
+                <field name="delivery_installed" invisible="1"/>
+                <field name="first_sync_queued" invisible="1"/>
+                <sheet>
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <img src="/sdlc_magento_connector/static/src/img/magento_mark.svg" alt="Magento"
+                             style="height: 40px; width: 40px; object-fit: contain;"/>
+                        <div>
+                            <h1 class="mb-0">Connect a Magento store</h1>
+                            <div class="text-muted">
+                                One step at a time; each step can be run again.
+                                <span invisible="not instance_id">Configuring
+                                    <field name="instance_id" readonly="1" nolabel="1" class="d-inline fw-semibold"
+                                           options="{'no_open': True}"/>.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <field name="step_header" nolabel="1" readonly="1" class="w-100"/>
+                    <div class="d-flex align-items-center gap-3 my-3">
+                        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: .06em;">Progress</span>
+                        <field name="progress" widget="progressbar" nolabel="1" class="flex-grow-1"/>
+                    </div>
+                    <field name="step_alert" nolabel="1" readonly="1" class="w-100 mb-3" invisible="not step_alert"/>
+
+                    <!-- 1. Store URL -->
+                    <div invisible="current_step != 'url'" name="step_url">
+                        <h2 class="h4">1. Store URL</h2>
+                        <p class="text-muted">
+                            Paste the store address the way you have it: <code>shop.example.com</code>, the admin
+                            URL or a REST URL all work. The wizard keeps the Magento root address and checks that
+                            the REST API answers (Magento replies "401" without credentials, which is expected).
+                        </p>
+                        <group>
+                            <group>
+                                <field name="url_input" placeholder="shop.example.com" required="current_step == 'url'"/>
+                                <field name="base_url" invisible="not base_url"/>
+                                <field name="name" placeholder="e.g. Main store"/>
+                            </group>
+                            <group>
+                                <field name="verify_ssl" widget="boolean_toggle"/>
+                                <div colspan="2" class="text-muted small" invisible="not ssl_problem">
+                                    The certificate is not trusted. Untick Verify SSL only for a test or internal
+                                    store, then check the address again.
+                                </div>
+                            </group>
+                        </group>
+                        <button name="action_check_url" type="object" string="Check address"
+                                icon="fa-plug" class="btn-secondary"/>
+                    </div>
+
+                    <!-- 2. Credentials -->
+                    <div invisible="current_step != 'credentials'" name="step_credentials">
+                        <h2 class="h4">2. Credentials</h2>
+                        <div class="alert alert-light border mb-3" role="status">
+                            <strong>Create the integration in Magento</strong>
+                            <ol class="mb-0 mt-1 ps-3">
+                                <li>In Magento Admin open <b>System &gt; Extensions &gt; Integrations</b> and click
+                                    <b>Add New Integration</b>.</li>
+                                <li>Name it (e.g. Odoo) and confirm your admin password. On the <b>API</b> tab choose
+                                    <b>Custom</b> resource access and tick Stores, Catalog (Products, Categories),
+                                    Customers, Sales (Orders, Invoices, Shipments, Credit Memos) and, with MSI,
+                                    Inventory &gt; Sources. <b>All</b> also works.</li>
+                                <li>Save, click <b>Activate</b> then <b>Allow</b>, and copy the four values Magento
+                                    shows into the fields below.</li>
+                            </ol>
+                        </div>
+                        <group>
+                            <group string="Integration values">
+                                <field name="consumer_key" password="True" invisible="auth_method != 'oauth1'"/>
+                                <field name="consumer_secret" password="True" invisible="auth_method != 'oauth1'"/>
+                                <field name="access_token" password="True"/>
+                                <field name="access_token_secret" password="True" invisible="auth_method != 'oauth1'"/>
+                            </group>
+                            <group string="Options">
+                                <field name="show_advanced" widget="boolean_toggle"/>
+                                <field name="auth_method" widget="radio" invisible="not show_advanced"/>
+                                <div colspan="2" class="text-muted small"
+                                     invisible="not show_advanced or auth_method != 'bearer'">
+                                    Bearer sends the access token alone. Magento 2.4.4 and later refuse it unless
+                                    "Allow OAuth Access Tokens to be used as standalone Bearer tokens" is enabled
+                                    (Stores &gt; Configuration &gt; Services &gt; OAuth).
+                                </div>
+                            </group>
+                        </group>
+                        <button name="action_validate_credentials" type="object" string="Validate access"
+                                icon="fa-key" class="btn-secondary"/>
+                        <div class="mt-3" invisible="not diagnostics_html">
+                            <h3 class="h6 text-uppercase text-muted" style="letter-spacing: .06em;">API access check</h3>
+                            <field name="diagnostics_html" nolabel="1" readonly="1"/>
+                        </div>
+                    </div>
+
+                    <!-- 3. Stores -->
+                    <div invisible="current_step != 'stores'" name="step_stores">
+                        <h2 class="h4">3. Stores</h2>
+                        <p class="text-muted">
+                            Choose the website and store view this Odoo company syncs with. Its store code
+                            scopes product and order calls.
+                        </p>
+                        <field name="store_line_ids" nolabel="1">
+                            <list create="0" delete="0" decoration-bf="is_selected" decoration-muted="not is_active">
+                                <field name="is_selected" column_invisible="1"/>
+                                <field name="website_name" readonly="1"/>
+                                <field name="website_magento_id" readonly="1" optional="hide"/>
+                                <field name="store_name" readonly="1"/>
+                                <field name="store_code" readonly="1"/>
+                                <field name="store_magento_id" readonly="1"/>
+                                <field name="is_active" readonly="1" widget="boolean"/>
+                                <button name="action_select" type="object" string="Use this store" icon="fa-check"
+                                        class="btn-link" invisible="is_selected"/>
+                                <field name="is_selected" string="Selected" readonly="1" widget="boolean"/>
+                            </list>
+                        </field>
+                        <group>
+                            <group string="Synced scope">
+                                <field name="website_id"/>
+                                <field name="store_id"/>
+                                <field name="store_code"/>
+                            </group>
+                        </group>
+                        <button name="action_discover_stores" type="object" string="Discover stores again"
+                                icon="fa-refresh" class="btn-secondary"/>
+                    </div>
+
+                    <!-- 4. Mappings -->
+                    <div invisible="current_step != 'mappings'" name="step_mappings">
+                        <h2 class="h4">4. Mappings</h2>
+                        <p class="text-muted">
+                            Proposed from the latest Magento orders, the tax rates and the customer groups, and
+                            pre-filled with what is already mapped. Untick a line to skip it, edit what is wrong,
+                            then create the mappings.
+                        </p>
+                        <group>
+                            <group>
+                                <field name="default_journal_id" options="{'no_create': True}"/>
+                                <field name="orders_sampled" string="Orders read" readonly="1"/>
+                            </group>
+                        </group>
+                        <notebook>
+                            <page string="Payment methods" name="payments">
+                                <field name="payment_line_ids" nolabel="1">
+                                    <list editable="bottom" create="0" delete="0">
+                                        <field name="accept" widget="boolean_toggle"/>
+                                        <field name="code" readonly="1"/>
+                                        <field name="label"/>
+                                        <field name="seen_count" readonly="1"/>
+                                        <field name="existing" readonly="1"/>
+                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="journal_id" options="{'no_create': True}"/>
+                                    </list>
+                                </field>
+                            </page>
+                            <page string="Shipping methods" name="carriers">
+                                <field name="carrier_line_ids" nolabel="1">
+                                    <list editable="bottom" create="0" delete="0">
+                                        <field name="accept" widget="boolean_toggle"/>
+                                        <field name="code" readonly="1"/>
+                                        <field name="label"/>
+                                        <field name="seen_count" readonly="1"/>
+                                        <field name="existing" readonly="1"/>
+                                        <field name="carrier_ref" column_invisible="not parent.delivery_installed"/>
+                                    </list>
+                                </field>
+                            </page>
+                            <page string="Tax rates" name="taxes">
+                                <field name="tax_line_ids" nolabel="1">
+                                    <list editable="bottom" create="0" delete="0">
+                                        <field name="accept" widget="boolean_toggle"/>
+                                        <field name="label" readonly="1"/>
+                                        <field name="code" readonly="1" optional="hide"/>
+                                        <field name="percent" readonly="1"/>
+                                        <field name="price_include" readonly="1"/>
+                                        <field name="seen_count" readonly="1"/>
+                                        <field name="existing" readonly="1"/>
+                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="tax_id" options="{'no_create': True}"/>
+                                    </list>
+                                </field>
+                            </page>
+                            <page string="Customer groups" name="groups">
+                                <field name="group_line_ids" nolabel="1">
+                                    <list editable="bottom" create="0" delete="0">
+                                        <field name="accept" widget="boolean_toggle"/>
+                                        <field name="magento_ref" readonly="1"/>
+                                        <field name="code" readonly="1" string="Group"/>
+                                        <field name="label" readonly="1" string="Tax Class"/>
+                                        <field name="seen_count" readonly="1"/>
+                                        <field name="existing" readonly="1"/>
+                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="pricelist_id" options="{'no_create': True}"/>
+                                    </list>
+                                </field>
+                            </page>
+                        </notebook>
+                        <div class="d-flex gap-2">
+                            <button name="action_propose_mappings" type="object" string="Propose again"
+                                    icon="fa-refresh" class="btn-secondary"/>
+                            <button name="action_apply_mappings" type="object" string="Create mappings"
+                                    icon="fa-check" class="btn-secondary"/>
+                        </div>
+                    </div>
+
+                    <!-- 5. Catalog check -->
+                    <div invisible="current_step != 'catalog'" name="step_catalog">
+                        <h2 class="h4">5. Catalog check</h2>
+                        <p class="text-muted">
+                            Reads up to 500 Magento products and compares them with Odoo before the first sync:
+                            duplicate default codes, barcode collisions, SKUs that would create duplicates,
+                            product types and missing prices. Informational: nothing is blocked or changed.
+                        </p>
+                        <button name="action_check_catalog" type="object" string="Run catalog check"
+                                icon="fa-search" class="btn-secondary mb-3"/>
+                        <group invisible="not catalog_sampled">
+                            <group>
+                                <field name="catalog_sampled"/>
+                                <field name="catalog_total"/>
+                                <field name="catalog_new_count"/>
+                            </group>
+                            <group>
+                                <field name="catalog_error_count"/>
+                                <field name="catalog_warning_count"/>
+                            </group>
+                        </group>
+                        <field name="check_line_ids" nolabel="1" readonly="1" invisible="not check_line_ids">
+                            <list create="0" delete="0">
+                                <field name="severity" widget="badge" decoration-danger="severity == 'error'"
+                                       decoration-warning="severity == 'warning'" decoration-info="severity == 'info'"/>
+                                <field name="category"/>
+                                <field name="sku"/>
+                                <field name="product_id"/>
+                                <field name="message"/>
+                            </list>
+                        </field>
+                    </div>
+
+                    <!-- 6. Go live -->
+                    <div invisible="current_step != 'golive'" name="step_golive">
+                        <h2 class="h4">6. Go live</h2>
+                        <p class="text-muted">
+                            Choose how the store keeps in sync, then save. "Run first sync now" queues categories,
+                            products, customers and orders; follow them in the Job Queue or the Console.
+                        </p>
+                        <group>
+                            <group string="Sync scope and schedule">
+                                <field name="auto_sync_enabled" widget="boolean_toggle"/>
+                                <field name="auto_sync_frequency" invisible="not auto_sync_enabled"/>
+                                <field name="auto_sync_hour_interval"
+                                       invisible="not auto_sync_enabled or auto_sync_frequency != 'hourly'"/>
+                                <field name="auto_sync_hour"
+                                       invisible="not auto_sync_enabled or auto_sync_frequency == 'hourly'"/>
+                                <field name="auto_sync_categories"/>
+                                <field name="auto_sync_products"/>
+                                <field name="auto_sync_customers"/>
+                                <field name="auto_sync_orders"/>
+                            </group>
+                            <group string="Background and stock">
+                                <field name="run_syncs_in_background" widget="boolean_toggle"/>
+                                <field name="stock_push_enabled" widget="boolean_toggle"/>
+                                <field name="stock_qty_basis"/>
+                                <field name="alert_user_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                            </group>
+                        </group>
+                        <group>
+                            <group string="Order workflows (defaults kept)" colspan="2">
+                                <field name="workflow_summary" nolabel="1" colspan="2" readonly="1"/>
+                            </group>
+                        </group>
+                        <h3 class="h6 text-uppercase text-muted mt-2" style="letter-spacing: .06em;">Known issues</h3>
+                        <div class="text-muted mb-2" invisible="issue_line_ids">No known issue: the store is ready.</div>
+                        <field name="issue_line_ids" nolabel="1" readonly="1" invisible="not issue_line_ids">
+                            <list create="0" delete="0">
+                                <field name="severity" widget="badge" decoration-danger="severity == 'error'"
+                                       decoration-warning="severity == 'warning'" decoration-info="severity == 'info'"/>
+                                <field name="step"/>
+                                <field name="message"/>
+                                <button name="action_fix" type="object" string="Fix" icon="fa-wrench" class="btn-link"
+                                        invisible="step == 'golive'"/>
+                            </list>
+                        </field>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <button name="action_apply_golive" type="object" string="Save settings"
+                                    icon="fa-save" class="btn-secondary"/>
+                            <button name="action_run_first_sync" type="object" string="Run first sync now"
+                                    icon="fa-play" class="btn-primary"
+                                    confirm="Queue the first sync of categories, products, customers and orders now?"/>
+                            <button name="action_open_console" type="object" string="Open Console"
+                                    icon="fa-tachometer" class="btn-secondary"/>
+                            <button name="action_refresh_issues" type="object" string="Refresh checklist"
+                                    icon="fa-refresh" class="btn-link"/>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top pt-3 mt-4">
+                        <div>
+                            <button name="action_back" type="object" string="Back" icon="fa-arrow-left"
+                                    class="btn-secondary" invisible="is_first_step"/>
+                        </div>
+                        <div>
+                            <button name="action_next" type="object" string="Next" icon="fa-arrow-right"
+                                    class="btn-primary" invisible="is_last_step"/>
+                        </div>
+                    </div>
+
+                    <field name="url_status" invisible="1"/>
+                    <field name="credentials_status" invisible="1"/>
+                    <field name="stores_status" invisible="1"/>
+                    <field name="mappings_status" invisible="1"/>
+                    <field name="catalog_status" invisible="1"/>
+                    <field name="golive_status" invisible="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_setup_wizard" model="ir.actions.act_window">
+        <field name="name">Connect a Magento Store</field>
+        <field name="res_model">magento.setup.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_magento_setup_wizard_form"/>
+        <field name="target">current</field>
+        <field name="group_ids" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
+    </record>
+
+    <menuitem id="menu_magento_setup_wizard" name="Connect a Store"
+              parent="sdlc_magento_connector.menu_magento_configuration"
+              action="action_magento_setup_wizard" sequence="5"
+              groups="sdlc_magento_connector.group_magento_manager"/>
+
+    <!-- Entry points on the instance form -->
+    <record id="view_magento_instance_form_setup_wizard" model="ir.ui.view">
+        <field name="name">magento.instance.form.setup.wizard</field>
+        <field name="model">magento.instance</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header/button[@name='action_test_connection']" position="before">
+                <button name="%(sdlc_magento_connector.action_magento_setup_wizard)d" type="action"
+                        string="Setup Wizard" icon="fa-magic" context="{'default_instance_id': id}"
+                        groups="sdlc_magento_connector.group_magento_manager" invisible="not id"/>
+            </xpath>
+            <xpath expr="//notebook" position="before">
+                <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2"
+                     role="status" invisible="not id or state != 'draft'"
+                     groups="sdlc_magento_connector.group_magento_manager">
+                    <span><strong>Not connected yet.</strong> The setup wizard checks the address, the
+                        credentials, the store view, the mappings and the catalog, one step at a time.</span>
+                    <button name="%(sdlc_magento_connector.action_magento_setup_wizard)d" type="action"
+                            string="Open setup wizard" class="btn-primary btn-sm"
+                            context="{'default_instance_id': id}"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

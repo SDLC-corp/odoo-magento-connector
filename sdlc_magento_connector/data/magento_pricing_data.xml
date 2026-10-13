@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- noupdate: an administrator's interval/activation survives upgrades. -->
+    <data noupdate="1">
+        <!-- Scheduled price push. Inactive by default; queues one job per active price
+             rule with "Scheduled Push" on (identity prices-<rule id>), which sends only
+             the prices that changed. -->
+        <record id="ir_cron_magento_push_prices" model="ir.cron">
+            <field name="name">Magento: Push Prices</field>
+            <field name="model_id" ref="model_magento_price_rule"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_magento_push_prices()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 01:00:00')"/>
+            <field name="active" eval="False"/>
+        </record>
+    </data>
+</odoo>

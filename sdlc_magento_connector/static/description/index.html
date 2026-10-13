@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odoo Magento 2 Connector — Seamless Integration</title>
+<style>
+  :root {
+    --bg: #f8f7fc;
+    --surface: #ffffff;
+    --surface2: #f0eef7;
+    --border: rgba(0,0,0,0.08);
+    --odoo: #7c3aed;
+    --odoo-light: #6d28d9;
+    --magento: #ea580c;
+    --magento-light: #c2410c;
+    --accent: #c026d3;
+    --text: #1a1633;
+    --muted: #64618a;
+    --card-glow: rgba(124,58,237,0.08);
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.15;
+  }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.08;
+  }
+  .orb-1 { width: 600px; height: 600px; background: var(--odoo); top: -200px; right: -150px; }
+  .orb-2 { width: 500px; height: 500px; background: var(--magento); bottom: 10%; left: -200px; }
+  .orb-3 { width: 400px; height: 400px; background: var(--accent); top: 40%; left: 50%; transform: translateX(-50%); opacity: 0.12; }
+
+  /* ── TYPOGRAPHY ── */
+  h1, h2, h3, h4 { font-family: 'Arial Narrow', Arial, Helvetica, sans-serif; }
+
+  .section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--odoo-light);
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.2);
+    padding: 5px 14px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+  }
+  .section-label::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--odoo-light);
+    display: inline-block;
+  }
+
+  /* ── NAVBAR ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 18px 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(248,247,252,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+  }
+
+  .brand-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .badge-pill {
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .badge-odoo { background: rgba(124,58,237,0.1); color: var(--odoo-light); border: 1px solid rgba(124,58,237,0.25); }
+  .badge-magento { background: rgba(249,115,22,0.1); color: var(--magento-light); border: 1px solid rgba(249,115,22,0.25); }
+
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+  }
+
+  .nav-tab {
+    padding: 8px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active {
+    background: var(--odoo);
+    color: #fff;
+  }
+
+  .nav-cta {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-ghost {
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--odoo-light); color: var(--odoo-light); }
+
+  .btn-primary {
+    padding: 10px 22px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, var(--odoo), #6d28d9);
+    color: #fff;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(124,58,237,0.5); }
+
+  /* ── HERO ── */
+  .hero {
+    position: relative;
+    z-index: 1;
+    padding: 30px 60px 50px;
+    text-align: center;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .hero h1 {
+    font-size: clamp(44px, 6vw, 76px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    margin-bottom: 28px;
+  }
+
+  .hero h1 .gradient-text {
+    background: linear-gradient(135deg, var(--odoo-light) 0%, var(--accent) 50%, var(--magento-light) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero p {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 640px;
+    margin: 0 auto 30px;
+    font-weight: 300;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 40px;
+  }
+
+  .btn-hero {
+    padding: 14px 32px;
+    border-radius: 14px;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+  .btn-hero-primary {
+    background: linear-gradient(135deg, var(--odoo), #9333ea);
+    border: none;
+    color: #fff;
+    box-shadow: 0 8px 32px rgba(124,58,237,0.4);
+  }
+  .btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(124,58,237,0.55); }
+  .btn-hero-secondary {
+    background: transparent;
+    border: 1.5px solid var(--border);
+    color: var(--text);
+  }
+  .btn-hero-secondary:hover { border-color: rgba(0,0,0,0.2); background: rgba(0,0,0,0.03); }
+
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 60px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: center;
+  }
+  .stat-num {
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--odoo-light), var(--magento-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .stat-label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── SECTION WRAPPER ── */
+  .section {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 50px 60px;
+  }
+
+  .section-header {
+    margin-bottom: 36px;
+  }
+  .section-header.center { text-align: center; }
+  .section-header h2 {
+    font-size: clamp(32px, 4vw, 52px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+  .section-header p {
+    font-size: 17px;
+    color: var(--muted);
+    font-weight: 300;
+    max-width: 580px;
+  }
+  .section-header.center p { margin: 0 auto; }
+
+  /* ── FEATURES GRID ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+    cursor: default;
+  }
+
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--card-glow), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(124,58,237,0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 60px rgba(124,58,237,0.1);
+  }
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .icon-purple { background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.2); }
+  .icon-orange { background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.2); }
+  .icon-pink   { background: rgba(232,121,249,0.1); border: 1px solid rgba(232,121,249,0.2); }
+  .icon-blue   { background: rgba(59,130,246,0.1);  border: 1px solid rgba(59,130,246,0.2);  }
+
+  .feature-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  .feature-card p {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── OPERATIONS SECTION ── */
+  .ops-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+
+  .ops-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ops-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 24px 24px 0 0;
+  }
+  .ops-card.import::after { background: linear-gradient(90deg, var(--odoo), var(--accent)); }
+  .ops-card.export::after { background: linear-gradient(90deg, var(--magento), #f59e0b); }
+
+  .ops-card-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .ops-card.import .ops-card-label { color: var(--odoo-light); }
+  .ops-card.export .ops-card-label { color: var(--magento-light); }
+
+  .ops-card h3 {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 28px;
+  }
+
+  .ops-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .ops-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .ops-list li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .ops-card.import .ops-list li::before { background: var(--odoo-light); }
+  .ops-card.export .ops-list li::before { background: var(--magento-light); }
+
+  /* ── SYNC FLOW ── */
+  .sync-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 5px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sync-flow::before {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(124,58,237,0.05), transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .sync-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-top: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .sync-platform {
+    text-align: center;
+    padding: 10px 20px;
+  }
+
+  .platform-logo {
+    width: 80px; height: 80px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    margin: 0 auto 14px;
+    border: 1px solid var(--border);
+  }
+  .platform-logo.odoo-logo { background: rgba(124,58,237,0.08); }
+  .platform-logo.magento-logo { background: rgba(249,115,22,0.08); }
+
+  .platform-name {
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .sync-arrows {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+  }
+
+  .sync-arrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .arrow-line {
+    flex: 1;
+    height: 2px;
+    position: relative;
+  }
+  .arrow-line.to-magento {
+    background: linear-gradient(90deg, rgba(124,58,237,0.8), rgba(249,115,22,0.8));
+  }
+  .arrow-line.to-odoo {
+    background: linear-gradient(90deg, rgba(249,115,22,0.8), rgba(124,58,237,0.8));
+  }
+
+  .arrow-line::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+  }
+  .arrow-line.to-magento::after { border-left-color: rgba(249,115,22,0.8); right: -1px; }
+  .arrow-line.to-odoo::after { right: auto; left: -1px; border-right-color: rgba(124,58,237,0.8); border-left: none; }
+
+  .arrow-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    padding: 4px 10px;
+    border-radius: 100px;
+    text-transform: uppercase;
+  }
+  .arrow-label.export { background: rgba(124,58,237,0.08); color: var(--odoo-light); }
+  .arrow-label.import { background: rgba(249,115,22,0.08); color: var(--magento-light); }
+
+  .sync-items {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .sync-chip {
+    padding: 8px 16px;
+    border-radius: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sync-chip:hover {
+    border-color: rgba(124,58,237,0.3);
+    color: var(--odoo-light);
+    background: rgba(124,58,237,0.06);
+  }
+  .sync-chip .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--odoo-light);
+    flex-shrink: 0;
+  }
+
+  /* ── FEATURE LIST ── */
+  .feature-list-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .feat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.5;
+    transition: all 0.2s;
+  }
+  .feat-item:hover {
+    border-color: rgba(124,58,237,0.2);
+    color: var(--text);
+  }
+  .feat-item .check {
+    width: 20px; height: 20px;
+    border-radius: 6px;
+    background: rgba(124,58,237,0.1);
+    border: 1px solid rgba(124,58,237,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 11px;
+    color: var(--odoo-light);
+  }
+
+  /* ── AUTOMATIC JOBS ── */
+  .jobs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .job-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px 28px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  .job-card:hover {
+    border-color: rgba(124,58,237,0.25);
+    transform: translateY(-3px);
+    box-shadow: 0 16px 50px rgba(124,58,237,0.08);
+  }
+
+  .job-icon {
+    width: 60px; height: 60px;
+    border-radius: 18px;
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin: 0 auto 18px;
+  }
+
+  .job-card h4 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .job-card p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* ── CONTACT SECTION ── */
+  .contact-section {
+    background: var(--surface);
+    border-radius: 32px;
+    border: 1px solid var(--border);
+    padding: 50px;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .contact-section::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.06), transparent 70%);
+    top: -100px; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .contact-section h2 {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+  }
+  .contact-section p {
+    color: var(--muted);
+    font-size: 17px;
+    margin-bottom: 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .contact-channels {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+
+  .channel-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px 36px;
+    text-align: center;
+    min-width: 200px;
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .channel-card:hover {
+    border-color: rgba(124,58,237,0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(124,58,237,0.1);
+  }
+  .channel-icon { font-size: 32px; margin-bottom: 12px; }
+  .channel-name {
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .channel-desc { font-size: 12px; color: var(--muted); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.75); }
+  }
+  @keyframes flow {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .animate-up { animation: fadeUp 0.7s ease both; }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+  .delay-4 { animation-delay: 0.4s; }
+
+  /* ── LIVE INDICATOR ── */
+  .live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #16a34a;
+    background: rgba(22,163,74,0.08);
+    border: 1px solid rgba(22,163,74,0.2);
+    padding: 4px 10px;
+    border-radius: 100px;
+    margin-left: 10px;
+    vertical-align: middle;
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #16a34a;
+    animation: pulse-dot 1.5s ease infinite;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    nav { padding: 16px 24px; }
+    .nav-tabs, .nav-cta { display: none; }
+    .hero { padding: 24px 24px 40px; }
+    .section { padding: 40px 24px; }
+    .ops-grid, .feature-list-grid { grid-template-columns: 1fr; }
+    .jobs-grid { grid-template-columns: 1fr 1fr; }
+    .sync-row { flex-direction: column; }
+    .contact-section { padding: 36px 24px; }
+    .divider { margin: 0 24px; }
+    .hero-stats { gap: 36px; }
+  }
+
+  @media (max-width: 600px) {
+    .jobs-grid { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+    .contact-channels { flex-direction: column; align-items: center; }
+    .hero h1 { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- BACKGROUND ORBS -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<!-- NAVBAR -->
+<nav>
+  <div class="nav-brand">
+    <div class="brand-badges">
+      <span class="badge-pill badge-odoo">Odoo</span>
+      <span style="color:var(--muted); font-size:13px;">×</span>
+      <span class="badge-pill badge-magento">Magento 2</span>
+    </div>
+    <span style="color:var(--muted); font-weight:400;">Connector</span>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="animate-up">
+    <span class="section-label">Official Integration Layer</span>
+  </div>
+
+  <h1 class="animate-up delay-1">
+    Sync Odoo &amp; Magento 2<br>
+  </h1>
+
+  <p class="animate-up delay-2">
+    Bi-directional sync for products, orders, customers, stock, invoices and shipments.
+    Set it up once — let it run forever.
+    <span class="live-badge"><span class="live-dot"></span>Real-time</span>
+  </p>
+
+  <div class="hero-actions animate-up delay-3">
+    <button class="btn-hero btn-hero-primary">Get Instant Personalized Demo</button>
+    <button class="btn-hero btn-hero-secondary">View on Odoo Apps Store</button>
+  </div>
+
+  <div class="hero-stats animate-up delay-4">
+    <div class="stat">
+      <div class="stat-num">2.1k+</div>
+      <div class="stat-label">Active Installations</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">99.9%</div>
+      <div class="stat-label">Sync Reliability</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">v2.3</div>
+      <div class="stat-label">Latest Version</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">14.0+</div>
+      <div class="stat-label">Odoo Versions</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- HIGHLIGHTS / FEATURES -->
+<section class="section">
+  <div class="section-header center">
+    <span class="section-label">Highlights</span>
+    <h2>Everything you need to connect<br>your commerce stack</h2>
+    <p>One connector replaces hours of manual data entry and eliminates sync errors between your ERP and storefront.</p>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon icon-purple">🔗</div>
+      <h3>Odoo–Magento 2 Integration</h3>
+      <p>Full two-way synchronization between Odoo and Magento. All operations managed from a single Odoo interface.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-orange">📦</div>
+      <h3>Manage Products</h3>
+      <p>Create and sync simple, variable, and configurable product types instantly across both platforms.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-pink">🛒</div>
+      <h3>Manage Orders</h3>
+      <p>Import and manage orders from Magento directly in Odoo from placement through to fulfilment.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-blue">👥</div>
+      <h3>Import Customers</h3>
+      <p>Seamlessly import customer data from Magento into Odoo and keep both platforms in sync.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-purple">📊</div>
+      <h3>Manage Stock</h3>
+      <p>Sync inventory between Magento and Odoo in real-time. Live-to-ERP and ERP-to-store stock updates.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-orange">🚚</div>
+      <h3>Export Shipping Information</h3>
+      <p>Push tracking numbers and shipment details from Odoo back to Magento automatically.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-pink">🧾</div>
+      <h3>Export Invoice Information</h3>
+      <p>Sync invoices created in Odoo back to Magento for complete financial record parity.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-blue">⚡</div>
+      <h3>Seamless Automation</h3>
+      <p>Scheduled cron jobs handle all routine sync tasks automatically with zero manual intervention.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- KEY CAPABILITIES LIST -->
+<section class="section">
+  <div class="section-header center">
+    <span class="section-label">Capabilities</span>
+    <h2>Everything included,<br>nothing held back</h2>
+  </div>
+
+  <div class="feature-list-grid">
+    <div class="feat-item"><div class="check">✓</div>Full Odoo Magento 2 integration (NEW)</div>
+    <div class="feat-item"><div class="check">✓</div>Magento 16+ Multi-store support out of the box</div>
+    <div class="feat-item"><div class="check">✓</div>Magento 8+ Multi-website &amp; multi-language support</div>
+    <div class="feat-item"><div class="check">✓</div>Magento 4+ Multi-currency support with live FX rates</div>
+    <div class="feat-item"><div class="check">✓</div>Order status sync with configurable workflows (NEW)</div>
+    <div class="feat-item"><div class="check">✓</div>Delivering Point integration with WMS connectors</div>
+    <div class="feat-item"><div class="check">✓</div>Magento 10+ queue-based async processing</div>
+    <div class="feat-item"><div class="check">✓</div>Key products: categories, attribute groups, attribute sets</div>
+    <div class="feat-item"><div class="check">✓</div>Supports Magento 2.3.x–2.4.x &amp; Community + Enterprise</div>
+    <div class="feat-item"><div class="check">✓</div>Magento Cart rules &amp; custom discounts fully supported</div>
+    <div class="feat-item"><div class="check">✓</div>Multi-tax rules based on region, product class &amp; customer</div>
+    <div class="feat-item"><div class="check">✓</div>Order Cancel Facility — cancel orders in both directions</div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- OPERATIONS -->
+<section class="section">
+  <div class="section-header center">
+    <span class="section-label">Data Flow</span>
+    <h2>Import &amp; Export Operations</h2>
+    <p>Granular control over every data entity flowing between your ERP and storefront.</p>
+  </div>
+
+  <div class="ops-grid">
+    <div class="ops-card import">
+      <div class="ops-card-label">↓ Import</div>
+      <h3>Magento → Odoo</h3>
+      <ul class="ops-list">
+        <li>Sync orders in real-time or via scheduled batch transfer for data-heavy flows</li>
+        <li>Import payments along with full Magento payment method metadata</li>
+        <li>Import Products and Variants with Magento-specific attribute details</li>
+        <li>Import Product Information, Pricing, &amp; Taxes with cross-reference mapping</li>
+        <li>Create and maintain Magento Product Websites references inside Odoo</li>
+        <li>Import shipping companies from Magento and associate them in Odoo</li>
+      </ul>
+    </div>
+
+    <div class="ops-card export">
+      <div class="ops-card-label">↑ Export</div>
+      <h3>Odoo → Magento</h3>
+      <ul class="ops-list">
+        <li>Publish orders from Odoo to Magento as completed sales with full line items</li>
+        <li>Export invoices along with payment status back to Magento</li>
+        <li>Export Products (simple, configurable, bundled) with Magento attribute mapping</li>
+        <li>Export Order Status, Shipping Details, and Tracking Number references</li>
+        <li>Create shipments in Magento from Odoo delivery confirmations automatically</li>
+        <li>Manage stock levels and push live inventory updates to Magento in real-time</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- SYNC VISUALIZATION -->
+<section class="section">
+  <div class="section-header center">
+    <span class="section-label">Synchronization</span>
+    <h2>Product &amp; Stock Sync</h2>
+    <p>Bi-directional, reliable, and instant. Your inventory is always accurate on both sides.</p>
+  </div>
+
+  <div class="sync-flow">
+    <div class="sync-row">
+      <div class="sync-platform">
+        <div class="platform-logo odoo-logo">🟣</div>
+        <div class="platform-name">Odoo ERP</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:4px;">Source of Truth</div>
+      </div>
+
+      <div class="sync-arrows">
+        <div class="sync-arrow">
+          <span class="arrow-label export">Export</span>
+          <div class="arrow-line to-magento"></div>
+        </div>
+        <div class="sync-arrow">
+          <div class="arrow-line to-odoo"></div>
+          <span class="arrow-label import">Import</span>
+        </div>
+      </div>
+
+      <div class="sync-platform">
+        <div class="platform-logo magento-logo">🔶</div>
+        <div class="platform-name">Magento 2</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:4px;">Commerce Frontend</div>
+      </div>
+    </div>
+
+    <div class="sync-items">
+      <div class="sync-chip"><span class="dot"></span> Products</div>
+      <div class="sync-chip"><span class="dot"></span> Orders</div>
+      <div class="sync-chip"><span class="dot"></span> Customers</div>
+      <div class="sync-chip"><span class="dot"></span> Inventory</div>
+      <div class="sync-chip"><span class="dot"></span> Invoices</div>
+      <div class="sync-chip"><span class="dot"></span> Shipments</div>
+      <div class="sync-chip"><span class="dot"></span> Payments</div>
+      <div class="sync-chip"><span class="dot"></span> Pricing</div>
+      <div class="sync-chip"><span class="dot"></span> Taxes</div>
+      <div class="sync-chip"><span class="dot"></span> Order Status</div>
+      <div class="sync-chip"><span class="dot"></span> Tracking Numbers</div>
+      <div class="sync-chip"><span class="dot"></span> Attributes</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- AUTOMATED JOBS -->
+<section class="section">
+  <div class="section-header center">
+    <span class="section-label">Automation</span>
+    <h2>Automatic Jobs</h2>
+    <p>Scheduled cron jobs handle all sync operations — no manual triggers required.</p>
+  </div>
+
+  <div class="jobs-grid">
+    <div class="job-card">
+      <div class="job-icon">📥</div>
+      <h4>Order Import</h4>
+      <p>Pull new Magento orders into Odoo automatically on a configurable schedule.</p>
+    </div>
+    <div class="job-card">
+      <div class="job-icon">📦</div>
+      <h4>Product Sync</h4>
+      <p>Push product updates, pricing changes, and new listings from Odoo to Magento.</p>
+    </div>
+    <div class="job-card">
+      <div class="job-icon">🔄</div>
+      <h4>Stock Update</h4>
+      <p>Keep inventory levels accurate across both platforms in near real-time.</p>
+    </div>
+    <div class="job-card">
+      <div class="job-icon">🚀</div>
+      <h4>Shipment Export</h4>
+      <p>Send tracking info and delivery confirmations back to Magento automatically.</p>
+    </div>
+    <div class="job-card">
+      <div class="job-icon">🧾</div>
+      <h4>Invoice Sync</h4>
+      <p>Export invoices and payment status from Odoo to Magento customers.</p>
+    </div>
+    <div class="job-card">
+      <div class="job-icon">❌</div>
+      <h4>Order Cancellation</h4>
+      <p>Propagate order cancellations bidirectionally to keep both systems consistent.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT / CTA -->
+<section class="section" style="padding-top: 20px;">
+  <div class="contact-section">
+    <h2>Ready to Connect?</h2>
+    <p>Get a personalized demo or reach us directly on email or WhatsApp.</p>
+
+    <div class="contact-channels">
+      <div class="channel-card" onclick="window.location.href='mailto:sales@sdlccorp.com';" style="cursor:pointer;">
+        <div class="channel-icon">📧</div>
+        <div class="channel-name">Email Us</div>
+        <div class="channel-desc">sales@sdlccorp.com<br>Response within 30 minutes</div>
+      </div>
+      <div class="channel-card" style="border-color: rgba(37,211,102,0.25); cursor:pointer;" onclick="window.open('https://wa.me/918920944210','_blank');">
+        <div class="channel-icon">💬</div>
+        <div class="channel-name">WhatsApp</div>
+        <div class="channel-desc">+91 89209 44210<br>Chat with us instantly</div>
+      </div>
+      <div class="channel-card">
+        <div class="channel-icon">🎯</div>
+        <div class="channel-name">Live Demo</div>
+        <div class="channel-desc">Personalized walkthrough<br>Book a 30-min slot</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 40px; position: relative; z-index: 1;">
+      <button class="btn-hero btn-hero-primary" style="font-size:16px; padding: 16px 40px;">
+        Get Instant Personalized Demo →
+      </button>
+    </div>
+  </div>
+</section>
+
+
+<script>
+  // Animate feature cards on scroll
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        entry.target.style.animationDelay = (i * 0.07) + 's';
+        entry.target.classList.add('animate-up');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.feature-card, .ops-card, .job-card, .feat-item, .sync-chip').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(20px)';
+    el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    observer.observe(el);
+  });
+
+  const animObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.feature-card, .ops-card, .job-card, .feat-item, .sync-chip').forEach(el => {
+    animObserver.observe(el);
+  });
+
+  // Nav tab interaction
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
