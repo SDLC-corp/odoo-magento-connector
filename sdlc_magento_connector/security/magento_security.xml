@@ -273,4 +273,16 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_dryrun_company" model="ir.rule">
+        <field name="name">Magento dry-run preview: multi-company</field>
+        <field name="model_id" ref="model_magento_dryrun"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_dryrun_line_company" model="ir.rule">
+        <field name="name">Magento dry-run preview row: multi-company</field>
+        <field name="model_id" ref="model_magento_dryrun_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>

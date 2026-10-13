@@ -82,3 +82,7 @@ access_magento_return_location_rule_user,magento.return.location.rule user,model
 access_magento_return_location_rule_manager,magento.return.location.rule manager,model_magento_return_location_rule,group_magento_manager,1,1,1,1
 access_magento_webhook_event_user,magento.webhook.event user,model_magento_webhook_event,group_magento_user,1,0,0,0
 access_magento_webhook_event_manager,magento.webhook.event manager,model_magento_webhook_event,group_magento_manager,1,0,0,1
+access_magento_dryrun_user,magento.dryrun user,model_magento_dryrun,group_magento_user,1,0,0,0
+access_magento_dryrun_manager,magento.dryrun manager,model_magento_dryrun,group_magento_manager,1,1,1,1
+access_magento_dryrun_line_user,magento.dryrun.line user,model_magento_dryrun_line,group_magento_user,1,0,0,0
+access_magento_dryrun_line_manager,magento.dryrun.line manager,model_magento_dryrun_line,group_magento_manager,1,1,1,1
