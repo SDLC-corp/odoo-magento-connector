@@ -24,3 +24,4 @@ from . import magento_pricing
 from . import magento_store
 from . import magento_product_i18n
 from . import magento_conflict
+from . import magento_totals_explainer

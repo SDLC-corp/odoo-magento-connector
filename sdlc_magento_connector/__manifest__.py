@@ -35,6 +35,7 @@
         'views/magento_store_p2_views.xml',
         'wizard/magento_setup_wizard_views.xml',
         'views/magento_conflict_p3_views.xml',
+        'views/magento_totals_p3_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

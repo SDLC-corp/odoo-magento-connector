@@ -243,4 +243,16 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
 
+    <record id="rule_magento_totals_explanation_company" model="ir.rule">
+        <field name="name">Magento totals explanation: multi-company</field>
+        <field name="model_id" ref="model_magento_totals_explanation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_magento_totals_explanation_line_company" model="ir.rule">
+        <field name="name">Magento totals explanation component: multi-company</field>
+        <field name="model_id" ref="model_magento_totals_explanation_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
 </odoo>
