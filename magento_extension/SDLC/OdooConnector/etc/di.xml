@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Multi-Source Inventory: a source item save (admin, REST inventory/source-items, import)
+         is a stock event. Remove this block if the Magento_Inventory* modules are removed. -->
+    <type name="Magento\InventoryApi\Api\SourceItemsSaveInterface">
+        <plugin name="sdlc_odoo_connector_source_items" type="SDLC\OdooConnector\Plugin\SourceItemsSavePlugin"/>
+    </type>
+
+    <!-- REST/service refunds pass return_to_stock_items as arguments, not on the credit memo
+         items: keep them for the credit memo observer. -->
+    <type name="Magento\Sales\Api\RefundOrderInterface">
+        <plugin name="sdlc_odoo_connector_return_to_stock" type="SDLC\OdooConnector\Plugin\RefundOrderReturnToStockPlugin"/>
+    </type>
+    <type name="Magento\Sales\Api\RefundInvoiceInterface">
+        <plugin name="sdlc_odoo_connector_return_to_stock" type="SDLC\OdooConnector\Plugin\RefundInvoiceReturnToStockPlugin"/>
+    </type>
+
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="sdlc_odoo_outbox_flush" xsi:type="object">SDLC\OdooConnector\Console\Command\FlushCommand</item>
+                <item name="sdlc_odoo_outbox_status" xsi:type="object">SDLC\OdooConnector\Console\Command\StatusCommand</item>
+                <item name="sdlc_odoo_outbox_retry" xsi:type="object">SDLC\OdooConnector\Console\Command\RetryCommand</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- Commands are built on every bin/magento call: keep their dependencies lazy. -->
+    <type name="SDLC\OdooConnector\Console\Command\FlushCommand">
+        <arguments>
+            <argument name="sender" xsi:type="object">SDLC\OdooConnector\Model\Sender\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="SDLC\OdooConnector\Console\Command\StatusCommand">
+        <arguments>
+            <argument name="outbox" xsi:type="object">SDLC\OdooConnector\Model\Outbox\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="SDLC\OdooConnector\Console\Command\RetryCommand">
+        <arguments>
+            <argument name="outbox" xsi:type="object">SDLC\OdooConnector\Model\Outbox\Proxy</argument>
+        </arguments>
+    </type>
+</config>

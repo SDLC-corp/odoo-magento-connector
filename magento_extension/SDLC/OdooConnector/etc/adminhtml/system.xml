@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Stores > Configuration > Services > Odoo Connector (default scope: one Odoo per install).
+ *
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="sdlc_odoo_connector" translate="label" sortOrder="910" showInDefault="1" showInWebsite="0" showInStore="0">
+            <label>Odoo Connector</label>
+            <tab>service</tab>
+            <resource>SDLC_OdooConnector::config</resource>
+            <group id="general" translate="label comment" sortOrder="10" showInDefault="1">
+                <label>Real-time Push to Odoo</label>
+                <comment><![CDATA[Records a tiny change notification (entity, id, SKU or order number, never customer data) when an order, invoice, shipment, credit memo, product, customer or stock item is saved, and pushes it to Odoo every minute, signed with HMAC-SHA256. Odoo re-reads the record through the REST API. Requires the Magento cron.]]></comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="endpoint_url" translate="label comment" type="text" sortOrder="20" showInDefault="1">
+                    <label>Odoo Webhook URL</label>
+                    <comment>Copy it from Odoo: Magento > Configuration > Instances > your instance > Real-time tab. Use https in production.</comment>
+                    <validate>validate-url</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="secret" translate="label comment" type="obscure" sortOrder="30" showInDefault="1">
+                    <label>Shared Secret</label>
+                    <comment>The instance's Shared Secret in Odoo. Stored encrypted.</comment>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+                <field id="odoo_database" translate="label comment" type="text" sortOrder="40" showInDefault="1">
+                    <label>Odoo Database (optional)</label>
+                    <comment>Only when one Odoo server hosts several databases without a database filter: sent as the X-Odoo-Database header.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+            <group id="events" translate="label" sortOrder="20" showInDefault="1">
+                <label>Events to Send</label>
+                <field id="orders" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Orders (placed, updated, status changes)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="invoices" translate="label" type="select" sortOrder="20" showInDefault="1">
+                    <label>Invoices</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="shipments" translate="label" type="select" sortOrder="30" showInDefault="1">
+                    <label>Shipments</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="creditmemos" translate="label" type="select" sortOrder="40" showInDefault="1">
+                    <label>Credit Memos</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="products" translate="label" type="select" sortOrder="50" showInDefault="1">
+                    <label>Products (saved, deleted)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="customers" translate="label" type="select" sortOrder="60" showInDefault="1">
+                    <label>Customers</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="stock" translate="label" type="select" sortOrder="70" showInDefault="1">
+                    <label>Stock (stock items and MSI source items)</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+            <group id="delivery" translate="label" sortOrder="30" showInDefault="1">
+                <label>Delivery</label>
+                <field id="batch_size" translate="label comment" type="text" sortOrder="10" showInDefault="1">
+                    <label>Events per Request</label>
+                    <comment>1 to 500.</comment>
+                    <validate>validate-digits validate-digits-range digits-range-1-500</validate>
+                </field>
+                <field id="max_attempts" translate="label comment" type="text" sortOrder="20" showInDefault="1">
+                    <label>Give Up After (attempts)</label>
+                    <comment>Failed deliveries are retried with exponential backoff (1, 2, 4 ... 60 minutes). Odoo's scheduled polling still catches up on events that were given up.</comment>
+                    <validate>validate-digits validate-digits-range digits-range-1-50</validate>
+                </field>
+                <field id="timeout" translate="label" type="text" sortOrder="30" showInDefault="1">
+                    <label>Request Timeout (seconds)</label>
+                    <validate>validate-digits validate-digits-range digits-range-1-60</validate>
+                </field>
+                <field id="verify_ssl" translate="label comment" type="select" sortOrder="40" showInDefault="1">
+                    <label>Verify Odoo's SSL Certificate</label>
+                    <comment>Keep Yes in production.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="retention_days" translate="label" type="text" sortOrder="50" showInDefault="1">
+                    <label>Keep Delivered Events (days)</label>
+                    <validate>validate-digits validate-digits-range digits-range-1-365</validate>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

@@ -34,6 +34,7 @@
         'data/magento_pricing_data.xml',
         'views/magento_store_p2_views.xml',
         'wizard/magento_setup_wizard_views.xml',
+        'views/magento_webhook_p3_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

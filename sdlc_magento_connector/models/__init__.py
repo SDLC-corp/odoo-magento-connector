@@ -23,3 +23,4 @@ from . import magento_order_actions
 from . import magento_pricing
 from . import magento_store
 from . import magento_product_i18n
+from . import magento_webhook

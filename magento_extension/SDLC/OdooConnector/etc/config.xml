@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Defaults: the module installs DISABLED; nothing is recorded or sent until an
+ * administrator enables it and enters the Odoo URL and shared secret.
+ *
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <sdlc_odoo_connector>
+            <general>
+                <enabled>0</enabled>
+                <secret backend_model="Magento\Config\Model\Config\Backend\Encrypted"/>
+            </general>
+            <events>
+                <orders>1</orders>
+                <invoices>1</invoices>
+                <shipments>1</shipments>
+                <creditmemos>1</creditmemos>
+                <products>1</products>
+                <customers>1</customers>
+                <stock>1</stock>
+            </events>
+            <delivery>
+                <batch_size>100</batch_size>
+                <max_attempts>10</max_attempts>
+                <timeout>10</timeout>
+                <verify_ssl>1</verify_ssl>
+                <retention_days>7</retention_days>
+            </delivery>
+        </sdlc_odoo_connector>
+    </default>
+</config>

@@ -1,6 +1,7 @@
 from . import models
 from . import services
 from . import wizard
+from . import controllers
 
 
 def pre_init_hook(env_or_cr):
