@@ -43,10 +43,27 @@ class SaleOrder(models.Model):
     )
     magento_order_id = fields.Char("Magento Order ID", readonly=True, copy=False, index=True)
     magento_sync_conflict = fields.Boolean(
-        "Magento Conflict", copy=False, readonly=True,
-        help="Set when Magento changed an order that is no longer a draft in Odoo; the lines were not overwritten.",
+        "Magento Conflict", copy=False, readonly=True, index=True,
+        compute="_compute_magento_sync_conflict", store=True,
+        help="The order has open Magento conflicts (Operations > Conflicts): Magento changed "
+             "it after Odoo processed it, or it was edited in Odoo and differs from Magento.",
     )
     magento_conflict_note = fields.Text(copy=False, readonly=True)
+    magento_conflict_ids = fields.One2many(
+        "magento.order.conflict", "order_id", string="Magento Conflicts", copy=False,
+    )
+    magento_conflict_count = fields.Integer(
+        "Open Magento Conflicts", compute="_compute_magento_conflict_count",
+    )
+    magento_status_event_ids = fields.One2many(
+        "magento.order.status.event", "order_id", string="Magento Status History", copy=False,
+    )
+    magento_import_snapshot = fields.Json(
+        "Magento Import Snapshot", copy=False, readonly=True,
+        help="The Magento order as Odoo processed it (items, addresses, customer, totals, "
+             "status, payment method, updated_at) plus the Odoo lines it produced. Re-syncs "
+             "are compared with it to detect conflicts.",
+    )
     magento_exported_from_odoo = fields.Boolean(
         "Created from Odoo",
         copy=False,
@@ -142,6 +159,29 @@ class SaleOrder(models.Model):
                 order.magento_order_id
                 or order.magento_instance_id
             )
+
+    @api.depends("magento_conflict_ids.state")
+    def _compute_magento_sync_conflict(self):
+        open_orders = set()
+        ids = [order_id for order_id in self.ids if order_id]
+        if ids:
+            groups = self.env["magento.order.conflict"].sudo()._read_group(
+                [("order_id", "in", ids), ("state", "=", "open")], ["order_id"], ["__count"],
+            )
+            open_orders = {order.id for order, count in groups if count}
+        for order in self:
+            order.magento_sync_conflict = order.id in open_orders
+
+    def _compute_magento_conflict_count(self):
+        counts = {}
+        ids = [order_id for order_id in self.ids if order_id]
+        if ids:
+            groups = self.env["magento.order.conflict"].sudo()._read_group(
+                [("order_id", "in", ids), ("state", "=", "open")], ["order_id"], ["__count"],
+            )
+            counts = {order.id: count for order, count in groups}
+        for order in self:
+            order.magento_conflict_count = counts.get(order.id, 0)
 
     @api.depends("order_line.invoice_status", "state", "magento_invoice_state")
     def _compute_invoice_status(self):
@@ -631,17 +671,19 @@ class SaleOrder(models.Model):
         the sale line <-> invoice line links survive re-syncs. Any other state: lines are
         never touched; differences are flagged with ``magento_sync_conflict``. In both cases
         the Odoo total is then compared with Magento's grand total.
+
+        Phase 3.7: every Magento status transition is recorded, and the order is compared
+        with its import snapshot (``magento_import_snapshot``, stored on the first pass):
+        quotations take Magento's changes (recorded ``resolved_auto``), confirmed orders get
+        one open ``magento.order.conflict`` per type (see ``magento_conflict.py``).
         """
         self.ensure_one()
         self._magento_register_order_mappings(data)
+        self._magento_record_status_events(data)
         items = self._magento_effective_items(data.get("items"))
         if not items:
             return
-        if self.state in ("draft", "sent"):
-            self._magento_write_order_lines(items, data=data)
-            self._magento_set_conflict([])
-        else:
-            self._magento_set_conflict(self._magento_compare_order_lines(items))
+        self._magento_conflict_run(data, items)
         self._magento_update_total_difference(data)
 
     def _magento_register_order_mappings(self, data):
@@ -891,9 +933,15 @@ class SaleOrder(models.Model):
                     if fname in vals:
                         changed.setdefault(fname, vals[fname])
                 commands.append(Command.update(line.id, changed))
+        keep_removed = self.env.context.get("magento_keep_removed_lines")
         for key, line in existing.items():
             if key not in seen:
-                commands.append(Command.unlink(line.id))
+                if keep_removed and self.state == "sale":
+                    # Confirmed lines cannot be deleted: a removed Magento item gets qty 0.
+                    if line.product_uom_qty:
+                        commands.append(Command.update(line.id, {"product_uom_qty": 0.0}))
+                else:
+                    commands.append(Command.unlink(line.id))
         if commands:
             self.with_context(sale_no_log_for_new_lines=True).write({"order_line": commands})
 
@@ -1056,15 +1104,31 @@ class SaleOrder(models.Model):
         return diffs
 
     def _magento_set_conflict(self, diffs):
+        """Keep the conflict note (and its chatter message, posted once) in line with
+        ``diffs``. ``magento_sync_conflict`` itself means "has open conflict rows"; a caller
+        passing differences that no open line conflict covers gets an ``items_changed`` row."""
         self.ensure_one()
         if not diffs:
-            if self.magento_sync_conflict or self.magento_conflict_note:
-                self.write({"magento_sync_conflict": False, "magento_conflict_note": False})
+            if self.magento_conflict_note:
+                self.write({"magento_conflict_note": False})
             return
         note = "\n".join(diffs)
-        if self.magento_sync_conflict and self.magento_conflict_note == note:
+        Conflict = self.env["magento.order.conflict"].sudo()
+        if not Conflict.search_count([
+            ("order_id", "=", self.id), ("state", "=", "open"),
+            ("conflict_type", "in", ("items_changed", "qty_changed", "price_changed", "totals_changed")),
+        ]):
+            Conflict.create({
+                "order_id": self.id,
+                "conflict_type": "items_changed",
+                "severity": "warn",
+                "summary": note[:250],
+                "diff": {"rows": [{"label": d, "before": "", "after": ""} for d in diffs]},
+                "can_accept": False,
+            })
+        if self.magento_conflict_note == note:
             return
-        self.write({"magento_sync_conflict": True, "magento_conflict_note": note})
+        self.write({"magento_conflict_note": note})
         body = Markup("%s<ul>%s</ul>") % (
             _("Magento changed this order after it left draft; the Odoo lines were not modified:"),
             Markup("").join(Markup("<li>%s</li>") % escape(d) for d in diffs),

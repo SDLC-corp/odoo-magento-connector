@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================
+         Phase 3.7: order conflicts (Operations > Conflicts)
+         ============================================================ -->
+    <record id="view_magento_order_conflict_list" model="ir.ui.view">
+        <field name="name">magento.order.conflict.list</field>
+        <field name="model">magento.order.conflict</field>
+        <field name="arch" type="xml">
+            <list string="Conflicts" create="0" edit="0" import="0"
+                  decoration-muted="state != 'open'">
+                <header>
+                    <button name="action_accept" type="object" string="Accept Magento"
+                            class="btn-primary" groups="sdlc_magento_connector.group_magento_user"/>
+                    <button name="action_keep" type="object" string="Keep Odoo"
+                            groups="sdlc_magento_connector.group_magento_user"/>
+                </header>
+                <field name="detected_at" string="Detected"/>
+                <field name="order_id" string="Order"/>
+                <field name="magento_increment_id" optional="show"/>
+                <field name="partner_id" optional="hide"/>
+                <field name="instance_id" optional="hide"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                <field name="conflict_type" string="Type"/>
+                <field name="summary"/>
+                <field name="severity" widget="badge"
+                       decoration-info="severity == 'info'"
+                       decoration-warning="severity == 'warn'"
+                       decoration-danger="severity == 'crit'"/>
+                <field name="can_accept" string="Magento Applicable" widget="boolean" optional="show"/>
+                <field name="order_state" optional="hide"/>
+                <field name="magento_updated_at" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-danger="state == 'open'"
+                       decoration-success="state in ('accepted', 'resolved_auto')"
+                       decoration-muted="state == 'kept'"/>
+                <field name="resolved_by" optional="hide"/>
+                <field name="resolved_date" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_order_conflict_search" model="ir.ui.view">
+        <field name="name">magento.order.conflict.search</field>
+        <field name="model">magento.order.conflict</field>
+        <field name="arch" type="xml">
+            <search string="Conflicts">
+                <field name="order_id"/>
+                <field name="magento_increment_id"/>
+                <field name="partner_id"/>
+                <field name="instance_id"/>
+                <filter name="open" string="Open" domain="[('state', '=', 'open')]"/>
+                <filter name="resolved" string="Resolved"
+                        domain="[('state', 'in', ('accepted', 'kept', 'resolved_auto'))]"/>
+                <filter name="auto" string="Resolved Automatically"
+                        domain="[('state', '=', 'resolved_auto')]"/>
+                <separator/>
+                <filter name="crit" string="Critical" domain="[('severity', '=', 'crit')]"/>
+                <filter name="warn" string="Warning" domain="[('severity', '=', 'warn')]"/>
+                <filter name="applicable" string="Magento Applicable" domain="[('can_accept', '=', True)]"/>
+                <separator/>
+                <filter name="type_lines" string="Lines and Totals"
+                        domain="[('conflict_type', 'in', ('items_changed', 'qty_changed', 'price_changed', 'totals_changed'))]"/>
+                <filter name="type_address" string="Address / Customer"
+                        domain="[('conflict_type', 'in', ('address_changed', 'customer_changed'))]"/>
+                <filter name="type_status" string="Status"
+                        domain="[('conflict_type', 'in', ('status_regressed', 'canceled_after_fulfilment'))]"/>
+                <filter name="type_odoo" string="Edited in Odoo"
+                        domain="[('conflict_type', '=', 'edited_in_odoo')]"/>
+                <separator/>
+                <filter name="detected_at" string="Detected" date="detected_at"/>
+                <group>
+                    <filter name="group_type" string="Type" context="{'group_by': 'conflict_type'}"/>
+                    <filter name="group_severity" string="Severity" context="{'group_by': 'severity'}"/>
+                    <filter name="group_order" string="Order" context="{'group_by': 'order_id'}"/>
+                    <filter name="group_instance" string="Instance" context="{'group_by': 'instance_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_magento_order_conflict_form" model="ir.ui.view">
+        <field name="name">magento.order.conflict.form</field>
+        <field name="model">magento.order.conflict</field>
+        <field name="arch" type="xml">
+            <form string="Conflict" create="0" edit="0">
+                <header>
+                    <button name="action_accept" type="object" string="Apply Magento changes"
+                            class="btn-primary"
+                            invisible="state != 'open' or not can_accept or conflict_type in ('address_changed', 'customer_changed', 'status_regressed', 'payment_changed')"
+                            confirm="The order is unlocked and its lines are rewritten from Magento. Continue?"/>
+                    <button name="action_accept" type="object" string="Apply new address"
+                            class="btn-primary"
+                            invisible="state != 'open' or not can_accept or conflict_type != 'address_changed'"/>
+                    <button name="action_accept" type="object" string="Use Magento customer"
+                            class="btn-primary"
+                            invisible="state != 'open' or not can_accept or conflict_type != 'customer_changed'"
+                            confirm="The Odoo order is re-assigned to the Magento customer. Continue?"/>
+                    <button name="action_accept" type="object" string="Accept Magento"
+                            class="btn-primary"
+                            invisible="state != 'open' or not can_accept or conflict_type not in ('status_regressed', 'payment_changed')"/>
+                    <button name="action_keep" type="object" string="Keep Odoo"
+                            invisible="state != 'open'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="open,accepted,kept"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_order" type="object" class="oe_stat_button"
+                                icon="fa-shopping-cart">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Sales Order</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <span class="text-uppercase small fw-semibold text-muted"
+                              style="letter-spacing: .07em;">
+                            <field name="conflict_type" readonly="1"/>
+                        </span>
+                        <h1><field name="order_id" readonly="1" options="{'no_open': True}"/></h1>
+                    </div>
+                    <div role="alert" class="alert alert-danger"
+                         invisible="state != 'open' or severity != 'crit'">
+                        <strong>Critical.</strong>
+                        <field name="guidance" nolabel="1" readonly="1" class="d-block mt-1"/>
+                    </div>
+                    <div role="status" class="alert alert-warning"
+                         invisible="state != 'open' or severity == 'crit'">
+                        <field name="guidance" nolabel="1" readonly="1" class="d-block"/>
+                    </div>
+                    <group>
+                        <group string="Order">
+                            <field name="magento_increment_id"/>
+                            <field name="partner_id"/>
+                            <field name="instance_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="order_state"/>
+                        </group>
+                        <group string="Tracking">
+                            <field name="severity" widget="badge"
+                                   decoration-info="severity == 'info'"
+                                   decoration-warning="severity == 'warn'"
+                                   decoration-danger="severity == 'crit'"/>
+                            <field name="can_accept"/>
+                            <field name="detected_at"/>
+                            <field name="magento_updated_at"/>
+                            <field name="resolved_by" invisible="state == 'open'" placeholder="Automatic"/>
+                            <field name="resolved_date" invisible="state == 'open'"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Differences" name="diff">
+                            <field name="diff_html" nolabel="1" readonly="1"
+                                   placeholder="No difference recorded."/>
+                            <field name="summary" invisible="1"/>
+                        </page>
+                        <page string="Technical" name="technical" groups="base.group_no_one">
+                            <group>
+                                <field name="magento_hash"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_order_conflict" model="ir.actions.act_window">
+        <field name="name">Conflicts</field>
+        <field name="res_model">magento.order.conflict</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_magento_order_conflict_search"/>
+        <field name="context">{'search_default_open': 1, 'search_default_group_type': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No open conflicts</p>
+            <p>An order changed in Magento after Odoo processed it (items, quantities, prices,
+               totals, address, customer, payment, a status moved backwards, a cancellation of a
+               delivered order), or edited in Odoo so that it differs from Magento, gets one row
+               per type here. Apply the Magento version or keep the Odoo one, alone or in bulk;
+               rows close themselves when both sides agree again.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_magento_order_conflicts" name="Conflicts" parent="menu_magento_sales"
+              action="action_magento_order_conflict" sequence="15"/>
+
+    <!-- Status history -->
+    <record id="view_magento_order_status_event_list" model="ir.ui.view">
+        <field name="name">magento.order.status.event.list</field>
+        <field name="model">magento.order.status.event</field>
+        <field name="arch" type="xml">
+            <list string="Magento Status History" create="0" edit="0" delete="0"
+                  decoration-danger="is_regression" decoration-muted="not is_transition">
+                <field name="sequence" string="#"/>
+                <field name="event_date"/>
+                <field name="from_status"/>
+                <field name="to_status"/>
+                <field name="magento_state" optional="hide"/>
+                <field name="source" widget="badge"/>
+                <field name="is_regression" widget="boolean" optional="show"/>
+                <field name="is_transition" column_invisible="1"/>
+                <field name="comment" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Sales order: smart button, status history tab, conflict banner -->
+    <record id="sale_order_form_magento_conflicts" model="ir.ui.view">
+        <field name="name">sale.order.form.magento.conflicts</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sdlc_magento_connector.sale_order_form_magento"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_magento_conflicts" type="object" class="oe_stat_button"
+                        icon="fa-exchange" invisible="not is_magento_order"
+                        groups="sdlc_magento_connector.group_magento_user">
+                    <field name="magento_conflict_count" widget="statinfo" string="Conflicts"/>
+                </button>
+            </xpath>
+            <xpath expr="//div[field[@name='magento_conflict_note']]" position="replace">
+                <div class="alert alert-danger" role="alert" invisible="not magento_sync_conflict">
+                    <strong>Magento conflict.</strong>
+                    This order and its Magento order differ; nothing was overwritten in Odoo.
+                    <button name="action_view_magento_conflicts" type="object" class="btn btn-link p-0 align-baseline"
+                            string="Review the conflicts" groups="sdlc_magento_connector.group_magento_user"/>
+                    <field name="magento_conflict_note" nolabel="1" readonly="1" class="d-block mt-1"
+                           invisible="not magento_conflict_note"/>
+                </div>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Magento Status History" name="magento_status_history"
+                      invisible="not is_magento_order"
+                      groups="sdlc_magento_connector.group_magento_user">
+                    <field name="magento_status_event_ids" readonly="1">
+                        <list string="Magento Status History" create="0" edit="0" delete="0"
+                              decoration-danger="is_regression" decoration-muted="not is_transition">
+                            <field name="sequence" string="#"/>
+                            <field name="event_date"/>
+                            <field name="from_status"/>
+                            <field name="to_status"/>
+                            <field name="magento_state" optional="hide"/>
+                            <field name="source" widget="badge"/>
+                            <field name="is_regression" widget="boolean" optional="show"/>
+                            <field name="is_transition" column_invisible="1"/>
+                            <field name="comment" optional="show"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
