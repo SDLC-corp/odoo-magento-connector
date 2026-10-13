@@ -26,3 +26,4 @@ from . import magento_product_i18n
 from . import magento_conflict
 from . import magento_totals_explainer
 from . import magento_returns
+from . import magento_webhook

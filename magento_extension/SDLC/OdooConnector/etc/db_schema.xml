@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Outbox of change notifications waiting to be pushed to Odoo. Ids only, never customer data.
+ *
+ * @copyright SDLC Corp
+ * @license   MIT
+ */
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="sdlc_odoo_event_outbox" resource="default" engine="innodb" comment="SDLC Odoo Connector Event Outbox">
+        <column xsi:type="bigint" name="outbox_id" unsigned="true" nullable="false" identity="true" comment="Outbox Row ID"/>
+        <column xsi:type="varchar" name="event_uuid" nullable="false" length="36" comment="Event ID sent to Odoo"/>
+        <column xsi:type="varchar" name="entity_type" nullable="false" length="32" comment="order, invoice, shipment, creditmemo, product, customer, stock"/>
+        <column xsi:type="varchar" name="entity_id" nullable="true" length="64" comment="Magento Entity ID"/>
+        <column xsi:type="varchar" name="entity_ref" nullable="true" length="128" comment="SKU or Order Increment ID"/>
+        <column xsi:type="varchar" name="order_id" nullable="true" length="32" comment="Parent Order ID (order documents)"/>
+        <column xsi:type="varchar" name="return_to_stock_items" nullable="true" length="255" comment="Credit memos: order item ids returned to stock"/>
+        <column xsi:type="varchar" name="event_type" nullable="false" length="32" comment="created, updated, status_changed, deleted"/>
+        <column xsi:type="varchar" name="dedupe_key" nullable="true" length="255" comment="Set while pending: coalesces repeated saves"/>
+        <column xsi:type="varchar" name="status" nullable="false" length="16" default="pending" comment="pending, processing, retry, sent, failed"/>
+        <column xsi:type="smallint" name="attempts" unsigned="true" nullable="false" default="0" comment="Delivery Attempts"/>
+        <column xsi:type="datetime" name="next_attempt_at" nullable="true" comment="Next Attempt (UTC)"/>
+        <column xsi:type="smallint" name="last_http_status" unsigned="true" nullable="true" comment="Last HTTP Status"/>
+        <column xsi:type="varchar" name="last_error" nullable="true" length="255" comment="Last Delivery Error"/>
+        <column xsi:type="varchar" name="claim_token" nullable="true" length="32" comment="Batch being delivered"/>
+        <column xsi:type="datetime" name="created_at" nullable="false" comment="Created (UTC)"/>
+        <column xsi:type="datetime" name="updated_at" nullable="false" comment="Updated (UTC)"/>
+        <column xsi:type="datetime" name="sent_at" nullable="true" comment="Delivered (UTC)"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="outbox_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="SDLC_ODOO_EVENT_OUTBOX_DEDUPE_KEY">
+            <column name="dedupe_key"/>
+        </constraint>
+        <index referenceId="SDLC_ODOO_EVENT_OUTBOX_STATUS_NEXT_ATTEMPT_AT" indexType="btree">
+            <column name="status"/>
+            <column name="next_attempt_at"/>
+        </index>
+        <index referenceId="SDLC_ODOO_EVENT_OUTBOX_CLAIM_TOKEN" indexType="btree">
+            <column name="claim_token"/>
+        </index>
+        <index referenceId="SDLC_ODOO_EVENT_OUTBOX_CREATED_AT" indexType="btree">
+            <column name="created_at"/>
+        </index>
+    </table>
+</schema>
