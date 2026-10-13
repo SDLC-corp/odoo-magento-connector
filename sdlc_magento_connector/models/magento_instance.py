@@ -62,6 +62,55 @@ _PAGED_SYNC_ENTITIES = {
 # job stays well under ``limit_time_real_cron`` (120 s by default) even on a slow Magento.
 _SYNC_PAGE_TIME_BUDGET = 60
 
+# Data Ownership (roadmap 3.8): system of record per entity. ``two_way`` (default) is the
+# behaviour before 3.8. Import paths check ``_magento_import_block_reason``, push paths
+# ``_magento_export_block_reason`` (see magento_dryrun.py for the push-side overrides).
+OWNERSHIP_ENTITIES = (
+    ("product", "Products"),
+    ("category", "Categories"),
+    ("customer", "Customers"),
+    ("order", "Orders"),
+    ("stock", "Stock"),
+    ("price", "Prices"),
+)
+OWNERSHIP_DIRECTIONS = [
+    ("two_way", "Two-way"),
+    ("magento_to_odoo", "Magento → Odoo"),
+    ("odoo_to_magento", "Odoo → Magento"),
+    ("off", "Off"),
+]
+OWNERSHIP_UPDATE_MODES = [
+    ("create_update", "Create and update"),
+    ("create_only", "Create only"),
+]
+# Plain-ASCII wording of the directions for skip reasons (they are logged too).
+_OWNERSHIP_DIRECTION_TEXT = {
+    "two_way": "two-way",
+    "magento_to_odoo": "Magento -> Odoo",
+    "odoo_to_magento": "Odoo -> Magento",
+    "off": "off",
+}
+_INBOUND_DIRECTIONS = frozenset({"two_way", "magento_to_odoo"})
+_OUTBOUND_DIRECTIONS = frozenset({"two_way", "odoo_to_magento"})
+
+
+def _ownership_direction_field(entity, label):
+    return fields.Selection(
+        OWNERSHIP_DIRECTIONS, string="%s Direction" % label, default="two_way", required=True,
+        help="Which side may write %s: Two-way (both), Magento → Odoo (imports only, Odoo "
+             "edits are not pushed), Odoo → Magento (pushes only, imports skip them) or Off "
+             "(neither)." % label.lower(),
+    )
+
+
+def _ownership_update_field(entity, label):
+    return fields.Selection(
+        OWNERSHIP_UPDATE_MODES, string="%s Existing Records" % label, default="create_update",
+        required=True,
+        help="Create only: a sync creates missing %s but never overwrites one that already "
+             "exists on the receiving side (skipped and reported)." % label.lower(),
+    )
+
 
 def _short_reason(exc, limit=300):
     """One-line failure reason for logs/reports; never dumps payloads."""
@@ -456,6 +505,20 @@ class MagentoInstance(models.Model):
         help="Products imported per job by a queued product sync (1-300). Each product also "
              "fetches its details and image, so keep a page well under the cron time limit.",
     )
+
+    # ---- Data Ownership (roadmap 3.8): direction + "can update existing" per entity ----
+    ownership_product_direction = _ownership_direction_field("product", "Products")
+    ownership_product_update = _ownership_update_field("product", "Products")
+    ownership_category_direction = _ownership_direction_field("category", "Categories")
+    ownership_category_update = _ownership_update_field("category", "Categories")
+    ownership_customer_direction = _ownership_direction_field("customer", "Customers")
+    ownership_customer_update = _ownership_update_field("customer", "Customers")
+    ownership_order_direction = _ownership_direction_field("order", "Orders")
+    ownership_order_update = _ownership_update_field("order", "Orders")
+    ownership_stock_direction = _ownership_direction_field("stock", "Stock")
+    ownership_stock_update = _ownership_update_field("stock", "Stock")
+    ownership_price_direction = _ownership_direction_field("price", "Prices")
+    ownership_price_update = _ownership_update_field("price", "Prices")
 
     # ---- Shared contract fields (Phase 0); consumed by views, dashboard and record rules ----
     company_id = fields.Many2one(
@@ -1336,6 +1399,12 @@ class MagentoInstance(models.Model):
         to_dt = fields.Datetime.to_datetime
         stats = _SyncStats(kind)
         stats.merge(run.get("stats"))
+        if self._magento_skip_blocked_import(stats, kind):
+            # Data Ownership: nothing fetched, watermark untouched, the run ends here.
+            self._magento_save_run_report(
+                report_type, run, stats.as_dict(), True, source_action=source_action, mode=mode,
+            )
+            return "%s sync skipped: %s" % (label, stats.skip_messages[-1])
         tracker = _WatermarkTracker.from_state(to_dt(run.get("before")), run.get("tracker"))
         start_cursor = self._magento_parse_cursor(run.get("cursor"))
         cursor = start_cursor
@@ -1396,6 +1465,55 @@ class MagentoInstance(models.Model):
         })
         job = self._magento_enqueue_sync_page(entity, run, source_action=source_action, mode=mode)
         return "%s so far; page %s done, next page in job %s" % (summary, run["page"] - 1, job.id)
+
+    # =====================
+    # DATA OWNERSHIP (roadmap 3.8)
+    # =====================
+    def _magento_ownership(self, entity):
+        """``(direction, update mode)`` of ``entity`` (a key of ``OWNERSHIP_ENTITIES``)."""
+        self.ensure_one()
+        direction = self["ownership_%s_direction" % entity] or "two_way"
+        update = self["ownership_%s_update" % entity] or "create_update"
+        return direction, update
+
+    def _magento_ownership_block_reason(self, entity, inbound, existing=None):
+        """Why Data Ownership forbids this sync step, or None when it is allowed.
+
+        ``inbound``: Magento -> Odoo (else Odoo -> Magento). ``existing``: the step
+        would overwrite a record that already exists on the receiving side (None:
+        check the direction only).
+        """
+        if not self:
+            return None
+        self.ensure_one()
+        direction, update = self._magento_ownership(entity)
+        label = dict(OWNERSHIP_ENTITIES).get(entity, entity).lower()
+        verb = "is" if entity == "stock" else "are"
+        if direction not in (_INBOUND_DIRECTIONS if inbound else _OUTBOUND_DIRECTIONS):
+            return "Data Ownership: %s %s %s, %s is off" % (
+                label, verb, _OWNERSHIP_DIRECTION_TEXT.get(direction, direction),
+                "import from Magento" if inbound else "push to Magento",
+            )
+        if existing and update == "create_only":
+            return "Data Ownership: %s %s create-only, the existing %s record is not updated" % (
+                label, verb, "Odoo" if inbound else "Magento",
+            )
+        return None
+
+    def _magento_import_block_reason(self, entity, existing=None):
+        return self._magento_ownership_block_reason(entity, True, existing=existing)
+
+    def _magento_export_block_reason(self, entity, existing=None):
+        return self._magento_ownership_block_reason(entity, False, existing=existing)
+
+    def _magento_skip_blocked_import(self, stats, kind):
+        """Entity-level import guard of the list syncs: counts one skip with the reason
+        and returns True when Data Ownership turns this import off."""
+        self.ensure_one()
+        reason = self._magento_import_block_reason(kind)
+        if reason:
+            stats.skip(kind, "(all)", reason, instance=self)
+        return bool(reason)
 
     # =====================
     # SYNC BOOKKEEPING
@@ -1752,6 +1870,8 @@ class MagentoInstance(models.Model):
         stats = _SyncStats("category")
         cat_model = self.env["magento.category"].with_context(skip_magento_sync=True)
         for instance in self:
+            if instance._magento_skip_blocked_import(stats, "category"):
+                continue
             api = MagentoAPI(instance)
             tree = instance._fetch_list(stats, "category", api.get_categories)
             if tree is None:
@@ -1779,6 +1899,9 @@ class MagentoInstance(models.Model):
             ("instance_id", "=", self.id),
             ("magento_id", "=", str(item["id"])),
         ], limit=1)
+        blocked = self._magento_import_block_reason("category", existing=bool(cat))
+        if blocked:
+            return ("skipped", blocked)
         parent = cat_model.browse()
         if item.get("parent_id"):
             parent = cat_model.search([
@@ -1877,6 +2000,8 @@ class MagentoInstance(models.Model):
         stats = _SyncStats("product")
         supported_types = self._supported_product_types()
         for instance in self:
+            if instance._magento_skip_blocked_import(stats, "product"):
+                continue
             api = MagentoAPI(instance)
             tracker, updated_from = instance._incremental_start("product")
             fetch_stats = {}
@@ -1919,15 +2044,15 @@ class MagentoInstance(models.Model):
         type_id = p.get("type_id")
         if type_id and type_id not in supported_types:
             return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
+        blocked = self._magento_import_block_reason("product")
+        if blocked:
+            return ("skipped", blocked)
 
         if product_data is None:
             product_data = api.get_product(sku) or {}
         type_id = product_data.get("type_id") or type_id
         if type_id and type_id not in supported_types:
             return ("skipped", f"unsupported product type '{type_id}' (sku {sku})")
-        if type_id == "configurable":
-            # One template, a variant per child SKU (magento_product_variant.py).
-            return self._magento_import_configurable(api, p, product_data, stats, box=box)
 
         # active_test=False everywhere: a product disabled in Magento is archived in
         # Odoo and must be found again on the next sync, not duplicated.
@@ -1947,9 +2072,24 @@ class MagentoInstance(models.Model):
                 ("sku", "=", sku),
             ], limit=1)
 
+        if type_id == "configurable":
+            blocked = self._magento_import_block_reason("product", existing=bool(mapping))
+            if blocked:
+                return ("skipped", blocked)
+            # One template, a variant per child SKU (magento_product_variant.py).
+            # ``magento_import_new`` tells the stock/price ownership guards (create-only)
+            # whether this import creates the product.
+            return self.with_context(magento_import_new=not mapping)._magento_import_configurable(
+                api, p, product_data, stats, box=box,
+            )
+
         product = mapping.odoo_product_id
         if not product:
             product = product_model.search([("default_code", "=", sku)], limit=1)
+        blocked = self._magento_import_block_reason("product", existing=bool(mapping or product))
+        if blocked:
+            return ("skipped", blocked)
+        is_new = not (mapping or product)
         if not product:
             product = product_model.create({
                 "name": p.get("name") or product_data.get("name") or sku,
@@ -1974,7 +2114,7 @@ class MagentoInstance(models.Model):
         else:
             outcome = "updated"
 
-        values = mapping._apply_magento_data(product_data)
+        values = mapping.with_context(magento_import_new=is_new)._apply_magento_data(product_data)
         values["odoo_product_id"] = product.id
         media_entries = product_data.get("media_gallery_entries") or []
         entry_id = media_entries[0].get("id") if media_entries else None
@@ -2013,6 +2153,8 @@ class MagentoInstance(models.Model):
     def sync_orders(self):
         stats = _SyncStats("order")
         for instance in self:
+            if instance._magento_skip_blocked_import(stats, "order"):
+                continue
             api = MagentoAPI(instance)
             tracker, updated_from = instance._incremental_start("order")
             fetch_stats = {}
@@ -2072,6 +2214,9 @@ class MagentoInstance(models.Model):
         # used in the caller's environment, so writing it still respects access rights.
         found = order_model.sudo()._magento_find_order(self, magento_id)
         order = order_model.browse(found.ids)
+        blocked = self._magento_import_block_reason("order", existing=bool(order))
+        if blocked:
+            return ("skipped", blocked)
 
         values = order_model._magento_prepare_order_vals(data, self, order=order)
         if values.get("magento_invoice_state") == "not_invoiced":
@@ -2158,6 +2303,8 @@ class MagentoInstance(models.Model):
             skip_magento_sync=True, active_test=False
         )
         for instance in self:
+            if instance._magento_skip_blocked_import(stats, "customer"):
+                continue
             api = MagentoAPI(instance)
             tracker, updated_from = instance._incremental_start("customer")
             fetch_stats = {}
@@ -2204,6 +2351,9 @@ class MagentoInstance(models.Model):
                 ("instance_id", "=", self.id),
                 ("email", "=", email),
             ], limit=1)
+        blocked = self._magento_import_block_reason("customer", existing=bool(customer))
+        if blocked:
+            return ("skipped", blocked)
         values = customer_model._extract_magento_values(data, self.id)
         outcome = "updated"
         if customer:

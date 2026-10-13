@@ -88,3 +88,7 @@ access_magento_shared_catalog_user,magento.shared.catalog user,model_magento_sha
 access_magento_shared_catalog_manager,magento.shared.catalog manager,model_magento_shared_catalog,group_magento_manager,1,1,1,1
 access_magento_b2b_quote_wizard_user,magento.b2b.quote.wizard user,model_magento_b2b_quote_wizard,group_magento_user,1,1,1,0
 access_magento_b2b_quote_wizard_manager,magento.b2b.quote.wizard manager,model_magento_b2b_quote_wizard,group_magento_manager,1,1,1,1
+access_magento_dryrun_user,magento.dryrun user,model_magento_dryrun,group_magento_user,1,0,0,0
+access_magento_dryrun_manager,magento.dryrun manager,model_magento_dryrun,group_magento_manager,1,1,1,1
+access_magento_dryrun_line_user,magento.dryrun.line user,model_magento_dryrun_line,group_magento_user,1,0,0,0
+access_magento_dryrun_line_manager,magento.dryrun.line manager,model_magento_dryrun_line,group_magento_manager,1,1,1,1

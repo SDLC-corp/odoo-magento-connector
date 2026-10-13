@@ -1,3 +1,4 @@
+import contextvars
 import http.client
 import json
 import logging
@@ -5,6 +6,7 @@ import os
 import re
 import socket
 import time
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
@@ -64,6 +66,18 @@ class MagentoCapabilityError(UserError):
     def __init__(self, message, capability=None):
         super().__init__(message)
         self.capability = capability
+
+
+# Dry-run guard (roadmap 3.8). A preview may read Magento but must never write to it:
+# while this is set (``magento.dryrun`` sets it around a preview), or while the
+# instance's context carries ``magento_dry_run``, every non-read request raises
+# ``MagentoDryRunWriteBlocked`` before anything is sent.
+DRY_RUN = contextvars.ContextVar("sdlc_magento_dry_run", default=False)
+_READ_METHODS = frozenset({"get", "head", "options"})
+
+
+class MagentoDryRunWriteBlocked(requests.exceptions.RequestException):
+    """A write to Magento was attempted during a dry-run preview; nothing was sent."""
 
 
 class MagentoAPI:
@@ -368,6 +382,13 @@ class MagentoAPI:
             pending.extend(arg for arg in getattr(err, "args", ()) if isinstance(arg, BaseException))
         return False
 
+    def _dry_run_active(self):
+        """True during a dry-run preview: writes to Magento are forbidden."""
+        if DRY_RUN.get():
+            return True
+        context = getattr(getattr(self.instance, "env", None), "context", None)
+        return isinstance(context, Mapping) and bool(context.get("magento_dry_run"))
+
     def _sleep(self, seconds):
         if seconds > 0:
             time.sleep(seconds)
@@ -400,6 +421,10 @@ class MagentoAPI:
     def _send_request(self, method, endpoint, *, params=None, payload=None, extra_headers=None):
         """One final path of ``_request``: fallback hosts, retries and backoff."""
         method = (method or "get").lower()
+        if method not in _READ_METHODS and self._dry_run_active():
+            raise MagentoDryRunWriteBlocked(
+                "Dry-run preview: %s %s was blocked; nothing is written to Magento." % (method.upper(), endpoint)
+            )
         idempotent = method in self.IDEMPOTENT_METHODS
         retry_statuses = self.RETRY_STATUSES if idempotent else self.RETRY_STATUSES_UNSAFE_METHODS
         endpoint, params = self._auth_prepare_query(endpoint, params)
