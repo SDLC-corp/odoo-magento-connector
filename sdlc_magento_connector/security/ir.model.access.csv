@@ -76,3 +76,7 @@ access_magento_totals_explanation_user,magento.totals.explanation user,model_mag
 access_magento_totals_explanation_manager,magento.totals.explanation manager,model_magento_totals_explanation,group_magento_manager,1,1,1,1
 access_magento_totals_explanation_line_user,magento.totals.explanation.line user,model_magento_totals_explanation_line,group_magento_user,1,1,1,1
 access_magento_totals_explanation_line_manager,magento.totals.explanation.line manager,model_magento_totals_explanation_line,group_magento_manager,1,1,1,1
+access_magento_return_reason_user,magento.return.reason user,model_magento_return_reason,base.group_user,1,0,0,0
+access_magento_return_reason_manager,magento.return.reason manager,model_magento_return_reason,group_magento_manager,1,1,1,1
+access_magento_return_location_rule_user,magento.return.location.rule user,model_magento_return_location_rule,group_magento_user,1,0,0,0
+access_magento_return_location_rule_manager,magento.return.location.rule manager,model_magento_return_location_rule,group_magento_manager,1,1,1,1

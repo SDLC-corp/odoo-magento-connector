@@ -26,3 +26,4 @@ from . import test_p2_fixes
 from . import test_p2_wizard
 from . import test_p3_conflicts
 from . import test_p3_totals
+from . import test_p3_returns
