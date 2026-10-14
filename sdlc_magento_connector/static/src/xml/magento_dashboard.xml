@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-<t t-name="sdlc_magento_connector.MagentoConsole">
+<t t-name="sdlc_magento_connector.MagentoConsole" owl="1">
   <div class="mg-console">
 
     <!-- 1. Masthead -->

@@ -2,6 +2,7 @@
 
 import { loadJS } from "@web/core/assets";
 import { _t } from "@web/core/l10n/translation";
+import { sprintf } from "@web/core/utils/strings";  // Odoo 16: _t() takes no arguments
 import { deserializeDateTime, formatDateTime } from "@web/core/l10n/dates";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
@@ -176,7 +177,7 @@ export class MagentoConsole extends Component {
     }
 
     get periodLabel() {
-        return _t("Last %s days", this.state.days);
+        return sprintf(_t("Last %s days"), this.state.days);
     }
 
     isSelected(instanceId) {
@@ -196,22 +197,22 @@ export class MagentoConsole extends Component {
             return _t("Never synced");
         }
         const dt = deserializeDateTime(inst.last_sync_at);
-        return _t("Synced %s", dt.toRelative() || formatDateTime(dt));
+        return sprintf(_t("Synced %s"), dt.toRelative() || formatDateTime(dt));
     }
 
     issuesLabel(inst) {
         const n = Number(inst.open_issues) || 0;
-        return n === 1 ? _t("1 open issue") : _t("%s open issues", this.count(n));
+        return n === 1 ? _t("1 open issue") : sprintf(_t("%s open issues"), this.count(n));
     }
 
     /** Full split for the row tooltip. */
     entityDetail(row) {
         const parts = [];
         if (row.permanent) {
-            parts.push(_t("%s permanent", this.count(row.permanent)));
+            parts.push(sprintf(_t("%s permanent"), this.count(row.permanent)));
         }
         if (row.transient) {
-            parts.push(_t("%s transient", this.count(row.transient)));
+            parts.push(sprintf(_t("%s transient"), this.count(row.transient)));
         }
         return parts.join(" · ");
     }
@@ -219,7 +220,7 @@ export class MagentoConsole extends Component {
     /** Short tag beside the entity name: the severity mix at a glance. */
     entityTag(row) {
         if (row.permanent && row.transient) {
-            return _t("%s perm.", this.count(row.permanent));
+            return sprintf(_t("%s perm."), this.count(row.permanent));
         }
         return row.permanent ? _t("permanent") : _t("transient");
     }
@@ -231,13 +232,13 @@ export class MagentoConsole extends Component {
             return _t("No digest sent yet");
         }
         const dt = deserializeDateTime(digest.sent_at);
-        return _t("Digest sent %s", dt.toRelative() || formatDateTime(dt));
+        return sprintf(_t("Digest sent %s"), dt.toRelative() || formatDateTime(dt));
     }
 
     get lastDigestTitle() {
         const digest = this.data?.last_digest;
         return digest
-            ? _t("%(instance)s, %(when)s", {
+            ? sprintf(_t("%(instance)s, %(when)s"), {
                   instance: digest.instance,
                   when: formatDateTime(deserializeDateTime(digest.sent_at)),
               })
@@ -252,7 +253,7 @@ export class MagentoConsole extends Component {
 
     get marginLabel() {
         const margin = this.data?.net_profit?.margin;
-        return margin === false || margin === undefined ? "" : _t("%s margin", `${margin}%`);
+        return margin === false || margin === undefined ? "" : sprintf(_t("%s margin"), `${margin}%`);
     }
 
     lastSyncTitle(inst) {
@@ -316,7 +317,10 @@ export class MagentoConsole extends Component {
         );
 
         // eslint-disable-next-line no-undef
+        // Odoo 16 ships Chart.js 2.9: axes are xAxes/yAxes lists, fonts and colours are
+        // per-option (fontColor, fontSize), tooltip callbacks get (item, data).
         this.trendChart = new Chart(canvas, {
+            type: "bar",
             data: {
                 labels,
                 datasets: [
@@ -341,7 +345,6 @@ export class MagentoConsole extends Component {
                         yAxisID: "orders",
                         backgroundColor: bars + "59",
                         hoverBackgroundColor: bars,
-                        borderRadius: 3,
                         maxBarThickness: 18,
                         order: 2,
                     },
@@ -353,45 +356,51 @@ export class MagentoConsole extends Component {
                 animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches
                     ? false
                     : { duration: 300 },
-                interaction: { mode: "index", intersect: false },
-                font: { family: font },
-                plugins: {
-                    legend: {
-                        position: "top",
-                        align: "end",
-                        labels: { color: inkDim, boxWidth: 10, boxHeight: 10, font: { size: 11 } },
-                    },
-                    tooltip: {
-                        backgroundColor: panel,
-                        borderColor: line,
-                        borderWidth: 1,
-                        titleColor: ink,
-                        bodyColor: inkDim,
-                        callbacks: {
-                            label: (ctx) =>
-                                ctx.dataset.yAxisID === "revenue"
-                                    ? `${ctx.dataset.label}: ${this.money(ctx.parsed.y, true)}`
-                                    : `${ctx.dataset.label}: ${this.count(ctx.parsed.y)}`,
+                hover: { mode: "index", intersect: false },
+                legend: {
+                    position: "top",
+                    align: "end",
+                    labels: { fontColor: inkDim, fontFamily: font, fontSize: 11, boxWidth: 10 },
+                },
+                tooltips: {
+                    mode: "index",
+                    intersect: false,
+                    backgroundColor: panel,
+                    borderColor: line,
+                    borderWidth: 1,
+                    titleFontColor: ink,
+                    bodyFontColor: inkDim,
+                    callbacks: {
+                        label: (item, chartData) => {
+                            const dataset = chartData.datasets[item.datasetIndex];
+                            return dataset.yAxisID === "revenue"
+                                ? `${dataset.label}: ${this.money(item.yLabel, true)}`
+                                : `${dataset.label}: ${this.count(item.yLabel)}`;
                         },
                     },
                 },
                 scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: inkDim, font: { size: 10 }, maxTicksLimit: 10 },
-                    },
-                    revenue: {
-                        position: "left",
-                        beginAtZero: true,
-                        grid: { color: line },
-                        ticks: { color: inkDim, font: { size: 10 }, callback: (v) => this.money(v) },
-                    },
-                    orders: {
-                        position: "right",
-                        beginAtZero: true,
-                        grid: { display: false },
-                        ticks: { color: inkDim, font: { size: 10 }, precision: 0 },
-                    },
+                    xAxes: [{
+                        gridLines: { display: false },
+                        ticks: { fontColor: inkDim, fontFamily: font, fontSize: 10, maxTicksLimit: 10 },
+                    }],
+                    yAxes: [
+                        {
+                            id: "revenue",
+                            position: "left",
+                            gridLines: { color: line },
+                            ticks: {
+                                beginAtZero: true, fontColor: inkDim, fontFamily: font, fontSize: 10,
+                                callback: (v) => this.money(v),
+                            },
+                        },
+                        {
+                            id: "orders",
+                            position: "right",
+                            gridLines: { display: false },
+                            ticks: { beginAtZero: true, fontColor: inkDim, fontFamily: font, fontSize: 10, precision: 0 },
+                        },
+                    ],
                 },
             },
         });
