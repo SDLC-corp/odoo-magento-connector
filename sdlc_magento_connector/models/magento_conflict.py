@@ -44,6 +44,7 @@ from markupsafe import Markup, escape
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ class MagentoOrderConflict(models.Model):
                                   help="Empty on a resolved conflict: resolved automatically.")
     resolved_date = fields.Datetime(readonly=True)
 
-    _open_type_uniq = models.UniqueIndex(
+    _open_type_uniq = UniqueIndex(
         "(order_id, conflict_type) WHERE state = 'open'",
         "This order already has an open conflict of this type.",
     )
@@ -344,7 +345,7 @@ class MagentoOrderStatusEvent(models.Model):
     comment = fields.Text(readonly=True)
     magento_history_id = fields.Char(readonly=True, index="btree_not_null")
 
-    _history_uniq = models.UniqueIndex(
+    _history_uniq = UniqueIndex(
         "(order_id, magento_history_id) WHERE magento_history_id IS NOT NULL",
         "This Magento status history entry is already recorded.",
     )

@@ -7,6 +7,7 @@ from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
 from ..services.magento_api import MagentoAPI
+from .sql_compat import Constraint
 
 
 _logger = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ class StockPicking(models.Model):
         help="MSI source the Magento shipment was deducted from.",
     )
 
-    _magento_shipment_uniq = models.Constraint(
+    _magento_shipment_uniq = Constraint(
         "unique(magento_instance_id, magento_shipment_id)",
         "This Magento shipment is already linked to another transfer of the same instance.",
     )
@@ -202,9 +203,9 @@ class StockPicking(models.Model):
                 qty = float(move.product_uom_qty or 0.0)
             if qty <= 0:
                 continue
-            if move.product_uom and sale_line.product_uom_id and move.product_uom != sale_line.product_uom_id:
+            if move.product_uom and sale_line.product_uom and move.product_uom != sale_line.product_uom:
                 qty = move.product_uom._compute_quantity(
-                    qty, sale_line.product_uom_id, rounding_method="HALF-UP"
+                    qty, sale_line.product_uom, rounding_method="HALF-UP"
                 )
             # Configurable children are shipped through their parent item in Magento.
             key = str(sale_line._magento_push_item_id())

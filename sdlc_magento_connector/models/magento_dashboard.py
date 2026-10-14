@@ -115,8 +115,8 @@ class MagentoDashboard(models.AbstractModel):
             action = self.env["ir.actions.actions"]._for_xml_id(xml_id)
         except (AccessError, ValueError):
             return False
-        group_ids = set(action.get("group_ids") or [])
-        if group_ids and not group_ids & set(self.env.user.all_group_ids.ids):
+        groups = action.get("groups_id") or []
+        if groups and not any(self.env.user.has_group(xml_id) for xml_id in groups):
             return False
         model_name = action.get("res_model") or (
             action.get("model_name") if action.get("type") == "ir.actions.server" else None
@@ -372,16 +372,18 @@ class MagentoDashboard(models.AbstractModel):
                 ("magento_product_id.magento_category_ids", "!=", False),
                 ("display_type", "=", False),
             ],
-            ["magento_product_id.magento_category_ids", "currency_id", "order_id.date_order:day"],
+            # Odoo 18 cannot group by a related path: group by product map and order,
+            # then spread each row over the map's categories (as a many2many group-by).
+            ["magento_product_id", "currency_id", "order_id"],
             ["price_subtotal:sum", "product_uom_qty:sum"],
         )
         totals = {}
-        for category, cur, day, amount, qty in rows:
-            if not category:
-                continue
-            entry = totals.setdefault(category, {"revenue": 0.0, "units": 0.0})
-            entry["revenue"] += (amount or 0.0) * rate(cur, self._as_date(day))
-            entry["units"] += qty or 0.0
+        for mproduct, cur, order, amount, qty in rows:
+            day = self._as_date(order.date_order)
+            for category in mproduct.magento_category_ids:
+                entry = totals.setdefault(category, {"revenue": 0.0, "units": 0.0})
+                entry["revenue"] += (amount or 0.0) * rate(cur, day)
+                entry["units"] += qty or 0.0
         ranked = sorted(totals.items(), key=lambda kv: kv[1]["revenue"], reverse=True)[:TOP_LIMIT]
         return [
             {
@@ -402,11 +404,12 @@ class MagentoDashboard(models.AbstractModel):
     def _by_country(self, live_period_orders, rate):
         rows = self.env["sale.order"]._read_group(
             live_period_orders,
-            ["partner_shipping_id.country_id", "currency_id", "date_order:day"],
+            ["partner_shipping_id", "currency_id", "date_order:day"],
             ["amount_total:sum", "__count"],
         )
         totals = {}
-        for country, cur, day, amount, count in rows:
+        for partner, cur, day, amount, count in rows:
+            country = partner.country_id
             entry = totals.setdefault(country, {"revenue": 0.0, "orders": 0})
             entry["revenue"] += (amount or 0.0) * rate(cur, self._as_date(day))
             entry["orders"] += count

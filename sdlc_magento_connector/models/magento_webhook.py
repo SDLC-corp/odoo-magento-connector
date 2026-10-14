@@ -39,6 +39,7 @@ from odoo.exceptions import AccessError, UserError
 from odoo.tools import mute_logger
 
 from ..services.magento_api import MagentoAPI, quote
+from .sql_compat import Constraint, UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -187,7 +188,7 @@ class MagentoWebhookEvent(models.Model):
         help="Credit memos: Magento order item ids returned to stock (comma separated). Magento "
              "does not keep this flag on the stored credit memo; the credit memo import uses it.")
 
-    _event_uid_uniq = models.Constraint(
+    _event_uid_uniq = Constraint(
         "UNIQUE(instance_id, event_uid)",
         "This Magento event was already received.",
     )
@@ -263,7 +264,7 @@ class MagentoInstance(models.Model):
     webhook_recent_event_ids = fields.Many2many(
         "magento.webhook.event", string="Latest Events", compute="_compute_webhook_recent_events")
 
-    _webhook_uuid_uniq = models.UniqueIndex(
+    _webhook_uuid_uniq = UniqueIndex(
         "(webhook_uuid) WHERE webhook_uuid IS NOT NULL",
         "Two Magento instances cannot share a webhook key.",
     )

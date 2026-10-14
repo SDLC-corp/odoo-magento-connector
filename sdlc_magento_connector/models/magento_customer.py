@@ -7,6 +7,7 @@ from odoo.exceptions import UserError, ValidationError
 
 from ..services.magento_api import MagentoAPI
 from .magento_product import magento_push_skipped, schedule_magento_push
+from .sql_compat import Constraint, UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class MagentoCustomer(models.Model):
     _magento_push_entity = "customer"
     _description = "Magento Customer"
 
-    _uniq_instance_magento_id = models.UniqueIndex(
+    _uniq_instance_magento_id = UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
         "This Magento customer already exists for this instance.",
     )
@@ -869,7 +870,7 @@ class MagentoCustomerGroup(models.Model):
     _description = "Magento Customer Group"
     _order = "instance_id, magento_group_id"
 
-    _uniq_instance_group = models.Constraint(
+    _uniq_instance_group = Constraint(
         "unique(instance_id, magento_group_id)",
         "This Magento customer group already exists for this instance.",
     )

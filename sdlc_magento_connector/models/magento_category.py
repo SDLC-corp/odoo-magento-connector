@@ -4,6 +4,7 @@ from odoo import fields, models
 from odoo.exceptions import UserError
 
 from .magento_product import magento_push_skipped, schedule_magento_push
+from .sql_compat import UniqueIndex
 
 # Fields whose change triggers the automatic (queued) push to Magento.
 _CATEGORY_SYNC_FIELDS = {"name", "is_active", "parent_id", "instance_id"}
@@ -15,7 +16,7 @@ class MagentoCategory(models.Model):
     _description = "Magento Category"
     _magento_push_entity = "category"
 
-    _uniq_instance_magento_id = models.UniqueIndex(
+    _uniq_instance_magento_id = UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
         "This Magento category already exists for this instance.",
     )

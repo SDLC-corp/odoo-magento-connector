@@ -37,6 +37,7 @@ from odoo.tools import float_compare
 
 from ..services.magento_api import MagentoAPI
 from .magento_job import exception_message
+from . import cron_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -566,7 +567,7 @@ class MagentoReconciliation(models.Model):
                 run._record_missing_issues()
             runs |= run
             if self._cron_can_commit():
-                self.env["ir.cron"]._commit_progress(1)
+                cron_compat.commit_progress(self.env, 1)
         return runs
 
 

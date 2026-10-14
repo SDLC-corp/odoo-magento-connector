@@ -14,6 +14,7 @@ from odoo.exceptions import UserError
 from odoo.tools import mute_logger
 
 from .magento_job import classify_exception, exception_message
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class MagentoSyncIssue(models.Model):
                                   help="Empty on a resolved issue: resolved automatically.")
     resolved_date = fields.Datetime(readonly=True)
 
-    _trace_key_open_uniq = models.UniqueIndex(
+    _trace_key_open_uniq = UniqueIndex(
         "(trace_key) WHERE state = 'open'",
         "There is already an open issue for this Magento record.",
     )

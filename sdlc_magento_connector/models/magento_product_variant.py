@@ -48,6 +48,7 @@ from odoo.tools import SQL
 from ..services.magento_api import MagentoAPI
 from .magento_instance import _SYNC_BATCH_SIZE, _SyncStats, _short_reason
 from .magento_product import magento_variant_products
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ class MagentoProductAttribute(models.Model):
     _order = "instance_id, attribute_code, id"
     _rec_name = "name"
 
-    _uniq_instance_attribute = models.UniqueIndex(
+    _uniq_instance_attribute = UniqueIndex(
         "(instance_id, magento_attribute_id)",
         "This Magento attribute is already mapped for this instance.",
     )
@@ -207,7 +208,7 @@ class MagentoProductAttributeOption(models.Model):
     _order = "attribute_binding_id, label, id"
     _rec_name = "label"
 
-    _uniq_attribute_value = models.UniqueIndex(
+    _uniq_attribute_value = UniqueIndex(
         "(attribute_binding_id, value)",
         "This Magento option is already mapped.",
     )
@@ -232,7 +233,7 @@ class MagentoProductLink(models.Model):
     _order = "parent_map_id, option_position, option_id, position, id"
     _rec_name = "child_sku"
 
-    _uniq_link = models.UniqueIndex(
+    _uniq_link = UniqueIndex(
         "(parent_map_id, link_type, option_id, child_sku)",
         "This SKU is already linked to this Magento product.",
     )
@@ -946,21 +947,51 @@ class MagentoInstance(models.Model):
         """Make sure the template has a line per option with every value its children use."""
         self.ensure_one()
         lines = {line.attribute_id: line for line in template.attribute_line_ids}
-        Line = self.env["product.template.attribute.line"].with_context(**_NO_VARIANTS_CTX)
+        # Odoo 18 skips the template attribute values when lines are created without
+        # variants, and generates every combination when they are written: keep both
+        # off and add the missing values ourselves (Odoo 19 does it in the line).
+        Line = self.env["product.template.attribute.line"].with_context(
+            **_NO_VARIANTS_CTX, update_product_template_attribute_values=False)
+        touched = Line.browse()
         for index, attribute in enumerate(attributes):
             used = self.env["product.attribute.value"].concat(*[values[index] for _child, values in rows])
             line = lines.get(attribute)
             if line:
                 missing = used - line.value_ids
                 if missing:
-                    line.write({"value_ids": [(4, value.id) for value in missing]})
+                    line.with_env(Line.env).write({"value_ids": [(4, value.id) for value in missing]})
+                    touched |= line
             elif used:
-                Line.create({
+                touched |= Line.create({
                     "product_tmpl_id": template.id,
                     "attribute_id": attribute.id,
                     "value_ids": [(6, 0, used.ids)],
                     "sequence": index,
                 })
+        self._magento_ensure_template_values(touched)
+
+    def _magento_ensure_template_values(self, lines):
+        """Create (or reactivate) the template attribute value of every value of
+        ``lines``, without creating product variants."""
+        PTAV = self.env["product.template.attribute.value"].with_context(active_test=False)
+        to_create = []
+        for line in lines:
+            existing = {
+                ptav.product_attribute_value_id: ptav
+                for ptav in PTAV.search([("attribute_line_id", "=", line.id)])
+            }
+            for value in line.value_ids:
+                ptav = existing.get(value)
+                if not ptav:
+                    to_create.append({
+                        "product_attribute_value_id": value.id,
+                        "attribute_line_id": line.id,
+                        "price_extra": value.default_extra_price,
+                    })
+                elif not ptav.ptav_active:
+                    ptav.ptav_active = True
+        if to_create:
+            PTAV.create(to_create)
 
     def _magento_is_standalone(self, product, template):
         """Whether ``product`` is a plain product of its own (template with that single

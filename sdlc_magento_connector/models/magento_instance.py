@@ -13,6 +13,7 @@ from odoo.modules import module as odoo_module
 from odoo.addons.base.models.res_partner import _tz_get
 from odoo.exceptions import ValidationError, UserError
 from ..services.magento_api import MagentoAPI
+from . import cron_compat
 
 
 _logger = logging.getLogger(__name__)
@@ -963,7 +964,7 @@ class MagentoInstance(models.Model):
     def _magento_commit_batch(self, processed):
         """Commit progress during real cron runs only. Interactive runs never commit."""
         if self._magento_can_commit():
-            self.env["ir.cron"]._commit_progress(processed)
+            cron_compat.commit_progress(self.env, processed)
 
     def _magento_isolation(self):
         """Savepoint isolating a whole step/instance.

@@ -264,11 +264,11 @@ class TestP2Orders(MagentoTestCommon):
         self.assertFalse(order.magento_total_differs)
         product_line = self.lines(order, "product")
         self.assertEqual(product_line.product_id, self.products["WS03-XS-Red"])
-        self.assertEqual(product_line.tax_ids.mapped("amount"), [8.25])
-        self.assertIn("US-MI-*-Rate 1", product_line.tax_ids.name)
+        self.assertEqual(product_line.tax_id.mapped("amount"), [8.25])
+        self.assertIn("US-MI-*-Rate 1", product_line.tax_id.name)
         shipping = self.lines(order, "shipping")
         self.assertEqual(shipping.price_unit, 5.0)
-        self.assertFalse(shipping.tax_ids, "Magento did not tax shipping")
+        self.assertFalse(shipping.tax_id, "Magento did not tax shipping")
         self.assertEqual(shipping.name, "Flat Rate - Fixed")
         self.assertEqual(shipping.product_id, self.instance.shipping_product_id)
         # Workflow "Processing and paid": confirmed, invoiced (the Magento invoice), paid.
@@ -351,7 +351,7 @@ class TestP2Orders(MagentoTestCommon):
         self.assertEqual(product_line.discount, 0.0)
         self.assertEqual(len(discount), 1)
         self.assertEqual(discount.price_unit, -7.0)
-        self.assertEqual(discount.tax_ids, product_line.tax_ids, "Tax applies after discount")
+        self.assertEqual(discount.tax_id, product_line.tax_id, "Tax applies after discount")
         self.assertIn("MINUS7", discount.name)
         self.assertEqual(order.amount_tax, 4.92)
         self.assertEqual(order.amount_total, 69.58)
@@ -366,7 +366,7 @@ class TestP2Orders(MagentoTestCommon):
         order = self.magento_orders(13)
         line = self.lines(order, "product")
         self.assertEqual(line.price_unit, 31.39)
-        self.assertTrue(line.tax_ids.price_include)
+        self.assertTrue(line.tax_id.price_include)
         self.assertEqual(order.amount_untaxed, 34.0)
         self.assertEqual(order.amount_tax, 2.39)
         self.assertEqual(order.amount_total, 36.39)
@@ -382,7 +382,7 @@ class TestP2Orders(MagentoTestCommon):
         self.sync(data)
         order = self.magento_orders(14)
         line = self.lines(order, "product")
-        self.assertEqual(sorted(line.tax_ids.mapped("amount")), [2.0, 6.0])
+        self.assertEqual(sorted(line.tax_id.mapped("amount")), [2.0, 6.0])
         self.assertFalse(self.lines(order, "shipping"), "No shipping line for free shipping")
         self.assertEqual(order.amount_tax, 8.0)
         self.assertEqual(order.amount_total, 108.0)
@@ -392,13 +392,13 @@ class TestP2Orders(MagentoTestCommon):
         data = mg_order(15, [item], state="new", status="pending", paid=False, invoiced=False)
         self.sync(data)
         order = self.magento_orders(15)
-        self.assertFalse(self.lines(order, "product").tax_ids,
+        self.assertFalse(self.lines(order, "product").tax_id,
                          "Product default taxes must not apply to an untaxed Magento line")
         self.assertEqual(order.amount_total, 105.0)
 
     def test_auto_created_taxes_are_reused(self):
         self.sync(live_order_1(), live_order_2())
-        taxes = (self.magento_orders(1) | self.magento_orders(2)).order_line.tax_ids
+        taxes = (self.magento_orders(1) | self.magento_orders(2)).order_line.tax_id
         self.assertEqual(len(taxes), 1)
         maps = self.env["magento.tax.map"].search([("instance_id", "=", self.instance.id)])
         self.assertEqual(len(maps), 1)
@@ -430,7 +430,7 @@ class TestP2Orders(MagentoTestCommon):
         mapping.tax_id = tax
         self.sync(live_order_1())
         order = self.magento_orders(1)
-        self.assertEqual(order.order_line.tax_ids, tax)
+        self.assertEqual(order.order_line.tax_id, tax)
         self.assertEqual(order.amount_total, 36.39)
 
     def test_fpt_line(self):

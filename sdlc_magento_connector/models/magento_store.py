@@ -25,6 +25,7 @@ from odoo import api, fields, models
 from odoo.exceptions import AccessError, UserError
 
 from ..services.magento_api import MagentoAPI
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class MagentoWebsite(models.Model):
     _description = "Magento Website"
     _order = "instance_id, is_default desc, sequence, magento_id"
 
-    _uniq_instance_website = models.UniqueIndex(
+    _uniq_instance_website = UniqueIndex(
         "(instance_id, magento_id)", "This Magento website is already known for this instance.",
     )
 
@@ -95,7 +96,7 @@ class MagentoStoreGroup(models.Model):
     _description = "Magento Store (Group)"
     _order = "instance_id, website_id, magento_id"
 
-    _uniq_instance_group = models.UniqueIndex(
+    _uniq_instance_group = UniqueIndex(
         "(instance_id, magento_id)", "This Magento store is already known for this instance.",
     )
 
@@ -116,7 +117,7 @@ class MagentoStoreView(models.Model):
     _description = "Magento Store View"
     _order = "instance_id, website_id, is_default desc, sequence, magento_id"
 
-    _uniq_instance_view = models.UniqueIndex(
+    _uniq_instance_view = UniqueIndex(
         "(instance_id, magento_id)", "This Magento store view is already known for this instance.",
     )
 

@@ -13,6 +13,7 @@ from odoo.exceptions import AccessError, UserError
 from odoo.tests import tagged
 from odoo.tools import mute_logger
 
+from odoo.addons.sdlc_magento_connector.models import cron_compat
 from odoo.addons.sdlc_magento_connector.models import magento_instance as instance_module
 from odoo.addons.sdlc_magento_connector.models.magento_job import _STALE_AFTER
 
@@ -336,10 +337,9 @@ class TestPagedSync(MagentoTestCommon):
         events = []
         test = self
         Job = type(self.Job)
-        cron_cls = type(self.env["ir.cron"])
         real_page = type(self.instance)._magento_run_sync_page
 
-        def _commit_progress(cron, processed=0, **kwargs):
+        def _commit_progress(env, processed=0):
             test.env.flush_all()
             events.append(("commit", len(test.maps()),
                            tuple(test.sync_jobs().mapped("state"))))
@@ -350,7 +350,7 @@ class TestPagedSync(MagentoTestCommon):
             return real_page(instance, *args, **kwargs)
 
         with patch.object(Job, "_job_can_commit", lambda job: True), \
-                patch.object(cron_cls, "_commit_progress", _commit_progress), \
+                patch.object(cron_compat, "commit_progress", _commit_progress), \
                 patch.object(type(self.instance), "_magento_run_sync_page", _page):
             self.instance.with_context(**QUEUE).action_sync_products()
             with mute_logger(JOB_LOGGER, SYNC_LOGGER):

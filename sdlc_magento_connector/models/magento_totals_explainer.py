@@ -41,6 +41,7 @@ from odoo.tools import float_compare, float_round
 
 from ..services.magento_api import MagentoAPI
 from .magento_order_mapping import _format_percent
+from .sql_compat import Constraint
 
 _logger = logging.getLogger(__name__)
 
@@ -179,7 +180,7 @@ class MagentoTotalsExplanation(models.Model):
                                string="Components", readonly=True)
     summary_html = fields.Html(compute="_compute_summary_html", sanitize=False)
 
-    _magento_explanation_order_uniq = models.Constraint(
+    _magento_explanation_order_uniq = Constraint(
         "unique(sale_order_id)", "An order has a single totals explanation.",
     )
 
@@ -420,7 +421,7 @@ class MagentoTotalsExplanation(models.Model):
         for line in ctx.order.order_line.filtered(lambda l: not l.display_type):
             role = line.magento_line_role or ("product" if line.magento_item_id else "odoo")
             key = line.magento_line_key or line.magento_item_id or False
-            taxes, supported = self._mx_odoo_taxes(line.tax_ids)
+            taxes, supported = self._mx_odoo_taxes(line.tax_id)
             lines.append(_MLine(
                 key=key, role=role, qty=line.product_uom_qty, price=line.price_unit,
                 disc=line.discount, taxes=taxes,

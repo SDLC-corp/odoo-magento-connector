@@ -70,6 +70,7 @@ from odoo.tools import float_compare, float_round
 
 from ..services.magento_api import MagentoAPI
 from .magento_sync_issue import MagentoSyncIssue as _BaseSyncIssue
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -914,7 +915,7 @@ class MagentoPricePushState(models.Model):
     _order = "rule_id, sku, key"
     _rec_name = "sku"
 
-    _uniq_rule_sku_key = models.UniqueIndex(
+    _uniq_rule_sku_key = UniqueIndex(
         "(rule_id, sku, key)",
         "This price was already recorded for this rule.",
     )

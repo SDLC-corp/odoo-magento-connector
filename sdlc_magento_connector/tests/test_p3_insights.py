@@ -55,13 +55,13 @@ class InsightsCase(MagentoTestCommon):
                    grand_total=None, payment="checkmo", state=None):
         commands = [
             Command.create({"product_id": product.id, "product_uom_qty": qty, "price_unit": price,
-                            "tax_ids": [Command.clear()], "magento_line_role": "product"})
+                            "tax_id": [Command.clear()], "magento_line_role": "product"})
             for product, qty, price in lines
         ]
         if shipping:
             commands.append(Command.create({
                 "product_id": self.ship_product.id, "product_uom_qty": 1, "price_unit": shipping,
-                "tax_ids": [Command.clear()], "magento_line_role": "shipping"}))
+                "tax_id": [Command.clear()], "magento_line_role": "shipping"}))
         order = self.env["sale.order"].with_context(**NO_PUSH).create({
             "partner_id": self.customer.id,
             "magento_instance_id": (instance or self.instance).id,

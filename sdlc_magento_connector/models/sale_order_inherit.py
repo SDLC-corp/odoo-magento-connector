@@ -11,6 +11,7 @@ from odoo.tools import SQL, email_normalize, float_compare
 
 from ..services.magento_api import MagentoAPI
 from .magento_instance import _SyncStats
+from .sql_compat import Constraint
 
 
 _logger = logging.getLogger(__name__)
@@ -147,7 +148,7 @@ class SaleOrder(models.Model):
         ondelete="set null", help="Workflow rule last applied to this order.",
     )
 
-    _magento_order_uniq = models.Constraint(
+    _magento_order_uniq = Constraint(
         "unique(magento_instance_id, magento_order_id)",
         "This Magento order is already imported for this Magento instance.",
     )
@@ -614,7 +615,7 @@ class SaleOrder(models.Model):
         qty = _to_float(item.get("qty_ordered") or item.get("qty")) or 1.0
         return {
             "product_id": product.id,
-            "product_uom_id": product.uom_id.id,
+            "product_uom": product.uom_id.id,
             "name": item.get("name") or product.display_name or sku,
             "product_uom_qty": qty,
             "price_unit": self._magento_item_unit_price(item, instance, qty),
@@ -811,7 +812,7 @@ class SaleOrder(models.Model):
             )
             taxes = self._magento_taxes_for_rates(rates, incl)
             vals.update({
-                "tax_ids": [Command.set(taxes.ids)],
+                "tax_id": [Command.set(taxes.ids)],
                 "discount": 0.0,
                 "magento_line_role": "product",
                 "magento_line_key": key,
@@ -878,11 +879,11 @@ class SaleOrder(models.Model):
         )
         return {
             "product_id": product.id,
-            "product_uom_id": product.uom_id.id,
+            "product_uom": product.uom_id.id,
             "name": name,
             "product_uom_qty": 1.0,
             "price_unit": price,
-            "tax_ids": [Command.set(taxes.ids)],
+            "tax_id": [Command.set(taxes.ids)],
             "discount": 0.0,
             "magento_line_role": role,
             "magento_line_key": key,
@@ -929,7 +930,7 @@ class SaleOrder(models.Model):
                 # values. Exported orders keep their Odoo price.
                 changed.setdefault("product_uom_qty", vals["product_uom_qty"])
                 changed.setdefault("price_unit", line.price_unit if keep_price else vals["price_unit"])
-                for fname in ("tax_ids", "discount"):
+                for fname in ("tax_id", "discount"):
                     if fname in vals:
                         changed.setdefault(fname, vals[fname])
                 commands.append(Command.update(line.id, changed))
@@ -958,7 +959,7 @@ class SaleOrder(models.Model):
                     ids = set(command[2])
             return set(current.ids) != ids
         if fname == "product_uom_qty":
-            rounding = line.product_uom_id.rounding or 0.0001
+            rounding = line.product_uom.rounding or 0.0001
             return float_compare(current, value or 0.0, precision_rounding=rounding) != 0
         if fname == "price_unit":
             currency = line.currency_id or line.order_id.currency_id or self.env.company.currency_id
@@ -1737,8 +1738,8 @@ class SaleOrder(models.Model):
             if not sale_line or sale_line.id not in line_qty:
                 continue
             qty = line_qty[sale_line.id]
-            if sale_line.product_uom_id and move.product_uom and sale_line.product_uom_id != move.product_uom:
-                qty = sale_line.product_uom_id._compute_quantity(
+            if sale_line.product_uom and move.product_uom and sale_line.product_uom != move.product_uom:
+                qty = sale_line.product_uom._compute_quantity(
                     qty, move.product_uom, rounding_method="HALF-UP"
                 )
             move.quantity = qty

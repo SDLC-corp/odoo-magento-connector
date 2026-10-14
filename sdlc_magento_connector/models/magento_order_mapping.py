@@ -15,10 +15,12 @@
   (or cancel). Run by ``magento.instance._magento_order_followup_steps``.
 """
 import logging
+import re
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare
+from .sql_compat import Constraint
 
 _logger = logging.getLogger(__name__)
 
@@ -82,7 +84,7 @@ class MagentoTaxMap(models.Model):
     auto_created = fields.Boolean(readonly=True, help="The Odoo tax was created by the connector.")
     active = fields.Boolean(default=True)
 
-    _magento_tax_map_uniq = models.Constraint(
+    _magento_tax_map_uniq = Constraint(
         "unique(instance_id, magento_code, percent, price_include)",
         "This Magento tax rate is already mapped for this instance.",
     )
@@ -120,7 +122,7 @@ class MagentoPaymentMap(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _magento_payment_map_uniq = models.Constraint(
+    _magento_payment_map_uniq = Constraint(
         "unique(instance_id, magento_method)",
         "This Magento payment method is already mapped for this instance.",
     )
@@ -143,7 +145,7 @@ class MagentoCarrierMap(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _magento_carrier_map_uniq = models.Constraint(
+    _magento_carrier_map_uniq = Constraint(
         "unique(instance_id, magento_code)",
         "This Magento shipping method is already mapped for this instance.",
     )
@@ -456,13 +458,29 @@ class MagentoInstance(models.Model):
             "price_include_override": override,
             "description": "%s%%" % _format_percent(percent),
         }
-        country = company.account_fiscal_country_id or company.country_id
-        if country:
-            vals["country_id"] = country.id
+        country = self._magento_tax_country(company, label)
+        vals["country_id"] = country.id
         group = self._magento_tax_group(company, country, percent)
         if group:
             vals["tax_group_id"] = group.id
         return Tax.with_company(company).create(vals)
+
+    def _magento_tax_country(self, company, label):
+        """Country of an auto-created tax (required on Odoo 18 taxes): the company's
+        fiscal country, else its country, else the ISO prefix of the Magento tax code
+        (``US-MI-*-Rate 1``). Never guessed beyond that."""
+        country = company.account_fiscal_country_id or company.country_id
+        if country:
+            return country
+        match = re.match(r"\s*([A-Za-z]{2})-", label or "")
+        if match:
+            country = self.env["res.country"].search([("code", "=", match.group(1).upper())], limit=1)
+        if not country:
+            raise UserError(_(
+                "Set the fiscal country of %(company)s: Odoo needs it to create the tax for "
+                "Magento rate %(rate)s.", company=company.display_name, rate=label,
+            ))
+        return country
 
     @api.model
     def _magento_tax_group(self, company, country, percent):
@@ -480,7 +498,7 @@ class MagentoInstance(models.Model):
         if base and base.company_id and base.company_id != company:
             base = Group.browse()
         if base:
-            return base.copy({"name": name})
+            return base.copy({"name": name, "country_id": country.id if country else base.country_id.id})
         vals = {"name": name, "company_id": company.id}
         if country:
             vals["country_id"] = country.id

@@ -19,6 +19,8 @@ from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 from odoo.modules import module as odoo_module
 from odoo.tools import SQL, mute_logger
+from .sql_compat import Index, UniqueIndex
+from . import cron_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -171,11 +173,11 @@ class MagentoJob(models.Model):
     args_display = fields.Text(string="Arguments", compute="_compute_call_display")
     res_ids_display = fields.Char(string="Records", compute="_compute_call_display")
 
-    _identity_key_active_uniq = models.UniqueIndex(
+    _identity_key_active_uniq = UniqueIndex(
         "(identity_key) WHERE identity_key IS NOT NULL AND state IN ('pending', 'started')",
         "A pending or started job with this identity key already exists.",
     )
-    _runner_idx = models.Index("(priority, eta, id) WHERE state = 'pending'")
+    _runner_idx = Index("(priority, eta, id) WHERE state = 'pending'")
 
     _PROTECTED_FIELDS = frozenset({"model_name", "method_name", "res_ids", "args", "kwargs", "user_id"})
 
@@ -299,7 +301,7 @@ class MagentoJob(models.Model):
     def _job_commit(self, processed=0):
         """Commit (with cron progress) when allowed; return the cron's remaining time."""
         if self._job_can_commit():
-            return self.env["ir.cron"]._commit_progress(processed)
+            return cron_compat.commit_progress(self.env, processed)
         return float("inf")
 
     @api.model

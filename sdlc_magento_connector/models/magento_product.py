@@ -13,6 +13,7 @@ from odoo.tools.mimetypes import guess_mimetype
 from ..services.magento_api import MagentoAPI
 # Defines ``magento.job``, which this module extends: it must be loaded first.
 from . import magento_job  # noqa: F401
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -363,11 +364,11 @@ class MagentoProductMap(models.Model):
     _description = "Magento Product Mapping"
     _magento_push_entity = "product"
 
-    _uniq_instance_magento_id = models.UniqueIndex(
+    _uniq_instance_magento_id = UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
         "This Magento product is already mapped for this instance.",
     )
-    _uniq_instance_sku = models.UniqueIndex(
+    _uniq_instance_sku = UniqueIndex(
         "(instance_id, sku) WHERE sku IS NOT NULL AND sku != ''",
         "A product mapping with this SKU already exists for this instance.",
     )

@@ -82,6 +82,7 @@ class TestStockPushP2(MagentoTestCommon):
             "location_id": self.supplier_location.id,
             "location_dest_id": self.stock_location.id,
             "move_ids": [Command.create({
+                "name": product.display_name,
                 "product_id": product.id,
                 "product_uom_qty": qty,
                 "product_uom": product.uom_id.id,
@@ -110,7 +111,7 @@ class TestStockPushP2(MagentoTestCommon):
         product, _m = self._mapped("BASIS-1", qty=10.0)
         self.env["stock.quant"]._update_reserved_quantity(product, self.stock_location, 3.0)
         out = self.env["stock.move"].create({
-            "product_id": product.id, "product_uom_qty": 4.0, "product_uom": product.uom_id.id,
+            "name": product.display_name, "product_id": product.id, "product_uom_qty": 4.0, "product_uom": product.uom_id.id,
             "location_id": self.stock_location.id, "location_dest_id": self.customer_location.id,
         })
         out._action_confirm()
@@ -325,7 +326,7 @@ class TestStockPushP2(MagentoTestCommon):
         product, _m = self._mapped("FC-1", qty=10.0)
         self.instance.write({"stock_push_enabled": True, "stock_qty_basis": "forecast"})
         move = self.env["stock.move"].create({
-            "product_id": product.id, "product_uom_qty": 4.0, "product_uom": product.uom_id.id,
+            "name": product.display_name, "product_id": product.id, "product_uom_qty": 4.0, "product_uom": product.uom_id.id,
             "location_id": self.stock_location.id, "location_dest_id": self.customer_location.id,
         })
         move._action_confirm()

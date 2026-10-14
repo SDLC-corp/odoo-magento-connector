@@ -57,6 +57,7 @@ import hashlib
 import json
 import logging
 from collections import Counter, OrderedDict
+from .sql_compat import UniqueIndex
 
 import requests
 from markupsafe import Markup, escape
@@ -118,7 +119,7 @@ class MagentoTierPriceImport(models.Model):
     _order = "instance_id, sku, customer_group, quantity"
     _rec_name = "sku"
 
-    _uniq_instance_tier = models.UniqueIndex(
+    _uniq_instance_tier = UniqueIndex(
         "(instance_id, sku, customer_group, quantity)",
         "This Magento tier price was already imported for this instance.",
     )

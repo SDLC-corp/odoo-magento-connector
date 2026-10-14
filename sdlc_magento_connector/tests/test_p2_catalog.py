@@ -524,7 +524,7 @@ class TestP2Catalog(MagentoTestCommon):
         self.create_map(moved, 1)
         warehouse = self.env["stock.warehouse"].search([("company_id", "=", self.env.company.id)], limit=1)
         self.env["stock.move"].create({
-            "product_id": moved.id, "product_uom_qty": 1.0, "product_uom": moved.uom_id.id,
+            "name": moved.display_name, "product_id": moved.id, "product_uom_qty": 1.0, "product_uom": moved.uom_id.id,
             "location_id": warehouse.lot_stock_id.id,
             "location_dest_id": self.env.ref("stock.stock_location_customers").id,
         })

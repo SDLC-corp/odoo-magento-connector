@@ -101,12 +101,12 @@ class TestP3Returns(MagentoTestCommon):
             "order_line": [
                 Command.create({
                     "product_id": cls.bag.id, "product_uom_qty": 2.0, "price_unit": 34.0,
-                    "tax_ids": [Command.clear()], "magento_item_id": str(BAG_ITEM),
+                    "tax_id": [Command.clear()], "magento_item_id": str(BAG_ITEM),
                     "magento_line_role": "product", "magento_line_key": str(BAG_ITEM),
                 }),
                 Command.create({
                     "product_id": shipping_product.id, "name": "Flat Rate - Fixed",
-                    "product_uom_qty": 1.0, "price_unit": 10.0, "tax_ids": [Command.clear()],
+                    "product_uom_qty": 1.0, "price_unit": 10.0, "tax_id": [Command.clear()],
                     "magento_line_role": "shipping", "magento_line_key": "shipping",
                 }),
             ],

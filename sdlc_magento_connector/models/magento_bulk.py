@@ -23,6 +23,7 @@ from odoo.exceptions import AccessError, ValidationError
 from odoo.modules import module as odoo_module
 
 from ..services.magento_api import MagentoAPI
+from . import cron_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -334,7 +335,7 @@ class MagentoBulkOperation(models.Model):
             except Exception:  # noqa: BLE001 - one broken operation must not stop the others
                 _logger.exception("Magento bulk operation %s: poll failed", op.id)
             if self._bulk_can_commit():
-                self.env["ir.cron"]._commit_progress(1)
+                cron_compat.commit_progress(self.env, 1)
         return len(ops)
 
     def _poll(self):

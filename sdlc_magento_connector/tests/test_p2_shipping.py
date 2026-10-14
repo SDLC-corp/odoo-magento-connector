@@ -85,10 +85,10 @@ class TestP2Shipping(MagentoTestCommon):
     # ------------------------------------------------------------------ helpers
     def _order(self, magento_id="7001", qty_bag=1.0, qty_hoodie=2.0, confirm=True, **vals):
         lines = [Command.create({"product_id": self.bag.id, "product_uom_qty": qty_bag,
-                                 "price_unit": 34.0, "tax_ids": [Command.clear()]})]
+                                 "price_unit": 34.0, "tax_id": [Command.clear()]})]
         if qty_hoodie:
             lines.append(Command.create({"product_id": self.hoodie.id, "product_uom_qty": qty_hoodie,
-                                         "price_unit": 52.0, "tax_ids": [Command.clear()]}))
+                                         "price_unit": 52.0, "tax_id": [Command.clear()]}))
         order = self.env["sale.order"].with_context(**NO_PUSH).create(dict({
             "partner_id": self.partner.id,
             "magento_instance_id": self.instance.id,

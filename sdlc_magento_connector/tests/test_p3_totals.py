@@ -354,8 +354,8 @@ class TestP3Totals(MagentoTestCommon):
         order, = self.sync(data)
         self.assertEqual(order.amount_total, 42.22)
         shipping = self.lines(order, "shipping")
-        self.assertTrue(shipping.tax_ids)
-        shipping.write({"tax_ids": [Command.clear()], "price_unit": 9.0})
+        self.assertTrue(shipping.tax_id)
+        shipping.write({"tax_id": [Command.clear()], "price_unit": 9.0})
         explanation = self.explain(order)
         found = self.components(explanation, "shipping").sorted("sequence")
         self.assertEqual(found.mapped("name"), ["Shipping amount", "Shipping tax"])
@@ -374,7 +374,7 @@ class TestP3Totals(MagentoTestCommon):
         kept.price_unit = 31.0
         order.write({"order_line": [Command.create({
             "product_id": self.products["24-MB02"].id, "product_uom_qty": 1, "price_unit": 1.0,
-            "tax_ids": [Command.clear()],
+            "tax_id": [Command.clear()],
         })]})
         explanation = self.explain(order)
         missing = self.components(explanation, "missing_line")
@@ -437,7 +437,7 @@ class TestP3Totals(MagentoTestCommon):
         self.lines(order, "shipping").price_unit = 4.0
         order.write({"order_line": [Command.create({
             "product_id": self.products["24-MB01"].id, "product_uom_qty": 1, "price_unit": 1.0,
-            "tax_ids": [Command.clear()],
+            "tax_id": [Command.clear()],
         })]})
         self.assertEqual(order.amount_total, 36.32)
         explanation = self.explain(order)

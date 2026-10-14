@@ -11,6 +11,7 @@ from odoo.models import BaseModel
 from odoo.tools.safe_eval import safe_eval, test_python_expr
 
 from ..services.magento_api import MagentoAPI
+from .sql_compat import Constraint
 
 
 _logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ class MagentoAvailableField(models.Model):
         default=lambda self: self.env.context.get("default_mapping_type", "product"),
     )
 
-    _uniq_magento_field = models.Constraint(
+    _uniq_magento_field = Constraint(
         "unique(code, instance_id, mapping_type)",
         "This Magento field already exists!",
     )
@@ -219,7 +220,7 @@ class MagentoFieldMapping(models.Model):
     )
     transform_test_source = fields.Char(string="Sample From", readonly=True, copy=False)
 
-    _uniq_magento_mapping = models.Constraint(
+    _uniq_magento_mapping = Constraint(
         "unique(mapping_type, instance_id, odoo_field, magento_field_id)",
         "Duplicate mapping is not allowed.",
     )

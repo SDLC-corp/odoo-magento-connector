@@ -335,7 +335,7 @@
         <field name="view_mode">form</field>
         <field name="view_id" ref="view_magento_setup_wizard_form"/>
         <field name="target">current</field>
-        <field name="group_ids" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
+        <field name="groups_id" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
     </record>
 
     <menuitem id="menu_magento_setup_wizard" name="Connect a Store"

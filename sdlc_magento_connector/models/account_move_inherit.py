@@ -9,6 +9,7 @@ from odoo.exceptions import UserError
 from odoo.tools import float_compare
 
 from ..services.magento_api import MagentoAPI
+from .sql_compat import Constraint
 
 
 _logger = logging.getLogger(__name__)
@@ -139,11 +140,11 @@ class AccountMove(models.Model):
         "stock.picking", "magento_refund_move_id", string="Return Receipts", readonly=True,
     )
 
-    _magento_invoice_uniq = models.Constraint(
+    _magento_invoice_uniq = Constraint(
         "unique(magento_instance_id, magento_invoice_id)",
         "This Magento invoice is already linked to another journal entry of the same instance.",
     )
-    _magento_credit_memo_uniq = models.Constraint(
+    _magento_credit_memo_uniq = Constraint(
         "unique(magento_instance_id, magento_credit_memo_id)",
         "This Magento credit memo is already linked to another journal entry of the same instance.",
     )

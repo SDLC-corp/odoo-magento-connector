@@ -32,6 +32,7 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tools import SQL
 
 from .magento_bulk import STATUS_COMPLETE, STATUS_OPEN
+from .sql_compat import Constraint, Index
 
 QTY_BASIS = [
     ("on_hand", "On Hand"),
@@ -84,7 +85,7 @@ class MagentoStockSourceMap(models.Model):
         help="Internal locations (children included) whose quantities are summed for this source.",
     )
 
-    _instance_source_uniq = models.Constraint(
+    _instance_source_uniq = Constraint(
         "UNIQUE(instance_id, source_code)",
         "This Magento source is already mapped for this instance.",
     )
@@ -120,7 +121,7 @@ class MagentoStockDirty(models.Model):
                                  readonly=True)
     date = fields.Datetime(default=fields.Datetime.now, readonly=True)
 
-    _instance_id_idx = models.Index("(instance_id, id)")
+    _instance_id_idx = Index("(instance_id, id)")
 
     @api.model
     def _magento_mark(self, product_ids, event="quantity"):

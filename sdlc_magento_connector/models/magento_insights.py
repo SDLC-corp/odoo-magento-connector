@@ -319,13 +319,13 @@ class MagentoDigest(models.Model):
             [("order_id", "any", live_domains["w"]), ("display_type", "=", False),
              ("product_id", "!=", False),
              "|", ("magento_line_role", "=", False), ("magento_line_role", "=", "product")],
-            ["product_id", "currency_id", "order_id.date_order:day"],
+            ["product_id", "currency_id", "order_id"],  # Odoo 18: no related-path group-by
             ["price_subtotal:sum", "product_uom_qty:sum"],
         )
         per_product = {}
-        for product, cur, day, amount, qty in line_rows:
+        for product, cur, order, amount, qty in line_rows:
             entry = per_product.setdefault(product, {"revenue": 0.0, "qty": 0.0})
-            entry["revenue"] += (amount or 0.0) * rate(cur, env["magento.dashboard"]._as_date(day))
+            entry["revenue"] += (amount or 0.0) * rate(cur, env["magento.dashboard"]._as_date(order.date_order))
             entry["qty"] += qty or 0.0
         ranked = sorted(per_product.items(), key=lambda kv: kv[1]["revenue"], reverse=True)[:TOP_PRODUCTS]
         for product, entry in ranked:

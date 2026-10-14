@@ -10,6 +10,7 @@ No test in this package may reach the network:
   ``unittest.mock.patch.object`` through ``self.patch_api``.
 """
 import json
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import requests
@@ -194,6 +195,20 @@ def build_order(entity_id, items, increment_id=None, email="roni_cost@example.co
 
 class MagentoTestCommon(TransactionCase):
     """Base class: one Magento instance, a product with a map, HTTP blocked."""
+
+    @contextmanager
+    def enter_registry_test_mode(self):
+        """Odoo 19's ``TransactionCase.enter_registry_test_mode`` on Odoo 18: new
+        cursors (e.g. a post-commit push) share the test transaction meanwhile."""
+        registry = self.env.registry
+        if registry.in_test_mode():
+            yield
+            return
+        registry.enter_test_mode(self.env.cr)
+        try:
+            yield
+        finally:
+            registry.leave_test_mode()
 
     @classmethod
     def setUpClass(cls):

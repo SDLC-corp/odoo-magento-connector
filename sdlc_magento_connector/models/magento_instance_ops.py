@@ -8,6 +8,7 @@ from markupsafe import Markup
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 from odoo.modules import module as odoo_module
+from . import cron_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class MagentoInstance(models.Model):
             batch.unlink()
             deleted += len(batch)
             if self._ops_can_commit():
-                self.env["ir.cron"]._commit_progress(len(batch))
+                cron_compat.commit_progress(self.env, len(batch))
             if len(batch) < _CLEANUP_BATCH:
                 break
         return deleted

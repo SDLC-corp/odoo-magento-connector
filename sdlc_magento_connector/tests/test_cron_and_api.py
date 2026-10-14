@@ -5,6 +5,7 @@ import requests
 
 from odoo.tests import tagged
 
+from odoo.addons.sdlc_magento_connector.models import cron_compat
 from odoo.addons.sdlc_magento_connector.services.magento_api import MagentoAPI
 
 from .common import MagentoTestCommon, make_response
@@ -33,10 +34,10 @@ class TestCron(MagentoTestCommon):
 
     def setUp(self):
         super().setUp()
-        # Cron runs commit progress per instance (ir.cron._commit_progress); a test
+        # Cron runs commit progress per instance (cron_compat.commit_progress); a test
         # transaction must never commit.
         self.commit_progress = self.startPatcher(patch.object(
-            type(self.env["ir.cron"]), "_commit_progress", return_value=float("inf")))
+            cron_compat, "commit_progress", return_value=float("inf")))
 
     def _patch_fetches(self):
         mocks = {}

@@ -5,13 +5,14 @@ from odoo.exceptions import UserError
 
 from ..services.magento_api import MagentoAPI
 from .magento_product import magento_push_skipped, raise_magento_user_error
+from .sql_compat import UniqueIndex
 
 
 class MagentoAttributeSet(models.Model):
     _name = "magento.attribute.set"
     _description = "Magento Attribute Set"
 
-    _uniq_instance_magento_id = models.UniqueIndex(
+    _uniq_instance_magento_id = UniqueIndex(
         "(instance_id, magento_id) WHERE magento_id IS NOT NULL AND magento_id != ''",
         "This Magento attribute set already exists for this instance.",
     )

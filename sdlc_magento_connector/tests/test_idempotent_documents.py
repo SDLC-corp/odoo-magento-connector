@@ -52,9 +52,9 @@ class TestIdempotentDocuments(MagentoTestCommon):
             "magento_status": "processing",
             "order_line": [
                 Command.create({"product_id": cls.bag.id, "product_uom_qty": 1.0,
-                                "price_unit": 34.0, "tax_ids": [Command.clear()]}),
+                                "price_unit": 34.0, "tax_id": [Command.clear()]}),
                 Command.create({"product_id": cls.hoodie.id, "product_uom_qty": 2.0,
-                                "price_unit": 52.0, "tax_ids": [Command.clear()]}),
+                                "price_unit": 52.0, "tax_id": [Command.clear()]}),
             ],
         }).with_env(cls.env)
         cls.bag_line, cls.hoodie_line = cls.order.order_line
@@ -100,9 +100,10 @@ class TestIdempotentDocuments(MagentoTestCommon):
             "location_dest_id": self.env.ref("stock.stock_location_customers").id,
             "move_ids": [
                 Command.create({
+                    "name": line.product_id.display_name,
                     "product_id": line.product_id.id,
                     "product_uom_qty": line.product_uom_qty,
-                    "product_uom": line.product_uom_id.id,
+                    "product_uom": line.product_uom.id,
                     "sale_line_id": line.id,
                     "location_id": picking_type.default_location_src_id.id,
                     "location_dest_id": self.env.ref("stock.stock_location_customers").id,

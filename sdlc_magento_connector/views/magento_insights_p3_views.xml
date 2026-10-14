@@ -318,7 +318,7 @@
         <field name="res_model">magento.settings.transfer</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
-        <field name="group_ids" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
+        <field name="groups_id" eval="[(4, ref('sdlc_magento_connector.group_magento_manager'))]"/>
     </record>
 
     <menuitem id="menu_magento_settings_transfer" name="Settings Export/Import"

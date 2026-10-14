@@ -37,6 +37,7 @@ from odoo.tools import float_is_zero
 from ..services.magento_api import MagentoAPI
 from .account_move_inherit import REFUND_MODES
 from .magento_order_mapping import PUSH_SKIP_CTX
+from .sql_compat import Constraint
 
 _logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ class MagentoReturnReason(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _magento_return_reason_code_uniq = models.Constraint(
+    _magento_return_reason_code_uniq = Constraint(
         "unique(instance_id, code)",
         "This return reason code already exists for this instance.",
     )
@@ -465,7 +466,7 @@ class SaleOrder(models.Model):
         for line in lines:
             wanted = _to_float(pending.get(str(line.id)))
             qty = min(wanted, max(line.qty_delivered, 0.0))
-            if float_is_zero(qty, precision_rounding=line.product_uom_id.rounding or 0.01):
+            if float_is_zero(qty, precision_rounding=line.product_uom.rounding or 0.01):
                 capped.append(line.product_id.display_name)
                 continue
             if qty < wanted:
@@ -529,13 +530,20 @@ class SaleOrder(models.Model):
             }
             if origin_picking:
                 vals["return_id"] = origin_picking.id
+            # Odoo 18 links a picking to its order through the procurement group: reuse
+            # the delivery's, else let the sale_id inverse create the order's group.
+            group = origin_picking.group_id or self.procurement_group_id
+            if group:
+                vals["group_id"] = group.id
+            vals["sale_id"] = self.id
             move_vals = []
             for line, qty in line_qtys.items():
                 origin_move = delivered.filtered(lambda m, l=line: m.sale_line_id == l)[:1]
                 mv = {
+                    "name": line.product_id.display_name,
                     "product_id": line.product_id.id,
                     "product_uom_qty": qty,
-                    "product_uom": line.product_uom_id.id,
+                    "product_uom": line.product_uom.id,
                     "sale_line_id": line.id,
                     "location_id": customer_location.id,
                     "location_dest_id": location.id,

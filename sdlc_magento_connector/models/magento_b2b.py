@@ -58,6 +58,7 @@ import requests
 from markupsafe import Markup
 
 from odoo import _, api, fields, models
+from .sql_compat import Constraint
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_compare, float_round
 
@@ -744,7 +745,7 @@ class ResPartnerB2B(models.Model):
         domain="[('instance_id', '=', magento_company_instance_id)]",
     )
 
-    _magento_company_uniq = models.Constraint(
+    _magento_company_uniq = Constraint(
         "unique(magento_company_instance_id, magento_company_id)",
         "A Magento company can only be linked to one contact per Magento instance.",
     )
@@ -884,7 +885,7 @@ class MagentoSharedCatalog(models.Model):
     last_result = fields.Char(readonly=True, copy=False)
     b2b_notice = fields.Char(compute="_compute_b2b_notice")
 
-    _magento_catalog_uniq = models.Constraint(
+    _magento_catalog_uniq = Constraint(
         "unique(instance_id, magento_catalog_id)",
         "This Magento shared catalog already exists for this instance.",
     )
@@ -1166,7 +1167,7 @@ class SaleOrderB2B(models.Model):
     magento_placed_order_ids = fields.One2many("sale.order", "magento_source_quotation_id",
                                                string="Placed Orders", readonly=True)
 
-    _magento_quote_uniq = models.Constraint(
+    _magento_quote_uniq = Constraint(
         "unique(magento_quote_instance_id, magento_quote_id)",
         "This Magento negotiable quote is already imported for this instance.",
     )

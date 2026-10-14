@@ -1,6 +1,7 @@
 from odoo import fields, models
 
 from .magento_product import magento_push_skipped
+from .sql_compat import Constraint
 
 # Contact fields mirrored on the linked magento.customer; editing one of them marks the
 # Magento customer for a (queued) push when the instance has ``push_partner_changes`` on.
@@ -55,7 +56,7 @@ class ResPartner(models.Model):
         help="VAT number as Magento sent it, kept when it failed validation.",
     )
 
-    _magento_customer_uniq = models.Constraint(
+    _magento_customer_uniq = Constraint(
         "unique(magento_instance_id, magento_customer_id)",
         "A Magento customer can only be linked to one contact per Magento instance.",
     )

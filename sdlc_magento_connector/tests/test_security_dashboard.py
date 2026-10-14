@@ -167,7 +167,7 @@ class TestDashboard(MagentoTestCommon):
             action = self.env.ref(xml_id, raise_if_not_found=False)
             if not action:
                 return False
-            if action.group_ids and not (action.group_ids & user.all_group_ids):
+            if action.groups_id and not (action.groups_id & user.groups_id):
                 return False
             model = getattr(action, "res_model", False) or getattr(action, "model_name", False)
             return not model or self.env[model].with_user(user).has_access("read")

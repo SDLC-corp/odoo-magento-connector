@@ -52,6 +52,7 @@ from .magento_product import (
     UNSUPPORTED_EXPORT_TYPES, _IMAGE_EXTENSIONS, magento_push_skipped, magento_variant_products,
     schedule_magento_push,
 )
+from .sql_compat import UniqueIndex
 
 _logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ class MagentoProductMedia(models.Model):
     _order = "map_id, is_main desc, position, id"
     _rec_name = "label"
 
-    _uniq_map_entry = models.UniqueIndex(
+    _uniq_map_entry = UniqueIndex(
         "(map_id, magento_entry_id) WHERE magento_entry_id IS NOT NULL AND magento_entry_id != ''",
         "This Magento gallery entry is already tracked for this product.",
     )

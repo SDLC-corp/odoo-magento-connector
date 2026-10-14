@@ -75,7 +75,7 @@ class TestMagentoReconciliation(MagentoTestCommon):
                 "product_id": self.product.id,
                 "product_uom_qty": 1,
                 "price_unit": total,
-                "tax_ids": [Command.clear()],
+                "tax_id": [Command.clear()],
             })],
         }
         vals.update(extra)
