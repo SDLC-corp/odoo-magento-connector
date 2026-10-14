@@ -15,21 +15,19 @@
                         string="Hold in Magento"
                         class="btn-secondary"
                         groups="sdlc_magento_connector.group_magento_user"
-                        confirm="Put this order on hold in Magento?"
-                        invisible="not magento_order_id or magento_on_hold or state == 'cancel' or magento_state in ('complete', 'closed', 'canceled', 'payment_review')"/>
+                        confirm="Put this order on hold in Magento?" attrs="{'invisible': ['|', '|', '|', ('magento_order_id', '=', False), ('magento_on_hold', '!=', False), ('state', '=', 'cancel'), ('magento_state', 'in', ['complete', 'closed', 'canceled', 'payment_review'])]}" />
                 <button name="action_magento_unhold"
                         type="object"
                         string="Release Hold"
                         class="btn-secondary"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_order_id or not magento_on_hold"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('magento_on_hold', '=', False)]}" />
             </xpath>
             <xpath expr="//form/sheet/div[hasclass('oe_title')]" position="before">
-                <div class="alert alert-warning" role="status" invisible="not magento_on_hold">
+                <div class="alert alert-warning" role="status" attrs="{'invisible': [('magento_on_hold', '=', False)]}">
                     <span class="badge rounded-pill text-bg-warning me-2">On hold in Magento</span>
                     Magento will not invoice or ship this order until the hold is released.
                 </div>
-                <div class="alert alert-danger" role="alert" invisible="not magento_cancel_conflict">
+                <div class="alert alert-danger" role="alert" attrs="{'invisible': [('magento_cancel_conflict', '=', False)]}">
                     <strong>Cancelled in Magento only.</strong>
                     Magento cancelled this order, but it already has a posted invoice or a done
                     delivery in Odoo, so it was left open. Issue a credit note or a return, then
@@ -81,12 +79,11 @@
                         type="object"
                         string="Push Tracking to Magento"
                         class="btn-secondary"
-                        groups="stock.group_stock_user"
-                        invisible="not magento_shipment_id"/>
+                        groups="stock.group_stock_user" attrs="{'invisible': [('magento_shipment_id', '=', False)]}" />
             </xpath>
             <xpath expr="//field[@name='magento_shipment_id']" position="after">
                 <field name="magento_tracking_ref" placeholder="e.g. 1Z999AA10123456784"/>
-                <field name="magento_source_code" invisible="not magento_source_code"/>
+                <field name="magento_source_code" attrs="{'invisible': [('magento_source_code', '=', False)]}" />
             </xpath>
         </field>
     </record>

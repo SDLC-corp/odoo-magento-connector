@@ -14,29 +14,25 @@
 
             <xpath expr="//field[@name='access_token']" position="after">
                 <field name="consumer_key" password="True"
-                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
-                       groups="sdlc_magento_connector.group_magento_manager"/>
+                       groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'oauth1')], 'required': [('auth_method', '=', 'oauth1')]}" />
                 <field name="consumer_secret" password="True"
-                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
-                       groups="sdlc_magento_connector.group_magento_manager"/>
+                       groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'oauth1')], 'required': [('auth_method', '=', 'oauth1')]}" />
                 <field name="access_token_secret" password="True"
-                       invisible="auth_method != 'oauth1'" required="auth_method == 'oauth1'"
-                       groups="sdlc_magento_connector.group_magento_manager"/>
+                       groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'oauth1')], 'required': [('auth_method', '=', 'oauth1')]}" />
                 <field name="oauth_signature_method"
-                       invisible="auth_method != 'oauth1'"
-                       groups="sdlc_magento_connector.group_magento_manager"/>
+                       groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'oauth1')]}" />
             </xpath>
 
             <xpath expr="//page[@name='connection']/group[not(@name)]" position="after">
-                <div class="alert alert-info mb-3" role="status" invisible="auth_method != 'oauth1'"
-                     groups="sdlc_magento_connector.group_magento_manager">
+                <div class="alert alert-info mb-3" role="status"
+                     groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'oauth1')]}">
                     <strong>Where to find the four OAuth values:</strong>
                     in Magento Admin go to <em>System &gt; Extensions &gt; Integrations</em>, open (or add
                     and activate) the integration, and copy its Consumer Key, Consumer Secret, Access Token
                     and Access Token Secret. Grant the integration the API resources the diagnosis lists.
                 </div>
-                <div class="alert alert-warning mb-3" role="status" invisible="auth_method != 'bearer'"
-                     groups="sdlc_magento_connector.group_magento_manager">
+                <div class="alert alert-warning mb-3" role="status"
+                     groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'bearer')]}">
                     Bearer tokens are rejected by Magento 2.4.4+ unless
                     <em>Allow OAuth Access Tokens to be used as standalone Bearer tokens</em> is enabled.
                     OAuth 1.0a is recommended.
@@ -48,8 +44,7 @@
                                 groups="sdlc_magento_connector.group_magento_manager"/>
                         <span class="text-muted">Checks each Magento API resource the connector reads.</span>
                     </div>
-                    <field name="access_diagnostics" nolabel="1" colspan="2"
-                           invisible="not access_diagnostics"/>
+                    <field name="access_diagnostics" nolabel="1" colspan="2" attrs="{'invisible': [('access_diagnostics', '=', False)]}" />
                 </group>
             </xpath>
         </field>

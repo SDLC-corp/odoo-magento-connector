@@ -1,12 +1,12 @@
 {
     'name': 'Magento 2 Connector',
-    'version': '17.0.1.1.0',
+    'version': '16.0.1.1.0',
     'category': 'Connector',
     'summary': 'Synchronize Magento 2 sales, catalog, customers, stock and accounting',
     'author': 'SDLC Corp',
     'support': 'sales@sdlccorp.com',
     'description': """
-Magento 2 Connector for Odoo 17
+Magento 2 Connector for Odoo 16
 ================================
 
 Connect Odoo with Magento Open Source or Adobe Commerce through Magento's REST API.

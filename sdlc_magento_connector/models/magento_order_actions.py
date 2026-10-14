@@ -285,7 +285,7 @@ class SaleOrder(models.Model):
                         " and ".join(blockers),
                     ))
                 continue
-            if order.locked:
+            if order.state == "done":  # Odoo 16: locked
                 order.action_unlock()
             order.with_context(**_NO_PUSH_CTX)._action_cancel()
             order._magento_note(_("Cancelled because the order was cancelled in Magento."))

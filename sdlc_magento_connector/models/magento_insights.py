@@ -22,8 +22,11 @@ import pytz
 
 from odoo import Command, _, api, fields, models, tools
 from odoo.exceptions import AccessError, UserError
-from odoo.tools import SQL, format_amount
+from odoo.tools import format_amount
+from .sql_compat import SQL
 from odoo.tools.sql import column_exists, table_exists
+from . import sql_compat
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -97,7 +100,7 @@ class MagentoInstance(models.Model):
     digest_count = fields.Integer(string="Digests", compute="_compute_digest_count")
 
     def _compute_digest_count(self):
-        counts = dict(self.env["magento.digest"]._read_group(
+        counts = dict(orm_compat.read_group(self.env["magento.digest"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"]))
         for instance in self:
             instance.digest_count = counts.get(instance, 0)
@@ -263,7 +266,7 @@ class MagentoDigest(models.Model):
             order_domains[key] = dom
             live_domains[key] = dom + [("state", "!=", "cancel")]
             count, amount = 0, 0.0
-            for cur, day, state, total, n in SaleOrder._read_group(
+            for cur, day, state, total, n in orm_compat.read_group(SaleOrder, 
                     dom, ["currency_id", "date_order:day", "state"], ["amount_total:sum", "__count"]):
                 count += n
                 if state != "cancel":
@@ -275,7 +278,7 @@ class MagentoDigest(models.Model):
                 ("invoice_date", ">=", start_day), ("invoice_date", "<", today_str),
             ]
             refund_domains[key] = rdom
-            rows = env["account.move"]._read_group(rdom, [], ["amount_total_signed:sum", "__count"])
+            rows = orm_compat.read_group(env["account.move"], rdom, [], ["amount_total_signed:sum", "__count"])
             total_signed, refund_count = rows[0] if rows else (0.0, 0)
             refunds[key] = currency.round(-(total_signed or 0.0))
             raw["refund_count_" + key] = refund_count
@@ -315,8 +318,8 @@ class MagentoDigest(models.Model):
 
         # -- top products (7 days) -----------------------------------------------------
         top_products = []
-        line_rows = env["sale.order.line"]._read_group(
-            [("order_id", "any", live_domains["w"]), ("display_type", "=", False),
+        line_rows = orm_compat.read_group(env["sale.order.line"], 
+            [("order_id", "in", env["sale.order"]._search(live_domains["w"])), ("display_type", "=", False),
              ("product_id", "!=", False),
              "|", ("magento_line_role", "=", False), ("magento_line_role", "=", "product")],
             ["product_id", "currency_id", "order_id"],  # Odoo 18: no related-path group-by
@@ -380,7 +383,7 @@ class MagentoDigest(models.Model):
         open_base = [("instance_id", "=", instance.id), ("state", "=", "open")]
         labels = dict(Issue._fields["entity"]._description_selection(env))
         open_total = 0
-        for entity, count in Issue._read_group(open_base, ["entity"], ["__count"], order="__count desc"):
+        for entity, count in orm_compat.read_group(Issue, open_base, ["entity"], ["__count"], order="__count desc"):
             open_total += count
             label = labels.get(entity, entity or _("Other"))
             open_rows.append({
@@ -652,7 +655,7 @@ class MagentoNetProfit(models.Model):
         cr = self.env.cr
         valued = column_exists(cr, "stock_move", "value") and column_exists(cr, "stock_move", "is_in")
         carrier = column_exists(cr, "stock_picking", "carrier_price") and column_exists(cr, "stock_picking", "sale_id")
-        cr.execute("SELECT data_type FROM information_schema.columns "
+        sql_compat.execute(cr, "SELECT data_type FROM information_schema.columns "
                    "WHERE table_name = 'product_product' AND column_name = 'standard_price'")
         row = cr.fetchone()
         if row and row[0] == "jsonb":
@@ -801,7 +804,7 @@ class MagentoNetProfit(models.Model):
 
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
-        self.env.cr.execute(SQL("CREATE OR REPLACE VIEW %s AS (%s)",
+        sql_compat.execute(self.env.cr, SQL("CREATE OR REPLACE VIEW %s AS (%s)",
                                 SQL.identifier(self._table), SQL(self._magento_query())))
 
 

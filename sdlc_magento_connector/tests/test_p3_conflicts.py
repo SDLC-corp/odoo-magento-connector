@@ -75,8 +75,7 @@ class TestP3Conflicts(MagentoTestCommon):
     def _deliver(self, order):
         picking = order.picking_ids.filtered(lambda p: p.picking_type_code == "outgoing")
         for move in picking.move_ids:
-            move.quantity = move.product_uom_qty
-            move.picked = True
+            move.quantity_done = move.product_uom_qty
         picking.with_context(skip_magento_sync=True)._action_done()
         # Linked to a Magento shipment: nothing to push on the next sync.
         picking.with_context(skip_magento_sync=True).write({"magento_shipment_id": "9%s" % order.id})
@@ -182,10 +181,10 @@ class TestP3Conflicts(MagentoTestCommon):
         self.assertTrue(order.magento_conflict_note)
         self.assertFlag(order)
 
-        order.action_lock()
+        order.action_done()
         qty.action_accept()
         self.assertEqual(self._line(order, self.bag).product_uom_qty, 3.0)
-        self.assertTrue(order.locked, "Locked again after the rewrite")
+        self.assertEqual(order.state, "done", "Locked again after the rewrite")
         self.assertEqual(qty.state, "accepted")
         self.assertEqual(qty.resolved_by, self.env.user)
         self.assertEqual(self._rows(order, "totals_changed", state="accepted").state, "accepted",

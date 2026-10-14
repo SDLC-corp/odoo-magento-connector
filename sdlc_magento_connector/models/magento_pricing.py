@@ -71,6 +71,7 @@ from odoo.tools import float_compare, float_round
 from ..services.magento_api import MagentoAPI
 from .magento_sync_issue import MagentoSyncIssue as _BaseSyncIssue
 from .sql_compat import UniqueIndex
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -227,7 +228,7 @@ class MagentoPriceRule(models.Model):
             rule.effective_website_id = 0 if is_global else rule.magento_website_id
 
     def _compute_push_state_count(self):
-        counts = dict(self.env["magento.price.push.state"]._read_group(
+        counts = dict(orm_compat.read_group(self.env["magento.price.push.state"], 
             [("rule_id", "in", self.ids)], ["rule_id"], ["__count"],
         ))
         for rule in self:
@@ -945,7 +946,7 @@ class MagentoInstance(models.Model):
     price_rule_count = fields.Integer(compute="_compute_price_rule_count")
 
     def _compute_price_rule_count(self):
-        counts = dict(self.env["magento.price.rule"]._read_group(
+        counts = dict(orm_compat.read_group(self.env["magento.price.rule"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"],
         ))
         for instance in self:

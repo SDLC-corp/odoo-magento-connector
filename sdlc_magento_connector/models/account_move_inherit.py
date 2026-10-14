@@ -438,7 +438,7 @@ class AccountMove(models.Model):
                 ("state", "=", "done"),
                 ("picking_type_code", "=", "incoming"),
                 ("magento_refund_move_id", "=", False),
-            ]).filtered(lambda p: p.return_id or p.location_id.usage == "customer")
+            ]).filtered(lambda p: p.move_ids.origin_returned_move_id or p.location_id.usage == "customer")
         by_line = {sol: key for key, sol in item_lines.items()}
         restock_ids = []
         used = Picking

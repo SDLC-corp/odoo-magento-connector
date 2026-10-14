@@ -10,6 +10,7 @@ from odoo.tests import tagged
 from odoo.addons.sdlc_magento_connector.models.stock_picking_inherit import split_tracking_numbers
 
 from .common import MagentoTestCommon, build_item, build_order, once
+from odoo.addons.sdlc_magento_connector.models import sql_compat
 
 NO_PUSH = dict(skip_magento_sync=True, magento_skip_push=True, skip_odoo_sync=True)
 
@@ -115,8 +116,7 @@ class TestP2Shipping(MagentoTestCommon):
             picking.with_context(skip_magento_sync=True).magento_tracking_ref = tracking
         for move in picking.move_ids:
             qty = (qtys or {}).get(move.product_id, move.product_uom_qty)
-            move.quantity = qty
-            move.picked = True
+            move.quantity_done = qty
         picking._action_done()
         self.assertEqual(picking.state, "done")
         return picking
@@ -201,7 +201,7 @@ class TestP2Shipping(MagentoTestCommon):
         picking = self._delivery(order)
         self.assertEqual(picking._magento_track_carrier(), ("ups", "UPS Ground"))
         # Reverse map from the transfer's delivery carrier (stock_delivery's carrier_id).
-        self.env.cr.execute("UPDATE magento_carrier_map SET carrier_ref = %s WHERE id = %s",
+        sql_compat.execute(self.env.cr, "UPDATE magento_carrier_map SET carrier_ref = %s WHERE id = %s",
                             ("delivery.carrier,77", mapping.id))
         self.env.invalidate_all()
         carrier = SimpleNamespace(_name="delivery.carrier", id=77, name="My UPS", delivery_type="fixed")
@@ -267,7 +267,7 @@ class TestP2Shipping(MagentoTestCommon):
         done = order.picking_ids.filtered(lambda p: p.state == "done")
         self.assertEqual(len(done), 1)
         self.assertEqual(done.magento_shipment_id, "701")
-        self.assertEqual(done.move_ids.quantity, 1.0)
+        self.assertEqual(done.move_ids.quantity_done, 1.0)
         self.assertEqual(done.magento_tracking_ref, "IMP-1")
         if "carrier_tracking_ref" in done._fields:
             self.assertEqual(done.carrier_tracking_ref, "IMP-1")
@@ -412,8 +412,7 @@ class TestP2Shipping(MagentoTestCommon):
         order.with_context(**NO_PUSH).action_confirm()
         picking = order.picking_ids
         for move in picking.move_ids:
-            move.quantity = move.product_uom_qty
-            move.picked = True
+            move.quantity_done = move.product_uom_qty
         picking.with_context(skip_magento_sync=True)._action_done()
         order = self._sync(self._mg(802, "canceled"))
         self.assertEqual(order.state, "sale", "a delivered order is not cancelled silently")

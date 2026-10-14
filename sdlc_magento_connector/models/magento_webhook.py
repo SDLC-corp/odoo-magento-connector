@@ -40,6 +40,8 @@ from odoo.tools import mute_logger
 
 from ..services.magento_api import MagentoAPI, quote
 from .sql_compat import Constraint, UniqueIndex
+from . import sql_compat
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -193,6 +195,11 @@ class MagentoWebhookEvent(models.Model):
         "This Magento event was already received.",
     )
 
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
+
     @api.depends("entity", "magento_ref", "event_type")
     def _compute_display_name(self):
         labels = dict(EVENT_ENTITIES)
@@ -275,10 +282,10 @@ class MagentoInstance(models.Model):
     # ------------------------------------------------------------------
     def init(self):
         super().init()
-        self.env.cr.execute(
+        sql_compat.execute(self.env.cr, 
             "SELECT id FROM magento_instance WHERE webhook_uuid IS NULL OR webhook_secret IS NULL")
         for (instance_id,) in self.env.cr.fetchall():
-            self.env.cr.execute(
+            sql_compat.execute(self.env.cr, 
                 """UPDATE magento_instance
                       SET webhook_uuid = COALESCE(webhook_uuid, %s),
                           webhook_secret = COALESCE(webhook_secret, %s)
@@ -325,15 +332,15 @@ class MagentoInstance(models.Model):
         since = now - timedelta(hours=24)
         Event = self.env["magento.webhook.event"].sudo()
         counts = {}
-        for instance, state, count in Event._read_group(
+        for instance, state, count in orm_compat.read_group(Event, 
             [("instance_id", "in", self.ids), ("received_at", ">=", since)],
             ["instance_id", "state"], ["__count"],
         ):
             counts[(instance.id, state)] = count
-        accepted_rows = {inst.id: at for inst, at in Event._read_group(
+        accepted_rows = {inst.id: at for inst, at in orm_compat.read_group(Event, 
             [("instance_id", "in", self.ids), ("state", "!=", "rejected")],
             ["instance_id"], ["received_at:max"])}
-        rejected_rows = {inst.id: at for inst, at in Event._read_group(
+        rejected_rows = {inst.id: at for inst, at in orm_compat.read_group(Event, 
             [("instance_id", "in", self.ids), ("state", "=", "rejected")],
             ["instance_id"], ["received_at:max"])}
         for instance in self:

@@ -12,6 +12,7 @@ from odoo.addons.sdlc_magento_connector.models.magento_returns import _create_in
 from odoo.addons.sdlc_magento_connector.services.magento_api import MagentoAPI
 
 from .common import MagentoTestCommon
+from odoo.addons.sdlc_magento_connector.models import sql_compat
 
 ORDER_ID = "7001"
 BAG_ITEM = 11
@@ -115,8 +116,7 @@ class TestP3Returns(MagentoTestCommon):
         cls.order.with_context(**ctx).action_confirm()
         cls.delivery = cls.order.picking_ids.filtered(lambda p: p.picking_type_code == "outgoing")
         for move in cls.delivery.move_ids:
-            move.quantity = move.product_uom_qty
-            move.picked = True
+            move.quantity_done = move.product_uom_qty
         cls.delivery.with_context(**ctx)._action_done()
         cls.Reason = cls.env["magento.return.reason"]
         cls.Rule = cls.env["magento.return.location.rule"]
@@ -168,13 +168,13 @@ class TestP3Returns(MagentoTestCommon):
         wizard = self.env["stock.return.picking"].with_context(
             active_id=self.delivery.id, active_ids=self.delivery.ids, active_model="stock.picking",
         ).create({"picking_id": self.delivery.id})
+        wizard._onchange_picking_id()  # Odoo 16 fills the lines in the onchange
         wizard.product_return_moves.write({"quantity": qty})
         if reason:
             wizard.magento_return_reason_id = reason
         picking = self.env["stock.picking"].browse(wizard.create_returns()["res_id"])
         for move in picking.move_ids:
-            move.quantity = move.product_uom_qty
-            move.picked = True
+            move.quantity_done = move.product_uom_qty
         picking._action_done()
         self.assertEqual(picking.state, "done")
         self.assertEqual(picking.picking_type_code, "incoming")
@@ -188,12 +188,12 @@ class TestP3Returns(MagentoTestCommon):
 
     def _dirty_products(self):
         self.env.flush_all()
-        self.env.cr.execute("SELECT product_id FROM magento_stock_dirty WHERE instance_id = %s",
+        sql_compat.execute(self.env.cr, "SELECT product_id FROM magento_stock_dirty WHERE instance_id = %s",
                             [self.instance.id])
         return {row[0] for row in self.env.cr.fetchall()}
 
     def _forget_stock_marks(self):
-        self.env.cr.execute("DELETE FROM magento_stock_dirty")
+        sql_compat.execute(self.env.cr, "DELETE FROM magento_stock_dirty")
         for key in list(self.env.cr.precommit.data):
             if key.startswith("sdlc_magento_connector.stock_"):
                 self.env.cr.precommit.data.pop(key)
@@ -320,8 +320,8 @@ class TestP3Returns(MagentoTestCommon):
         self.assertEqual(receipt.picking_type_code, "incoming")
         self.assertEqual(receipt.location_dest_id, self.returns_location)
         self.assertEqual(receipt.sale_id, self.order)
-        self.assertEqual(receipt.return_id, self.delivery)
-        self.assertEqual(receipt.move_ids.quantity, 1.0)
+        self.assertEqual(receipt.move_ids.origin_returned_move_id.picking_id, self.delivery)
+        self.assertEqual(receipt.move_ids.quantity_done, 1.0)
         self.assertEqual(self.bag.with_context(location=self.returns_location.id).qty_available, 1.0)
         self.assertEqual(self.bag_line.qty_delivered, 1.0, "the return counts against the delivery")
         # Stock push: the validated receipt marked the product dirty (delta job queued).
@@ -391,8 +391,7 @@ class TestP3Returns(MagentoTestCommon):
         self.assertFalse(move.magento_return_picking_ids)
         delivery = order.picking_ids.filtered(lambda p: p.picking_type_code == "outgoing")
         for stock_move in delivery.move_ids:
-            stock_move.quantity = stock_move.product_uom_qty
-            stock_move.picked = True
+            stock_move.quantity_done = stock_move.product_uom_qty
         delivery.with_context(**ctx)._action_done()
         self.assertFalse(move.magento_restock_waiting)
         self.assertEqual(move.magento_return_picking_ids.state, "done")

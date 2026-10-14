@@ -19,7 +19,7 @@
                 <field name="entity"/>
                 <field name="magento_ref"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="message"/>
                 <field name="severity" widget="badge"
@@ -81,20 +81,16 @@
         <field name="arch" type="xml">
             <form string="Sync Issue" create="0">
                 <header>
-                    <button name="action_retry" type="object" string="Retry" class="btn-primary"
-                            invisible="state != 'open'"/>
-                    <button name="action_resolve" type="object" string="Resolve"
-                            invisible="state != 'open'"/>
-                    <button name="action_ignore" type="object" string="Ignore"
-                            invisible="state != 'open'"/>
-                    <button name="action_reopen" type="object" string="Reopen"
-                            invisible="state == 'open'"/>
+                    <button name="action_retry" type="object" string="Retry" class="btn-primary" attrs="{'invisible': [('state', '!=', 'open')]}" />
+                    <button name="action_resolve" type="object" string="Resolve" attrs="{'invisible': [('state', '!=', 'open')]}" />
+                    <button name="action_ignore" type="object" string="Ignore" attrs="{'invisible': [('state', '!=', 'open')]}" />
+                    <button name="action_reopen" type="object" string="Reopen" attrs="{'invisible': [('state', '=', 'open')]}" />
                     <field name="state" widget="statusbar" statusbar_visible="open,resolved"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_record" type="object" class="oe_stat_button"
-                                icon="fa-external-link" invisible="not record_ref">
+                                icon="fa-external-link" attrs="{'invisible': [('record_ref', '=', False)]}">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Odoo Record</span>
                             </div>
@@ -104,13 +100,11 @@
                         <label for="display_label" string="Magento record"/>
                         <h1><field name="display_label" readonly="1"/></h1>
                     </div>
-                    <div role="alert" class="alert alert-danger"
-                         invisible="not message or severity != 'permanent'">
+                    <div role="alert" class="alert alert-danger" attrs="{'invisible': ['|', ('message', '=', False), ('severity', '!=', 'permanent')]}">
                         <strong>Permanent error</strong> &#8212; will not succeed without a fix.
                         <field name="message" nolabel="1" readonly="1" class="d-block mt-1"/>
                     </div>
-                    <div role="status" class="alert alert-warning"
-                         invisible="not message or severity != 'transient'">
+                    <div role="status" class="alert alert-warning" attrs="{'invisible': ['|', ('message', '=', False), ('severity', '!=', 'transient')]}">
                         <strong>Transient error</strong> &#8212; usually succeeds on retry.
                         <field name="message" nolabel="1" readonly="1" class="d-block mt-1"/>
                     </div>
@@ -121,21 +115,21 @@
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="entity"/>
                             <field name="magento_ref"/>
-                            <field name="record_ref" invisible="not record_ref"/>
+                            <field name="record_ref" attrs="{'invisible': [('record_ref', '=', False)]}" />
                         </group>
                         <group string="Tracking">
                             <field name="severity" widget="badge"
                                    decoration-warning="severity == 'transient'"
                                    decoration-danger="severity == 'permanent'"/>
-                            <field name="is_auth_error" invisible="not is_auth_error"/>
+                            <field name="is_auth_error" attrs="{'invisible': [('is_auth_error', '=', False)]}" />
                             <field name="occurrences"/>
                             <field name="first_seen"/>
                             <field name="last_seen"/>
-                            <field name="job_id" invisible="not job_id"/>
-                            <field name="job_state" invisible="not job_id"/>
-                            <field name="resolved_by" invisible="state == 'open'"
-                                   placeholder="Automatic"/>
-                            <field name="resolved_date" invisible="state == 'open'"/>
+                            <field name="job_id" attrs="{'invisible': [('job_id', '=', False)]}" />
+                            <field name="job_state" attrs="{'invisible': [('job_id', '=', False)]}" />
+                            <field name="resolved_by"
+                                   placeholder="Automatic" attrs="{'invisible': [('state', '=', 'open')]}" />
+                            <field name="resolved_date" attrs="{'invisible': [('state', '=', 'open')]}" />
                             <field name="trace_key" groups="base.group_no_one"/>
                         </group>
                     </group>
@@ -176,23 +170,19 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_open_issues" type="object"
-                        class="oe_stat_button" icon="fa-check-circle"
-                        invisible="open_issue_count &gt; 0">
+                        class="oe_stat_button" icon="fa-check-circle" attrs="{'invisible': [('open_issue_count', '&gt;', 0)]}">
                     <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
                 </button>
                 <button name="action_view_open_issues" type="object"
-                        class="oe_stat_button text-danger" icon="fa-exclamation-circle"
-                        invisible="open_issue_count == 0">
+                        class="oe_stat_button text-danger" icon="fa-exclamation-circle" attrs="{'invisible': [('open_issue_count', '=', 0)]}">
                     <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
                 </button>
                 <button name="action_view_failed_jobs" type="object"
-                        class="oe_stat_button text-danger" icon="fa-tasks"
-                        invisible="failed_job_count == 0">
+                        class="oe_stat_button text-danger" icon="fa-tasks" attrs="{'invisible': [('failed_job_count', '=', 0)]}">
                     <field name="failed_job_count" widget="statinfo" string="Failed Jobs"/>
                 </button>
                 <button name="action_view_queued_jobs" type="object"
-                        class="oe_stat_button" icon="fa-hourglass-half"
-                        invisible="pending_job_count == 0">
+                        class="oe_stat_button" icon="fa-hourglass-half" attrs="{'invisible': [('pending_job_count', '=', 0)]}">
                     <field name="pending_job_count" widget="statinfo" string="Queued Jobs"/>
                 </button>
             </div>
@@ -206,7 +196,7 @@
                             <field name="alert_on_permanent"/>
                             <field name="alert_user_ids" widget="many2many_tags"
                                    options="{'no_create': True}"/>
-                            <field name="last_alert_at" invisible="not last_alert_at"/>
+                            <field name="last_alert_at" attrs="{'invisible': [('last_alert_at', '=', False)]}" />
                         </group>
                         <group string="Log Retention">
                             <field name="log_retention_days"/>

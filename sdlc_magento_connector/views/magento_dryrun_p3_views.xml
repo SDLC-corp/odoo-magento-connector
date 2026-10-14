@@ -88,22 +88,20 @@
                 <group string="Transform" name="transform">
                     <field name="transform_expr" class="font-monospace"
                            placeholder="e.g. upper(strip(value)) · round(float(value) * 1.2, 2) · default(value, 'n/a')"/>
-                    <field name="transform_direction" widget="radio" options="{'horizontal': true}"
-                           invisible="not transform_expr"/>
-                    <div colspan="2" class="text-muted small" invisible="transform_expr">
+                    <field name="transform_direction" widget="radio" options="{'horizontal': true}" attrs="{'invisible': [('transform_expr', '=', False)]}" />
+                    <div colspan="2" class="text-muted small" attrs="{'invisible': [('transform_expr', '!=', False)]}">
                         Optional. Available: <code>value</code>, <code>record</code> and
                         <code>upper</code>, <code>lower</code>, <code>strip</code>,
                         <code>replace(value, old, new)</code>, <code>default(value, fallback)</code>,
                         <code>round</code>, <code>int</code>, <code>float</code>, <code>str</code>.
                     </div>
-                    <div colspan="2" invisible="not transform_expr">
+                    <div colspan="2" attrs="{'invisible': [('transform_expr', '=', False)]}">
                         <button name="action_live_test_transform" type="object" string="Live Test"
                                 icon="fa-flask" class="btn-secondary"/>
                         <span class="text-muted small ms-2">Runs the transform on a live sample record.</span>
                     </div>
                 </group>
-                <group string="Live Test Result" name="transform_test"
-                       invisible="not transform_test_status or not transform_expr">
+                <group string="Live Test Result" name="transform_test" attrs="{'invisible': ['|', ('transform_test_status', '=', False), ('transform_expr', '=', False)]}">
                     <field name="transform_test_status" widget="badge"
                            decoration-success="transform_test_status == 'ok'"
                            decoration-danger="transform_test_status == 'error'"/>
@@ -155,11 +153,9 @@
                 <field name="message" optional="show"/>
                 <field name="job_state" optional="hide" widget="badge"/>
                 <button name="action_apply_lines" type="object" string="Apply" icon="fa-play"
-                        invisible="action not in ('create', 'update')"
-                        groups="sdlc_magento_connector.group_magento_manager"/>
-                <field name="target_id" column_invisible="1"/>
-                <button name="action_open_target" type="object" string="Open" icon="fa-external-link"
-                        invisible="not target_id"/>
+                        groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('action', 'not in', ['create', 'update'])]}" />
+                <field name="target_id" invisible="1"/>
+                <button name="action_open_target" type="object" string="Open" icon="fa-external-link" attrs="{'invisible': [('target_id', '=', False)]}" />
             </tree>
         </field>
     </record>
@@ -171,10 +167,8 @@
             <form string="Preview Row" create="0" edit="0">
                 <header>
                     <button name="action_apply_lines" type="object" string="Apply" class="btn-primary"
-                            invisible="action not in ('create', 'update')"
-                            groups="sdlc_magento_connector.group_magento_manager"/>
-                    <button name="action_open_target" type="object" string="Open Odoo Record"
-                            invisible="not target_id"/>
+                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('action', 'not in', ['create', 'update'])]}" />
+                    <button name="action_open_target" type="object" string="Open Odoo Record" attrs="{'invisible': [('target_id', '=', False)]}" />
                 </header>
                 <sheet>
                     <div class="oe_title">
@@ -197,11 +191,11 @@
                         <group>
                             <field name="dryrun_id"/>
                             <field name="change_count"/>
-                            <field name="job_id" invisible="not job_id"/>
-                            <field name="job_state" invisible="not job_id" widget="badge"/>
+                            <field name="job_id" attrs="{'invisible': [('job_id', '=', False)]}" />
+                            <field name="job_state" widget="badge" attrs="{'invisible': [('job_id', '=', False)]}" />
                         </group>
                     </group>
-                    <div role="status" class="alert alert-warning" invisible="not message">
+                    <div role="status" class="alert alert-warning" attrs="{'invisible': [('message', '=', False)]}">
                         <field name="message" nolabel="1" readonly="1" class="d-block"/>
                     </div>
                     <notebook>
@@ -264,7 +258,7 @@
             <tree string="Dry-run Previews">
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="entity"/>
                 <field name="previewed_at"/>
@@ -305,47 +299,39 @@
         <field name="arch" type="xml">
             <form string="Dry-run Preview">
                 <header>
-                    <button name="action_preview" type="object" string="Preview" class="btn-primary"
-                            invisible="state != 'draft'"/>
-                    <button name="action_preview" type="object" string="Preview Again"
-                            invisible="state == 'draft'"/>
+                    <button name="action_preview" type="object" string="Preview" class="btn-primary" attrs="{'invisible': [('state', '!=', 'draft')]}" />
+                    <button name="action_preview" type="object" string="Preview Again" attrs="{'invisible': [('state', '=', 'draft')]}" />
                     <button name="action_apply" type="object" string="Apply" class="btn-primary"
-                            invisible="state != 'previewed' or create_count + update_count == 0"
+                            attrs="{'invisible': ['|', ('state', '!=', 'previewed'), '&amp;', ('create_count', '=', 0), ('update_count', '=', 0)]}"
                             confirm="Queue the real import of every record this preview would create or update?"/>
                     <button name="action_apply_full_sync" type="object" string="Apply Full Sync"
-                            invisible="state == 'draft'"
-                            confirm="Queue the regular sync of the whole entity (not only the previewed records)?"/>
+                            confirm="Queue the regular sync of the whole entity (not only the previewed records)?" attrs="{'invisible': [('state', '=', 'draft')]}" />
                     <field name="state" widget="statusbar" statusbar_visible="draft,previewed,applied"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-plus-circle" context="{'dryrun_action': 'create'}"
-                                invisible="state == 'draft'">
+                                icon="fa-plus-circle" context="{'dryrun_action': 'create'}" attrs="{'invisible': [('state', '=', 'draft')]}">
                             <field name="create_count" widget="statinfo" string="Creates"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-pencil" context="{'dryrun_action': 'update'}"
-                                invisible="state == 'draft'">
+                                icon="fa-pencil" context="{'dryrun_action': 'update'}" attrs="{'invisible': [('state', '=', 'draft')]}">
                             <field name="update_count" widget="statinfo" string="Updates"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-check" context="{'dryrun_action': 'unchanged'}"
-                                invisible="state == 'draft'">
+                                icon="fa-check" context="{'dryrun_action': 'unchanged'}" attrs="{'invisible': [('state', '=', 'draft')]}">
                             <field name="unchanged_count" widget="statinfo" string="No Change"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-forward" context="{'dryrun_action': 'skip'}"
-                                invisible="state == 'draft'">
+                                icon="fa-forward" context="{'dryrun_action': 'skip'}" attrs="{'invisible': [('state', '=', 'draft')]}">
                             <field name="skip_count" widget="statinfo" string="Skips"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button text-danger"
-                                icon="fa-exclamation-triangle" context="{'dryrun_action': 'error'}"
-                                invisible="state == 'draft' or error_count == 0">
+                                icon="fa-exclamation-triangle" context="{'dryrun_action': 'error'}" attrs="{'invisible': ['|', ('state', '=', 'draft'), ('error_count', '=', 0)]}">
                             <field name="error_count" widget="statinfo" string="Errors"/>
                         </button>
                         <button name="action_view_jobs" type="object" class="oe_stat_button"
-                                icon="fa-tasks" invisible="job_count == 0">
+                                icon="fa-tasks" attrs="{'invisible': [('job_count', '=', 0)]}">
                             <field name="job_count" widget="statinfo" string="Apply Jobs"/>
                         </button>
                     </div>
@@ -355,26 +341,24 @@
                         </span>
                         <h1><field name="name" readonly="1" placeholder="New preview"/></h1>
                     </div>
-                    <div role="status" class="alert alert-info" invisible="state != 'draft'">
+                    <div role="status" class="alert alert-info" attrs="{'invisible': [('state', '!=', 'draft')]}">
                         <strong>Nothing is written.</strong> The preview reads Magento and runs the
                         real import of each record inside a transaction that is always rolled back;
                         writes to Magento are blocked. Review the rows, then Apply.
                     </div>
                     <group>
                         <group string="Scope">
-                            <field name="instance_id" options="{'no_create': True}"
-                                   readonly="state != 'draft'"/>
-                            <field name="entity" widget="radio" options="{'horizontal': true}"
-                                   readonly="state != 'draft'"/>
+                            <field name="instance_id" options="{'no_create': True}" attrs="{'readonly': [('state', '!=', 'draft')]}" />
+                            <field name="entity" widget="radio" options="{'horizontal': true}" attrs="{'readonly': [('state', '!=', 'draft')]}" />
                             <field name="limit"/>
                             <field name="magento_refs" placeholder="e.g. 24-MB01, 24-MB04"/>
-                            <field name="updated_since" invisible="entity == 'category'"/>
+                            <field name="updated_since" attrs="{'invisible': [('entity', '=', 'category')]}" />
                         </group>
                         <group string="Result">
-                            <field name="summary" invisible="not summary"/>
-                            <field name="previewed_at" invisible="not previewed_at"/>
-                            <field name="previewed_by" invisible="not previewed_by"/>
-                            <field name="applied_at" invisible="not applied_at"/>
+                            <field name="summary" attrs="{'invisible': [('summary', '=', False)]}" />
+                            <field name="previewed_at" attrs="{'invisible': [('previewed_at', '=', False)]}" />
+                            <field name="previewed_by" attrs="{'invisible': [('previewed_by', '=', False)]}" />
+                            <field name="applied_at" attrs="{'invisible': [('applied_at', '=', False)]}" />
                             <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                         </group>
@@ -397,12 +381,12 @@
                                     <field name="target_name" optional="show"/>
                                     <field name="message" optional="show"/>
                                     <field name="job_state" optional="hide" widget="badge"/>
-                                    <field name="target_id" column_invisible="1"/>
+                                    <field name="target_id" invisible="1"/>
                                     <button name="action_apply_lines" type="object" string="Apply"
-                                            icon="fa-play" invisible="action not in ('create', 'update')"
-                                            groups="sdlc_magento_connector.group_magento_manager"/>
+                                            icon="fa-play"
+                                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('action', 'not in', ['create', 'update'])]}" />
                                     <button name="action_open_target" type="object" string="Open"
-                                            icon="fa-external-link" invisible="not target_id"/>
+                                            icon="fa-external-link" attrs="{'invisible': [('target_id', '=', False)]}" />
                                 </tree>
                             </field>
                         </page>

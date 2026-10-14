@@ -7,13 +7,14 @@ import requests
 
 from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import UserError
-from odoo.tools import SQL
+from .sql_compat import SQL
 from odoo.tools.mimetypes import guess_mimetype
 
 from ..services.magento_api import MagentoAPI
 # Defines ``magento.job``, which this module extends: it must be loaded first.
 from . import magento_job  # noqa: F401
 from .sql_compat import UniqueIndex
+from . import sql_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class MagentoJob(models.Model):
         ran = self.browse()
         for job_id in job_ids:
             self.flush_model()
-            cr.execute(SQL(
+            sql_compat.execute(cr, SQL(
                 "SELECT channel FROM magento_job WHERE id = %s AND state = 'pending' "
                 "FOR UPDATE SKIP LOCKED", job_id,
             ))
@@ -139,12 +140,12 @@ class MagentoJob(models.Model):
             if not row:
                 continue
             channel = row[0]
-            cr.execute(SQL(
+            sql_compat.execute(cr, SQL(
                 "SELECT 1 FROM magento_job WHERE state = 'started' AND channel = %s LIMIT 1", channel,
             ))
             if cr.fetchone():
                 continue
-            cr.execute(SQL(
+            sql_compat.execute(cr, SQL(
                 "SELECT pg_try_advisory_xact_lock(hashtext(%s))", "magento.job.channel:%s" % channel
             ))
             if not cr.fetchone()[0]:
@@ -228,7 +229,7 @@ class MagentoPushErrorMixin(models.AbstractModel):
             # record (REPEATABLE READ then raises a serialization error and the
             # request is retried, finding the job started).
             job.flush_recordset()
-            self.env.cr.execute(SQL("SELECT 1 FROM magento_job WHERE id = %s FOR NO KEY UPDATE", job.id))
+            sql_compat.execute(self.env.cr, SQL("SELECT 1 FROM magento_job WHERE id = %s FOR NO KEY UPDATE", job.id))
             current = set((job.args or [[]])[0] or [])
             if not flags <= current:
                 job.write({"args": [sorted(current | flags)]})

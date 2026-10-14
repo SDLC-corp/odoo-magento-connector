@@ -13,14 +13,14 @@
             <tree string="Tax Mapping" editable="bottom" decoration-danger="not tax_id"
                   decoration-muted="not active">
                 <field name="instance_id" options="{'no_create': True}"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="magento_code"/>
                 <field name="magento_title" optional="show"/>
                 <field name="percent" class="o_magento_num"/>
                 <field name="price_include" widget="boolean_toggle"/>
                 <field name="tax_id" options="{'no_create': True}"/>
                 <field name="auto_created" optional="show" readonly="1"/>
-                <field name="active" column_invisible="1"/>
+                <field name="active" invisible="1"/>
             </tree>
         </field>
     </record>
@@ -65,14 +65,14 @@
         <field name="arch" type="xml">
             <tree string="Payment Methods" editable="bottom" decoration-muted="not active">
                 <field name="instance_id" options="{'no_create': True}"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="magento_method"/>
                 <field name="name" optional="show"/>
                 <field name="journal_id" options="{'no_create': True}"
                        placeholder="Instance default"/>
                 <field name="payment_method_line_id" options="{'no_create': True}" optional="show"/>
                 <field name="refund_method_line_id" options="{'no_create': True}" optional="show"/>
-                <field name="active" column_invisible="1"/>
+                <field name="active" invisible="1"/>
             </tree>
         </field>
     </record>
@@ -112,11 +112,11 @@
         <field name="arch" type="xml">
             <tree string="Carriers" editable="bottom" decoration-muted="not active">
                 <field name="instance_id" options="{'no_create': True}"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="magento_code"/>
                 <field name="name" optional="show"/>
                 <field name="carrier_ref" options="{'no_create': True}"/>
-                <field name="active" column_invisible="1"/>
+                <field name="active" invisible="1"/>
             </tree>
         </field>
     </record>
@@ -142,7 +142,7 @@
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="magento_states"/>
                 <field name="magento_statuses" optional="hide"/>
                 <field name="payment_methods" optional="show"/>
@@ -154,7 +154,7 @@
                 <field name="register_payment" widget="boolean_toggle"/>
                 <field name="validate_delivery" widget="boolean_toggle"/>
                 <field name="lock_order" widget="boolean_toggle"/>
-                <field name="active" column_invisible="1"/>
+                <field name="active" invisible="1"/>
             </tree>
         </field>
     </record>
@@ -165,8 +165,7 @@
         <field name="arch" type="xml">
             <form string="Order Workflow">
                 <sheet>
-                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-secondary"
-                            invisible="active"/>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-secondary" attrs="{'invisible': [('active', '!=', False)]}" />
                     <div class="oe_title">
                         <label for="name"/>
                         <h1><field name="name" placeholder="e.g. Processing and paid"/></h1>
@@ -184,12 +183,12 @@
                         </group>
                         <group string="Then, in this order">
                             <field name="cancel_order"/>
-                            <field name="confirm_order" invisible="cancel_order"/>
-                            <field name="create_invoice" invisible="cancel_order"/>
-                            <field name="post_invoice" invisible="cancel_order"/>
-                            <field name="register_payment" invisible="cancel_order"/>
-                            <field name="validate_delivery" invisible="cancel_order"/>
-                            <field name="lock_order" invisible="cancel_order"/>
+                            <field name="confirm_order" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
+                            <field name="create_invoice" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
+                            <field name="post_invoice" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
+                            <field name="register_payment" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
+                            <field name="validate_delivery" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
+                            <field name="lock_order" attrs="{'invisible': [('cancel_order', '!=', False)]}" />
                         </group>
                     </group>
                     <div class="text-muted small">
@@ -268,15 +267,14 @@
                             <field name="tax_rounding_method"/>
                             <button name="action_apply_tax_rounding_to_company" type="object"
                                     string="Apply to Company" class="btn-link"
-                                    invisible="not tax_rounding_differs"
-                                    confirm="This changes the tax rounding of every document of the company. Continue?"/>
+                                    confirm="This changes the tax rounding of every document of the company. Continue?" attrs="{'invisible': [('tax_rounding_differs', '=', False)]}" />
                         </div>
                         <field name="company_tax_rounding_method" readonly="1"
                                decoration-warning="tax_rounding_differs"/>
                         <field name="tax_rounding_differs" invisible="1"/>
                     </group>
                 </group>
-                <div class="alert alert-warning mb-2" role="alert" invisible="not tax_rounding_differs">
+                <div class="alert alert-warning mb-2" role="alert" attrs="{'invisible': [('tax_rounding_differs', '=', False)]}">
                     The company rounds taxes differently from this Magento store: imported order
                     totals may differ from Magento by a cent. Use <strong>Apply to Company</strong>
                     to align them.
@@ -309,7 +307,7 @@
         <field name="inherit_id" ref="sale_order_form_magento"/>
         <field name="arch" type="xml">
             <xpath expr="//form/sheet/div[hasclass('oe_title')]" position="before">
-                <div class="alert alert-warning" role="alert" invisible="not magento_total_differs">
+                <div class="alert alert-warning" role="alert" attrs="{'invisible': [('magento_total_differs', '=', False)]}">
                     <strong>Total differs from Magento.</strong>
                     The Odoo total is off by
                     <field name="magento_total_difference" class="fw-bold" readonly="1"/>
@@ -323,21 +321,17 @@
                 <field name="magento_workflow_id" readonly="1" options="{'no_open': True}"/>
                 <field name="magento_payment_method" readonly="1"/>
                 <field name="magento_shipping_description" readonly="1"/>
-                <field name="magento_coupon_code" readonly="1" invisible="not magento_coupon_code"/>
-                <field name="magento_discount_description" readonly="1"
-                       invisible="not magento_discount_description"/>
+                <field name="magento_coupon_code" readonly="1" attrs="{'invisible': [('magento_coupon_code', '=', False)]}" />
+                <field name="magento_discount_description" readonly="1" attrs="{'invisible': [('magento_discount_description', '=', False)]}" />
             </xpath>
             <xpath expr="//group[@name='magento_info']/group[2]" position="inside">
                 <field name="magento_grand_total" readonly="1"/>
                 <field name="magento_total_differs" invisible="1"/>
-                <field name="magento_total_difference" readonly="1"
-                       invisible="not magento_total_differs" decoration-warning="1"/>
+                <field name="magento_total_difference" readonly="1" decoration-warning="1" attrs="{'invisible': [('magento_total_differs', '=', False)]}" />
                 <field name="magento_refund_state" readonly="1" widget="badge"
-                       invisible="not magento_refund_state or magento_refund_state == 'none'"
                        decoration-info="magento_refund_state == 'partial'"
-                       decoration-muted="magento_refund_state == 'refunded'"/>
-                <field name="magento_total_refunded" readonly="1"
-                       invisible="not magento_total_refunded"/>
+                       decoration-muted="magento_refund_state == 'refunded'" attrs="{'invisible': ['|', ('magento_refund_state', '=', False), ('magento_refund_state', '=', 'none')]}" />
+                <field name="magento_total_refunded" readonly="1" attrs="{'invisible': [('magento_total_refunded', '=', False)]}" />
             </xpath>
         </field>
     </record>
@@ -352,9 +346,8 @@
                 <attribute name="decoration-warning">magento_total_differs and not magento_sync_conflict</attribute>
             </xpath>
             <xpath expr="//field[@name='amount_total']" position="after">
-                <field name="magento_total_differs" column_invisible="1"/>
-                <field name="magento_total_difference" string="Diff. Magento" optional="show"
-                       invisible="not magento_total_differs" decoration-warning="1"/>
+                <field name="magento_total_differs" invisible="1"/>
+                <field name="magento_total_difference" string="Diff. Magento" optional="show" decoration-warning="1" attrs="{'invisible': [('magento_total_differs', '=', False)]}" />
             </xpath>
             <xpath expr="//field[@name='magento_status']" position="after">
                 <field name="magento_coupon_code" optional="hide"/>

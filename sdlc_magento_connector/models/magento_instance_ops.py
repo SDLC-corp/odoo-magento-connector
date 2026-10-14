@@ -9,6 +9,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 from odoo.modules import module as odoo_module
 from . import cron_compat
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -52,10 +53,10 @@ class MagentoInstance(models.Model):
                 raise ValidationError(_("Log retention must be at least one day."))
 
     def _compute_ops_counts(self):
-        issue_rows = self.env["magento.sync.issue"]._read_group(
+        issue_rows = orm_compat.read_group(self.env["magento.sync.issue"], 
             [("instance_id", "in", self.ids), ("state", "=", "open")], ["instance_id"], ["__count"]
         )
-        job_rows = self.env["magento.job"]._read_group(
+        job_rows = orm_compat.read_group(self.env["magento.job"], 
             [("instance_id", "in", self.ids), ("state", "=", "failed")], ["instance_id"], ["__count"]
         )
         issues = {inst.id: n for inst, n in issue_rows}

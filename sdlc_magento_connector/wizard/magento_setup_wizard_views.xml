@@ -25,7 +25,7 @@
                             <h1 class="mb-0">Connect a Magento store</h1>
                             <div class="text-muted">
                                 One step at a time; each step can be run again.
-                                <span invisible="not instance_id">Configuring
+                                <span attrs="{'invisible': [('instance_id', '=', False)]}">Configuring
                                     <field name="instance_id" readonly="1" nolabel="1" class="d-inline fw-semibold"
                                            options="{'no_open': True}"/>.</span>
                             </div>
@@ -37,10 +37,10 @@
                         <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: .06em;">Progress</span>
                         <field name="progress" widget="progressbar" nolabel="1" class="flex-grow-1"/>
                     </div>
-                    <field name="step_alert" nolabel="1" readonly="1" class="w-100 mb-3" invisible="not step_alert"/>
+                    <field name="step_alert" nolabel="1" readonly="1" class="w-100 mb-3" attrs="{'invisible': [('step_alert', '=', False)]}" />
 
                     <!-- 1. Store URL -->
-                    <div invisible="current_step != 'url'" name="step_url">
+                    <div name="step_url" attrs="{'invisible': [('current_step', '!=', 'url')]}">
                         <h2 class="h4">1. Store URL</h2>
                         <p class="text-muted">
                             Paste the store address the way you have it: <code>shop.example.com</code>, the admin
@@ -49,13 +49,13 @@
                         </p>
                         <group>
                             <group>
-                                <field name="url_input" placeholder="shop.example.com" required="current_step == 'url'"/>
-                                <field name="base_url" invisible="not base_url"/>
+                                <field name="url_input" placeholder="shop.example.com" attrs="{'required': [('current_step', '=', 'url')]}" />
+                                <field name="base_url" attrs="{'invisible': [('base_url', '=', False)]}" />
                                 <field name="name" placeholder="e.g. Main store"/>
                             </group>
                             <group>
                                 <field name="verify_ssl" widget="boolean_toggle"/>
-                                <div colspan="2" class="text-muted small" invisible="not ssl_problem">
+                                <div colspan="2" class="text-muted small" attrs="{'invisible': [('ssl_problem', '=', False)]}">
                                     The certificate is not trusted. Untick Verify SSL only for a test or internal
                                     store, then check the address again.
                                 </div>
@@ -66,7 +66,7 @@
                     </div>
 
                     <!-- 2. Credentials -->
-                    <div invisible="current_step != 'credentials'" name="step_credentials">
+                    <div name="step_credentials" attrs="{'invisible': [('current_step', '!=', 'credentials')]}">
                         <h2 class="h4">2. Credentials</h2>
                         <div class="alert alert-light border mb-3" role="status">
                             <strong>Create the integration in Magento</strong>
@@ -83,16 +83,15 @@
                         </div>
                         <group>
                             <group string="Integration values">
-                                <field name="consumer_key" password="True" invisible="auth_method != 'oauth1'"/>
-                                <field name="consumer_secret" password="True" invisible="auth_method != 'oauth1'"/>
+                                <field name="consumer_key" password="True" attrs="{'invisible': [('auth_method', '!=', 'oauth1')]}" />
+                                <field name="consumer_secret" password="True" attrs="{'invisible': [('auth_method', '!=', 'oauth1')]}" />
                                 <field name="access_token" password="True"/>
-                                <field name="access_token_secret" password="True" invisible="auth_method != 'oauth1'"/>
+                                <field name="access_token_secret" password="True" attrs="{'invisible': [('auth_method', '!=', 'oauth1')]}" />
                             </group>
                             <group string="Options">
                                 <field name="show_advanced" widget="boolean_toggle"/>
-                                <field name="auth_method" widget="radio" invisible="not show_advanced"/>
-                                <div colspan="2" class="text-muted small"
-                                     invisible="not show_advanced or auth_method != 'bearer'">
+                                <field name="auth_method" widget="radio" attrs="{'invisible': [('show_advanced', '=', False)]}" />
+                                <div colspan="2" class="text-muted small" attrs="{'invisible': ['|', ('show_advanced', '=', False), ('auth_method', '!=', 'bearer')]}">
                                     Bearer sends the access token alone. Magento 2.4.4 and later refuse it unless
                                     "Allow OAuth Access Tokens to be used as standalone Bearer tokens" is enabled
                                     (Stores &gt; Configuration &gt; Services &gt; OAuth).
@@ -101,14 +100,14 @@
                         </group>
                         <button name="action_validate_credentials" type="object" string="Validate access"
                                 icon="fa-key" class="btn-secondary"/>
-                        <div class="mt-3" invisible="not diagnostics_html">
+                        <div class="mt-3" attrs="{'invisible': [('diagnostics_html', '=', False)]}">
                             <h3 class="h6 text-uppercase text-muted" style="letter-spacing: .06em;">API access check</h3>
                             <field name="diagnostics_html" nolabel="1" readonly="1"/>
                         </div>
                     </div>
 
                     <!-- 3. Stores -->
-                    <div invisible="current_step != 'stores'" name="step_stores">
+                    <div name="step_stores" attrs="{'invisible': [('current_step', '!=', 'stores')]}">
                         <h2 class="h4">3. Stores</h2>
                         <p class="text-muted">
                             Choose the website and store view this Odoo company syncs with. Its store code
@@ -116,7 +115,7 @@
                         </p>
                         <field name="store_line_ids" nolabel="1">
                             <tree create="0" delete="0" decoration-bf="is_selected" decoration-muted="not is_active">
-                                <field name="is_selected" column_invisible="1"/>
+                                <field name="is_selected" invisible="1"/>
                                 <field name="website_name" readonly="1"/>
                                 <field name="website_magento_id" readonly="1" optional="hide"/>
                                 <field name="store_name" readonly="1"/>
@@ -124,7 +123,7 @@
                                 <field name="store_magento_id" readonly="1"/>
                                 <field name="is_active" readonly="1" widget="boolean"/>
                                 <button name="action_select" type="object" string="Use this store" icon="fa-check"
-                                        class="btn-link" invisible="is_selected"/>
+                                        class="btn-link" attrs="{'invisible': [('is_selected', '!=', False)]}" />
                                 <field name="is_selected" string="Selected" readonly="1" widget="boolean"/>
                             </tree>
                         </field>
@@ -140,7 +139,7 @@
                     </div>
 
                     <!-- 4. Mappings -->
-                    <div invisible="current_step != 'mappings'" name="step_mappings">
+                    <div name="step_mappings" attrs="{'invisible': [('current_step', '!=', 'mappings')]}">
                         <h2 class="h4">4. Mappings</h2>
                         <p class="text-muted">
                             Proposed from the latest Magento orders, the tax rates and the customer groups, and
@@ -162,7 +161,7 @@
                                         <field name="label"/>
                                         <field name="seen_count" readonly="1"/>
                                         <field name="existing" readonly="1"/>
-                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="company_id" invisible="1"/>
                                         <field name="journal_id" options="{'no_create': True}"/>
                                     </tree>
                                 </field>
@@ -175,7 +174,7 @@
                                         <field name="label"/>
                                         <field name="seen_count" readonly="1"/>
                                         <field name="existing" readonly="1"/>
-                                        <field name="carrier_ref" column_invisible="not parent.delivery_installed"/>
+                                        <field name="carrier_ref" attrs="{'column_invisible': [('parent.delivery_installed', '=', False)]}" />
                                     </tree>
                                 </field>
                             </page>
@@ -189,7 +188,7 @@
                                         <field name="price_include" readonly="1"/>
                                         <field name="seen_count" readonly="1"/>
                                         <field name="existing" readonly="1"/>
-                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="company_id" invisible="1"/>
                                         <field name="tax_id" options="{'no_create': True}"/>
                                     </tree>
                                 </field>
@@ -203,7 +202,7 @@
                                         <field name="label" readonly="1" string="Tax Class"/>
                                         <field name="seen_count" readonly="1"/>
                                         <field name="existing" readonly="1"/>
-                                        <field name="company_id" column_invisible="1"/>
+                                        <field name="company_id" invisible="1"/>
                                         <field name="pricelist_id" options="{'no_create': True}"/>
                                     </tree>
                                 </field>
@@ -218,7 +217,7 @@
                     </div>
 
                     <!-- 5. Catalog check -->
-                    <div invisible="current_step != 'catalog'" name="step_catalog">
+                    <div name="step_catalog" attrs="{'invisible': [('current_step', '!=', 'catalog')]}">
                         <h2 class="h4">5. Catalog check</h2>
                         <p class="text-muted">
                             Reads up to 500 Magento products and compares them with Odoo before the first sync:
@@ -227,7 +226,7 @@
                         </p>
                         <button name="action_check_catalog" type="object" string="Run catalog check"
                                 icon="fa-search" class="btn-secondary mb-3"/>
-                        <group invisible="not catalog_sampled">
+                        <group attrs="{'invisible': [('catalog_sampled', '=', False)]}">
                             <group>
                                 <field name="catalog_sampled"/>
                                 <field name="catalog_total"/>
@@ -238,7 +237,7 @@
                                 <field name="catalog_warning_count"/>
                             </group>
                         </group>
-                        <field name="check_line_ids" nolabel="1" readonly="1" invisible="not check_line_ids">
+                        <field name="check_line_ids" nolabel="1" readonly="1" attrs="{'invisible': [('check_line_ids', '=', False)]}">
                             <tree create="0" delete="0">
                                 <field name="severity" widget="badge" decoration-danger="severity == 'error'"
                                        decoration-warning="severity == 'warning'" decoration-info="severity == 'info'"/>
@@ -251,7 +250,7 @@
                     </div>
 
                     <!-- 6. Go live -->
-                    <div invisible="current_step != 'golive'" name="step_golive">
+                    <div name="step_golive" attrs="{'invisible': [('current_step', '!=', 'golive')]}">
                         <h2 class="h4">6. Go live</h2>
                         <p class="text-muted">
                             Choose how the store keeps in sync, then save. "Run first sync now" queues categories,
@@ -260,11 +259,9 @@
                         <group>
                             <group string="Sync scope and schedule">
                                 <field name="auto_sync_enabled" widget="boolean_toggle"/>
-                                <field name="auto_sync_frequency" invisible="not auto_sync_enabled"/>
-                                <field name="auto_sync_hour_interval"
-                                       invisible="not auto_sync_enabled or auto_sync_frequency != 'hourly'"/>
-                                <field name="auto_sync_hour"
-                                       invisible="not auto_sync_enabled or auto_sync_frequency == 'hourly'"/>
+                                <field name="auto_sync_frequency" attrs="{'invisible': [('auto_sync_enabled', '=', False)]}" />
+                                <field name="auto_sync_hour_interval" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '!=', 'hourly')]}" />
+                                <field name="auto_sync_hour" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '=', 'hourly')]}" />
                                 <field name="auto_sync_categories"/>
                                 <field name="auto_sync_products"/>
                                 <field name="auto_sync_customers"/>
@@ -283,15 +280,14 @@
                             </group>
                         </group>
                         <h3 class="h6 text-uppercase text-muted mt-2" style="letter-spacing: .06em;">Known issues</h3>
-                        <div class="text-muted mb-2" invisible="issue_line_ids">No known issue: the store is ready.</div>
-                        <field name="issue_line_ids" nolabel="1" readonly="1" invisible="not issue_line_ids">
+                        <div class="text-muted mb-2" attrs="{'invisible': [('issue_line_ids', '!=', False)]}">No known issue: the store is ready.</div>
+                        <field name="issue_line_ids" nolabel="1" readonly="1" attrs="{'invisible': [('issue_line_ids', '=', False)]}">
                             <tree create="0" delete="0">
                                 <field name="severity" widget="badge" decoration-danger="severity == 'error'"
                                        decoration-warning="severity == 'warning'" decoration-info="severity == 'info'"/>
                                 <field name="step"/>
                                 <field name="message"/>
-                                <button name="action_fix" type="object" string="Fix" icon="fa-wrench" class="btn-link"
-                                        invisible="step == 'golive'"/>
+                                <button name="action_fix" type="object" string="Fix" icon="fa-wrench" class="btn-link" attrs="{'invisible': [('step', '=', 'golive')]}" />
                             </tree>
                         </field>
                         <div class="d-flex flex-wrap gap-2 mt-3">
@@ -310,11 +306,11 @@
                     <div class="d-flex justify-content-between align-items-center border-top pt-3 mt-4">
                         <div>
                             <button name="action_back" type="object" string="Back" icon="fa-arrow-left"
-                                    class="btn-secondary" invisible="is_first_step"/>
+                                    class="btn-secondary" attrs="{'invisible': [('is_first_step', '!=', False)]}" />
                         </div>
                         <div>
                             <button name="action_next" type="object" string="Next" icon="fa-arrow-right"
-                                    class="btn-primary" invisible="is_last_step"/>
+                                    class="btn-primary" attrs="{'invisible': [('is_last_step', '!=', False)]}" />
                         </div>
                     </div>
 
@@ -352,12 +348,12 @@
             <xpath expr="//header/button[@name='action_test_connection']" position="before">
                 <button name="%(sdlc_magento_connector.action_magento_setup_wizard)d" type="action"
                         string="Setup Wizard" icon="fa-magic" context="{'default_instance_id': id}"
-                        groups="sdlc_magento_connector.group_magento_manager" invisible="not id"/>
+                        groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('id', '=', False)]}" />
             </xpath>
             <xpath expr="//notebook" position="before">
                 <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2"
-                     role="status" invisible="not id or state != 'draft'"
-                     groups="sdlc_magento_connector.group_magento_manager">
+                     role="status"
+                     groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': ['|', ('id', '=', False), ('state', '!=', 'draft')]}">
                     <span><strong>Not connected yet.</strong> The setup wizard checks the address, the
                         credentials, the store view, the mappings and the catalog, one step at a time.</span>
                     <button name="%(sdlc_magento_connector.action_magento_setup_wizard)d" type="action"

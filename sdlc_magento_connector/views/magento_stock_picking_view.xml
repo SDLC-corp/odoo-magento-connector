@@ -10,12 +10,11 @@
                         type="object"
                         string="Push Shipment to Magento"
                         class="oe_highlight"
-                        groups="stock.group_stock_user"
-                        invisible="picking_type_code != 'outgoing' or not magento_order_id or magento_shipment_id"/>
+                        groups="stock.group_stock_user" attrs="{'invisible': ['|', '|', ('picking_type_code', '!=', 'outgoing'), ('magento_order_id', '=', False), ('magento_shipment_id', '!=', False)]}" />
             </header>
 
             <xpath expr="//sheet" position="inside">
-                <group string="Magento Shipment" invisible="not magento_order_id">
+                <group string="Magento Shipment" attrs="{'invisible': [('magento_order_id', '=', False)]}">
                     <field name="magento_order_id" readonly="1"/>
                     <field name="magento_increment_id" readonly="1"/>
                     <field name="magento_shipment_increment_id" readonly="1"/>

@@ -37,6 +37,7 @@ from odoo.tools import float_compare
 from ..models.magento_customer import _DEFAULT_GROUP_NAMES
 from ..models.magento_dashboard import MagentoDashboard as _BaseDashboard
 from ..services.magento_api import MagentoAPI
+from ..models import sql_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -404,6 +405,11 @@ class MagentoSetupWizard(models.TransientModel):
                     "%s: %s" % (rule.name, rule._magento_step_labels()) for rule in rules)
             else:
                 wizard.workflow_summary = _("The default order workflows are created when you save.")
+
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
 
     @api.depends("current_step")
     def _compute_display_name(self):
@@ -1118,7 +1124,7 @@ class MagentoSetupWizard(models.TransientModel):
         # Odoo default codes that equal a Magento SKU once case and spaces are ignored.
         loose = {}
         if skus:
-            self.env.cr.execute(
+            sql_compat.execute(self.env.cr, 
                 "SELECT id FROM product_product WHERE default_code IS NOT NULL "
                 "AND lower(btrim(default_code)) = ANY(%s)", [list({sku.lower() for sku in skus})])
             for product in Product.search([("id", "in", [row[0] for row in self.env.cr.fetchall()])]):

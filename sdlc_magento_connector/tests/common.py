@@ -213,6 +213,13 @@ class MagentoTestCommon(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # Odoo 16 does not load a chart of accounts on a bare database (17+ does): load the
+        # generic one, as Odoo 16's own accounting tests do, when the company has none.
+        if not cls.env["account.journal"].search_count([
+                ("type", "=", "sale"), ("company_id", "=", cls.env.company.id)]):
+            chart = cls.env.ref("l10n_generic_coa.configurable_chart_template", raise_if_not_found=False)
+            if chart:
+                chart.try_loading(company=cls.env.company, install_demo=False)
         cls.env = cls.env(context=dict(
             cls.env.context,
             tracking_disable=True,

@@ -44,7 +44,8 @@ from psycopg2.extras import Json
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
-from odoo.tools import SQL, html_sanitize
+from odoo.tools import html_sanitize
+from .sql_compat import SQL
 from odoo.tools.mimetypes import guess_mimetype
 
 from .magento_instance import _short_reason
@@ -53,6 +54,7 @@ from .magento_product import (
     schedule_magento_push,
 )
 from .sql_compat import UniqueIndex
+from . import sql_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -427,7 +429,7 @@ class MagentoProductMap(models.Model):
             record.update_field_translations(fname, translations)
             return
         record.flush_recordset([fname])
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             "UPDATE %(table)s SET %(column)s = COALESCE(%(column)s, '{}'::jsonb) || %(value)s "
             "WHERE id = %(id)s",
             table=SQL.identifier(record._table), column=SQL.identifier(fname),

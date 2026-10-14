@@ -89,6 +89,11 @@ class MagentoTaxMap(models.Model):
         "This Magento tax rate is already mapped for this instance.",
     )
 
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
+
     @api.depends("magento_code", "magento_title", "percent")
     def _compute_display_name(self):
         for record in self:
@@ -487,18 +492,16 @@ class MagentoInstance(models.Model):
         tax group (same accounts) so the order totals show the real rate."""
         Group = self.env["account.tax.group"].sudo()
         name = "Tax %s%%" % _format_percent(percent)
-        domain = [("company_id", "=", company.id), ("name", "=", name)]
+        domain = [("name", "=", name)]  # Odoo 16: tax groups are shared by all companies
         if country:
             domain.append(("country_id", "in", (country.id, False)))
         group = Group.search(domain, limit=1)
         if group:
             return group
         base = company.account_sale_tax_id.tax_group_id
-        if base and base.company_id and base.company_id != company:
-            base = Group.browse()
         if base:
             return base.copy({"name": name, "country_id": country.id if country else base.country_id.id})
-        vals = {"name": name, "company_id": company.id}
+        vals = {"name": name}
         if country:
             vals["country_id"] = country.id
         return Group.create(vals)

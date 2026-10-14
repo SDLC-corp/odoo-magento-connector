@@ -12,8 +12,7 @@
                 <button name="action_open_magento_credit_memo"
                         type="object"
                         class="oe_stat_button"
-                        icon="fa-external-link"
-                        invisible="not magento_credit_memo_id">
+                        icon="fa-external-link" attrs="{'invisible': [('magento_credit_memo_id', '=', False)]}">
                     <field name="magento_credit_memo_display" widget="statinfo" string="Credit Memo"/>
                 </button>
 
@@ -23,7 +22,7 @@
             <!-- Add Magento Information tab -->
             <xpath expr="//notebook" position="inside">
 
-                <page string="Magento" invisible="not magento_sale_order_id">
+                <page string="Magento" attrs="{'invisible': [('magento_sale_order_id', '=', False)]}">
                     <field name="magento_sale_order_id" invisible="1"/>
 
                     <group string="Order Information" col="4">
@@ -59,69 +58,69 @@
         <field name="arch" type="xml">
             <!-- Hide Odoo "Number" column on Credit Memos; we show Magento Credit Memo instead -->
             <xpath expr="//field[@name='name']" position="attributes">
-                <attribute name="column_invisible">context.get('default_move_type') == 'out_refund'</attribute>
+                <attribute name="invisible">context.get('default_move_type') == 'out_refund'</attribute>
             </xpath>
 
             <xpath expr="//field[@name='name']" position="before">
                 <field name="magento_credit_memo_display"
                        string="Credit Memo"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
                 <field name="magento_credit_memo_created_at"
                        string="Created"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
                 <field name="magento_sale_order_name"
                        string="Order #"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
                 <field name="magento_sale_order_created_at"
                        string="Order Date"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
             </xpath>
 
-            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@column_invisible, 'out_invoice')]"
+            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@invisible, 'out_invoice')]"
                    position="attributes">
                 <attribute name="string">Bill-to Name</attribute>
             </xpath>
 
-            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@column_invisible, 'out_invoice')]"
+            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@invisible, 'out_invoice')]"
                    position="after">
                 <field name="magento_refund_state"
                        string="Status"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
                 <field name="magento_refunded_amount"
                        string="Refunded"
                        widget="monetary"
                        options="{'currency_field': 'currency_id'}"
                        optional="show"
-                       column_invisible="context.get('default_move_type') != 'out_refund'"/>
-                <field name="magento_credit_memo_id" column_invisible="1"/>
+                       invisible="context.get('default_move_type') != 'out_refund'" />
+                <field name="magento_credit_memo_id" invisible="1"/>
                 <button name="action_open_magento_credit_memo"
                         type="object"
                         string="View"
                         class="btn-link"
-                        invisible="context.get('default_move_type') != 'out_refund' or not magento_credit_memo_id"/>
+                        invisible="context.get('default_move_type') != 'out_refund'" attrs="{'invisible': [('magento_credit_memo_id', '=', False)]}" />
             </xpath>
 
             <!-- Hide standard invoice columns on Credit Memos (out_refund) to match Magento UI -->
-            <xpath expr="//field[@name='invoice_date'][contains(@column_invisible, 'out_invoice')]"
+            <xpath expr="//field[@name='invoice_date'][contains(@invisible, 'out_invoice')]"
                    position="attributes">
-                <attribute name="column_invisible">context.get('default_move_type') == 'out_refund' or context.get('default_move_type') not in ('out_invoice', 'out_refund', 'out_receipt')</attribute>
+                <attribute name="invisible">context.get('default_move_type') == 'out_refund' or context.get('default_move_type') not in ('out_invoice', 'out_refund', 'out_receipt')</attribute>
             </xpath>
 
             <xpath expr="//field[@name='invoice_date_due']" position="attributes">
-                <attribute name="column_invisible">context.get('default_move_type') == 'out_refund'</attribute>
+                <attribute name="invisible">context.get('default_move_type') == 'out_refund'</attribute>
             </xpath>
 
             <xpath expr="//field[@name='amount_untaxed_signed']" position="attributes">
-                <attribute name="column_invisible">context.get('default_move_type') == 'out_refund'</attribute>
+                <attribute name="invisible">context.get('default_move_type') == 'out_refund'</attribute>
             </xpath>
 
             <xpath expr="//field[@name='payment_state']" position="attributes">
-                <attribute name="column_invisible">context.get('default_move_type') == 'out_refund'</attribute>
+                <attribute name="invisible">context.get('default_move_type') == 'out_refund'</attribute>
             </xpath>
         </field>
     </record>

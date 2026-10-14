@@ -512,8 +512,7 @@ class TestP2Orders(MagentoTestCommon):
         self.sync(data)
         order = self.magento_orders(34)
         self.assertEqual(order.magento_workflow_id, workflow)
-        self.assertEqual(order.state, "sale")
-        self.assertTrue(order.locked)
+        self.assertEqual(order.state, "done")  # Odoo 16: a locked order is done
         self.assertEqual(order.invoice_ids.state, "posted")
         self.assertEqual(order.invoice_ids.amount_total, 36.39)
         self.assertFalse(order.invoice_ids.magento_invoice_id)

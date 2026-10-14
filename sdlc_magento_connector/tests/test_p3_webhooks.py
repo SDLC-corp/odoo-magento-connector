@@ -17,6 +17,7 @@ from odoo.addons.sdlc_magento_connector.models import magento_webhook
 from odoo.addons.sdlc_magento_connector.models.magento_webhook import sign_body
 
 from .common import MagentoTestCommon, build_product
+from odoo.addons.sdlc_magento_connector.models import sql_compat
 
 USER_GROUP = "sdlc_magento_connector.group_magento_user"
 MANAGER_GROUP = "sdlc_magento_connector.group_magento_manager"
@@ -357,7 +358,7 @@ class TestWebhookReceiver(MagentoTestCommon):
         self._post([_event("customer", 2), _event("customer", 3)])
         events = self.Event.search([("instance_id", "=", self.instance.id)])
         old = events[:1]
-        self.env.cr.execute("UPDATE magento_webhook_event SET received_at = %s WHERE id = %s",
+        sql_compat.execute(self.env.cr, "UPDATE magento_webhook_event SET received_at = %s WHERE id = %s",
                             (fields.Datetime.now() - timedelta(days=magento_webhook.EVENT_RETENTION_DAYS + 1),
                              old.id))
         self.env.invalidate_all()

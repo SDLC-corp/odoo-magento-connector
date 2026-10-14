@@ -18,7 +18,7 @@
                 <field name="date_enqueued" string="Enqueued"/>
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="channel" optional="show"/>
                 <field name="method_name" optional="hide"/>
@@ -77,27 +77,22 @@
             <form string="Magento Job" create="0">
                 <header>
                     <button name="action_run_now" type="object" string="Run Now" class="btn-primary"
-                            invisible="state not in ('pending', 'failed')"
-                            groups="sdlc_magento_connector.group_magento_manager"/>
+                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('state', 'not in', ['pending', 'failed'])]}" />
                     <button name="action_retry" type="object" string="Retry"
-                            invisible="state not in ('failed', 'cancelled', 'started')"
-                            groups="sdlc_magento_connector.group_magento_manager"/>
+                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('state', 'not in', ['failed', 'cancelled', 'started'])]}" />
                     <button name="action_cancel" type="object" string="Cancel"
-                            invisible="state not in ('pending', 'failed')"
-                            groups="sdlc_magento_connector.group_magento_manager"/>
-                    <button name="action_open_record" type="object" string="Open Record"
-                            invisible="not record_count"/>
+                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('state', 'not in', ['pending', 'failed'])]}" />
+                    <button name="action_open_record" type="object" string="Open Record" attrs="{'invisible': [('record_count', '=', False)]}" />
                     <field name="state" widget="statusbar" statusbar_visible="pending,started,done"/>
                 </header>
                 <sheet>
-                    <div class="alert alert-danger" role="alert" invisible="state != 'failed'">
+                    <div class="alert alert-danger" role="alert" attrs="{'invisible': [('state', '!=', 'failed')]}">
                         <strong>Job failed</strong>
                         (<field name="error_class" nolabel="1" readonly="1" class="d-inline"/>,
                         attempt <field name="attempts" nolabel="1" readonly="1" class="d-inline"/>).
                         <field name="last_error" nolabel="1" readonly="1" class="d-block mt-1"/>
                     </div>
-                    <div class="alert alert-warning" role="status"
-                         invisible="state != 'pending' or not last_error">
+                    <div class="alert alert-warning" role="status" attrs="{'invisible': ['|', ('state', '!=', 'pending'), ('last_error', '=', False)]}">
                         <strong>Retry scheduled</strong> after a transient error:
                         <field name="last_error" nolabel="1" readonly="1" class="d-block mt-1"/>
                     </div>
@@ -110,15 +105,15 @@
                             <field name="instance_id" readonly="1"/>
                             <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
-                            <field name="channel" readonly="state != 'pending'"/>
-                            <field name="priority" readonly="state != 'pending'"/>
-                            <field name="identity_key" invisible="not identity_key"/>
+                            <field name="channel" attrs="{'readonly': [('state', '!=', 'pending')]}" />
+                            <field name="priority" attrs="{'readonly': [('state', '!=', 'pending')]}" />
+                            <field name="identity_key" attrs="{'invisible': [('identity_key', '=', False)]}" />
                             <field name="user_id"/>
                         </group>
                         <group string="Execution">
-                            <field name="eta" readonly="state != 'pending'"/>
+                            <field name="eta" attrs="{'readonly': [('state', '!=', 'pending')]}" />
                             <field name="attempts"/>
-                            <field name="max_attempts" readonly="state != 'pending'"/>
+                            <field name="max_attempts" attrs="{'readonly': [('state', '!=', 'pending')]}" />
                             <field name="date_enqueued"/>
                             <field name="date_started"/>
                             <field name="date_done"/>
@@ -135,11 +130,11 @@
                             <field name="args_display" nolabel="1" readonly="1"
                                    class="font-monospace text-break"/>
                         </page>
-                        <page string="Result" name="result" invisible="not result">
+                        <page string="Result" name="result" attrs="{'invisible': [('result', '=', False)]}">
                             <field name="result" nolabel="1" readonly="1" class="font-monospace text-break"/>
                         </page>
-                        <page string="Traceback" name="traceback" invisible="not exc_info"
-                              groups="sdlc_magento_connector.group_magento_manager">
+                        <page string="Traceback" name="traceback"
+                              groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('exc_info', '=', False)]}">
                             <field name="exc_info" nolabel="1" readonly="1" class="font-monospace text-break"/>
                         </page>
                     </notebook>

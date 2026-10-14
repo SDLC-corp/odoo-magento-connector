@@ -100,6 +100,11 @@ class MagentoReturnReason(models.Model):
         "This return reason code already exists for this instance.",
     )
 
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
+
     @api.depends("code", "name")
     def _compute_display_name(self):
         for reason in self:
@@ -164,6 +169,11 @@ class MagentoReturnLocationRule(models.Model):
         for rule in self:
             if rule.location_id.usage != "internal":
                 raise ValidationError(_("A return location must be an internal location."))
+
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
 
     @api.depends("warehouse_id", "categ_id", "reason_id", "location_id")
     def _compute_display_name(self):
@@ -528,8 +538,7 @@ class SaleOrder(models.Model):
                 "magento_refund_move_id": move.id,
                 "magento_return_reason_id": reason.id if reason else False,
             }
-            if origin_picking:
-                vals["return_id"] = origin_picking.id
+            # Odoo 16 has no return_id: the moves link to the delivery (origin_returned_move_id).
             # Odoo 18 links a picking to its order through the procurement group: reuse
             # the delivery's, else let the sale_id inverse create the order's group.
             group = origin_picking.group_id or self.procurement_group_id
@@ -564,8 +573,7 @@ class SaleOrder(models.Model):
             try:
                 with self.env.cr.savepoint():
                     for stock_move in picking.move_ids:
-                        stock_move.quantity = stock_move.product_uom_qty
-                        stock_move.picked = True
+                        stock_move.quantity_done = stock_move.product_uom_qty
                     picking._action_done()
                     validated = picking.state == "done"
             except (UserError, ValidationError) as exc:

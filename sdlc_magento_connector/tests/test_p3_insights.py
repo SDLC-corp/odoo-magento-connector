@@ -14,6 +14,7 @@ from odoo.exceptions import UserError
 from odoo.tests import tagged
 
 from .common import MagentoTestCommon
+from odoo.addons.sdlc_magento_connector.models import orm_compat
 
 NOW = datetime(2026, 10, 13, 9, 0, 0)
 LINK_URL = re.compile(r"/web#action=sdlc_magento_connector\.action_magento_digest_link_open&active_id=(\d+)$")
@@ -271,22 +272,22 @@ class TestNetProfit(InsightsCase):
         NetProfit = self.env["magento.net.profit"]
         domain = [("order_id", "in", (a | b | c).ids)]
         # Order-level amounts are allocated to lines: per order, the lines add up.
-        per_order = dict(NetProfit._read_group(domain, ["order_id"], ["revenue_untaxed:sum"]))
+        per_order = dict(orm_compat.read_group(NetProfit, domain, ["order_id"], ["revenue_untaxed:sum"]))
         self.assertAlmostEqual(per_order[a], 44.0)
         self.assertAlmostEqual(per_order[b], 20.0)
         self.assertAlmostEqual(per_order[c], 30.0)
         # The "Orders" measure counts orders, whatever the number of lines.
-        [(orders,)] = NetProfit._read_group(domain, [], ["order_count:sum"])
+        [(orders,)] = orm_compat.read_group(NetProfit, domain, [], ["order_count:sum"])
         self.assertAlmostEqual(orders, 3.0)
-        by_month = {m.strftime("%Y-%m"): v for m, v in NetProfit._read_group(
+        by_month = {m.strftime("%Y-%m"): v for m, v in orm_compat.read_group(NetProfit, 
             domain, ["date_order:month"], ["order_count:sum"])}
         self.assertEqual(by_month, {"2026-08": 1.0, "2026-09": 2.0})
-        by_instance = dict(NetProfit._read_group(domain, ["instance_id"], ["revenue_untaxed:sum"]))
+        by_instance = dict(orm_compat.read_group(NetProfit, domain, ["instance_id"], ["revenue_untaxed:sum"]))
         self.assertAlmostEqual(by_instance[self.instance], 64.0)
         self.assertAlmostEqual(by_instance[second], 30.0)
-        by_payment = dict(NetProfit._read_group(domain, ["payment_method"], ["order_count:sum"]))
+        by_payment = dict(orm_compat.read_group(NetProfit, domain, ["payment_method"], ["order_count:sum"]))
         self.assertEqual(by_payment, {"checkmo": 2.0, "paypal_express": 1.0})
-        by_categ = dict(NetProfit._read_group(domain, ["categ_id"], ["revenue_untaxed:sum"]))
+        by_categ = dict(orm_compat.read_group(NetProfit, domain, ["categ_id"], ["revenue_untaxed:sum"]))
         # Order A: bag line is 10/40 of the products, so 1/4 of the 44 order revenue.
         self.assertAlmostEqual(by_categ[self.category], 11.0 + 20.0)
         # Website: the instance's default website.
@@ -294,7 +295,7 @@ class TestNetProfit(InsightsCase):
             "instance_id": self.instance.id, "magento_id": 1, "code": "base", "name": "Main Website",
             "is_default": True})
         self.env.flush_all()
-        by_website = dict(NetProfit._read_group(domain, ["website_id"], ["order_count:sum"]))
+        by_website = dict(orm_compat.read_group(NetProfit, domain, ["website_id"], ["order_count:sum"]))
         self.assertAlmostEqual(by_website[website], 2.0)
 
     def test_dashboard_net_profit_panel_and_digest(self):

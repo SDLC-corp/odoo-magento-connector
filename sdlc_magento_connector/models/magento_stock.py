@@ -29,10 +29,12 @@ from datetime import timedelta
 
 from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
-from odoo.tools import SQL
+from .sql_compat import SQL
 
 from .magento_bulk import STATUS_COMPLETE, STATUS_OPEN
 from .sql_compat import Constraint, Index
+from . import sql_compat
+from . import orm_compat
 
 QTY_BASIS = [
     ("on_hand", "On Hand"),
@@ -89,6 +91,11 @@ class MagentoStockSourceMap(models.Model):
         "UNIQUE(instance_id, source_code)",
         "This Magento source is already mapped for this instance.",
     )
+
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
 
     @api.depends("source_code", "location_ids")
     def _compute_display_name(self):
@@ -155,7 +162,7 @@ class MagentoStockDirty(models.Model):
                  WHERE l.product_id = ANY(%s::int[])""",
                 changed, todo,
             )
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             """
             WITH changed AS (%s)
             INSERT INTO magento_stock_dirty (instance_id, product_id, date)
@@ -229,13 +236,13 @@ class MagentoInstance(models.Model):
                 raise ValidationError(_("Magento stock locations must be internal locations."))
 
     def _compute_stock_counts(self):
-        maps = self.env["magento.product.map"]._read_group(
+        maps = orm_compat.read_group(self.env["magento.product.map"], 
             self._magento_stock_map_domain(), ["instance_id"], ["__count"])
         map_counts = {inst.id: n for inst, n in maps}
         dirty_counts = {}
         if self.ids:
             self.env["magento.stock.dirty"].flush_model()
-            self.env.cr.execute(SQL(
+            sql_compat.execute(self.env.cr, SQL(
                 "SELECT instance_id, COUNT(DISTINCT product_id) FROM magento_stock_dirty "
                 "WHERE instance_id = ANY(%s) GROUP BY instance_id", self.ids))
             dirty_counts = dict(self.env.cr.fetchall())
@@ -454,12 +461,12 @@ class MagentoInstance(models.Model):
                     self.id)
         if limit:
             query = SQL("%s LIMIT %s", query, limit)
-        self.env.cr.execute(query)
+        sql_compat.execute(self.env.cr, query)
         return self.env.cr.fetchall()
 
     def _magento_clear_dirty_rows(self, row_ids):
         if row_ids:
-            self.env.cr.execute(SQL("DELETE FROM magento_stock_dirty WHERE id = ANY(%s)", list(row_ids)))
+            sql_compat.execute(self.env.cr, SQL("DELETE FROM magento_stock_dirty WHERE id = ANY(%s)", list(row_ids)))
             self.env["magento.stock.dirty"].invalidate_model()
             # A later change in this transaction must flag its product again.
             self.env.cr.precommit.data.pop(_DIRTY_SEEN_KEY, None)
@@ -591,7 +598,7 @@ class MagentoProductMap(models.Model):
         pending = set()
         if self.ids:
             self.env["magento.stock.dirty"].flush_model()
-            self.env.cr.execute(SQL(
+            sql_compat.execute(self.env.cr, SQL(
                 """SELECT DISTINCT m.id FROM magento_product_map m
                      JOIN magento_stock_dirty d
                        ON d.instance_id = m.instance_id AND d.product_id = m.odoo_product_id
@@ -604,7 +611,7 @@ class MagentoProductMap(models.Model):
         if operator not in ("=", "!=") or not isinstance(value, bool):
             return NotImplemented
         self.env["magento.stock.dirty"].flush_model()
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             """SELECT DISTINCT m.id FROM magento_product_map m
                  JOIN magento_stock_dirty d
                    ON d.instance_id = m.instance_id AND d.product_id = m.odoo_product_id"""))
@@ -643,6 +650,14 @@ class StockQuant(models.Model):
         if product_id and location_id and location_id.usage == "internal":
             self.env["magento.stock.dirty"]._magento_mark(
                 product_id.ids, "quantity" if quantity else "reserved")
+        return result
+
+    @api.model
+    def _update_reserved_quantity(self, product_id, location_id, quantity, *args, **kwargs):
+        # Odoo 16 reserves through this method (17+ goes through _update_available_quantity).
+        result = super()._update_reserved_quantity(product_id, location_id, quantity, *args, **kwargs)
+        if product_id and location_id and location_id.usage == "internal":
+            self.env["magento.stock.dirty"]._magento_mark(product_id.ids, "reserved")
         return result
 
 

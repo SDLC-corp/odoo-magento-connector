@@ -14,6 +14,7 @@ from odoo.addons.base.models.res_partner import _tz_get
 from odoo.exceptions import ValidationError, UserError
 from ..services.magento_api import MagentoAPI
 from . import cron_compat
+from . import orm_compat
 
 
 _logger = logging.getLogger(__name__)
@@ -545,11 +546,11 @@ class MagentoInstance(models.Model):
             ("magento.category", "instance_id", "category_count"),
             ("sale.order", "magento_instance_id", "order_count"),
         ):
-            rows = self.env[model]._read_group(
+            rows = orm_compat.read_group(self.env[model], 
                 [(field_name, "in", self.ids)], [field_name], ["__count"]
             )
             counts[key] = {inst.id: n for inst, n in rows}
-        rows = self.env["magento.sync.report"]._read_group(
+        rows = orm_compat.read_group(self.env["magento.sync.report"], 
             [("instance_id", "in", self.ids), ("errors", ">", 0)], ["instance_id"], ["__count"]
         )
         counts["sync_error_count"] = {inst.id: n for inst, n in rows}
@@ -558,7 +559,7 @@ class MagentoInstance(models.Model):
                 rec[key] = per_instance.get(rec.id, 0)
 
     def _compute_pending_job_count(self):
-        rows = self.env["magento.job"]._read_group(
+        rows = orm_compat.read_group(self.env["magento.job"], 
             [("instance_id", "in", self.ids), ("state", "in", ("pending", "started"))],
             ["instance_id"], ["__count"],
         )

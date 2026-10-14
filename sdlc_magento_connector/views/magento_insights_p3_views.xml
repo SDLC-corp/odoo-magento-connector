@@ -38,7 +38,7 @@
                 <button name="action_open_net_profit" type="object" class="oe_stat_button"
                         icon="fa-line-chart" string="Net Profit"/>
                 <button name="action_view_digests" type="object" class="oe_stat_button"
-                        icon="fa-envelope-o" invisible="not digest_count">
+                        icon="fa-envelope-o" attrs="{'invisible': [('digest_count', '=', False)]}">
                     <field name="digest_count" widget="statinfo" string="Digests"/>
                 </button>
             </div>
@@ -79,7 +79,7 @@
                 <field name="orders_yesterday" string="Orders"/>
                 <field name="revenue_yesterday" string="Revenue"/>
                 <field name="recipient_ids" widget="many2many_tags" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
             </tree>
         </field>
@@ -93,8 +93,8 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_mail" type="object" class="oe_stat_button"
-                                icon="fa-paper-plane-o" string="Outgoing Mail" invisible="not mail_id"
-                                groups="base.group_system"/>
+                                icon="fa-paper-plane-o" string="Outgoing Mail"
+                                groups="base.group_system" attrs="{'invisible': [('mail_id', '=', False)]}" />
                     </div>
                     <div class="oe_title">
                         <h1><field name="name"/></h1>
@@ -188,7 +188,7 @@
                 <field name="payment_method" optional="show"/>
                 <field name="product_id" optional="show"/>
                 <field name="categ_id" optional="hide"/>
-                <field name="currency_id" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="order_count" sum="Orders" optional="hide"/>
                 <field name="revenue_total" sum="Total" optional="hide"/>
                 <field name="revenue_untaxed" sum="Total"/>
@@ -257,7 +257,7 @@
         <field name="arch" type="xml">
             <form string="Settings Export/Import">
                 <field name="state" invisible="1"/>
-                <div class="alert alert-info" role="status" invisible="state != 'start'">
+                <div class="alert alert-info" role="status" attrs="{'invisible': [('state', '!=', 'start')]}">
                     <strong>Export</strong> downloads the instance's configuration (settings, tax,
                     payment and carrier mappings, order workflows, return reasons and rules, field
                     mappings, price rules, customer groups, stock sources) as a JSON file. Access
@@ -267,18 +267,16 @@
                 </div>
                 <group>
                     <group>
-                        <field name="instance_id" options="{'no_create': True}"
-                               readonly="state != 'start'"/>
-                        <field name="import_file" filename="import_filename"
-                               invisible="state == 'done'" readonly="state != 'start'"/>
+                        <field name="instance_id" options="{'no_create': True}" attrs="{'readonly': [('state', '!=', 'start')]}" />
+                        <field name="import_file" filename="import_filename" attrs="{'invisible': [('state', '=', 'done')], 'readonly': [('state', '!=', 'start')]}" />
                         <field name="import_filename" invisible="1"/>
                     </group>
-                    <group invisible="state == 'start'">
+                    <group attrs="{'invisible': [('state', '=', 'start')]}">
                         <field name="source_label"/>
-                        <field name="create_count" string="To create" invisible="state != 'preview'"/>
-                        <field name="create_count" string="Created" invisible="state != 'done'"/>
-                        <field name="update_count" string="To update" invisible="state != 'preview'"/>
-                        <field name="update_count" string="Updated" invisible="state != 'done'"/>
+                        <field name="create_count" string="To create" attrs="{'invisible': [('state', '!=', 'preview')]}" />
+                        <field name="create_count" string="Created" attrs="{'invisible': [('state', '!=', 'done')]}" />
+                        <field name="update_count" string="To update" attrs="{'invisible': [('state', '!=', 'preview')]}" />
+                        <field name="update_count" string="Updated" attrs="{'invisible': [('state', '!=', 'done')]}" />
                         <field name="unchanged_count" string="Unchanged"/>
                         <field name="unresolved_count" string="With unresolved references"
                                decoration-warning="unresolved_count &gt; 0"/>
@@ -286,10 +284,10 @@
                                decoration-danger="error_count &gt; 0"/>
                     </group>
                 </group>
-                <div class="alert alert-warning" role="alert" invisible="not note">
+                <div class="alert alert-warning" role="alert" attrs="{'invisible': [('note', '=', False)]}">
                     <field name="note" nolabel="1"/>
                 </div>
-                <field name="line_ids" invisible="state == 'start'" nolabel="1" readonly="1">
+                <field name="line_ids" nolabel="1" readonly="1" attrs="{'invisible': [('state', '=', 'start')]}">
                     <tree decoration-success="action == 'create'" decoration-info="action == 'update'"
                           decoration-muted="action == 'unchanged'" decoration-danger="action == 'error'">
                         <field name="section" width="150px"/>
@@ -300,14 +298,11 @@
                     </tree>
                 </field>
                 <footer>
-                    <button name="action_export" type="object" string="Export to JSON" class="btn-primary"
-                            invisible="state != 'start'"/>
-                    <button name="action_preview" type="object" string="Preview Import" class="btn-secondary"
-                            invisible="state != 'start'"/>
+                    <button name="action_export" type="object" string="Export to JSON" class="btn-primary" attrs="{'invisible': [('state', '!=', 'start')]}" />
+                    <button name="action_preview" type="object" string="Preview Import" class="btn-secondary" attrs="{'invisible': [('state', '!=', 'start')]}" />
                     <button name="action_apply" type="object" string="Apply Import" class="btn-primary"
-                            invisible="state != 'preview'"
-                            confirm="Apply these changes to the instance?"/>
-                    <button name="action_back" type="object" string="Back" invisible="state != 'preview'"/>
+                            confirm="Apply these changes to the instance?" attrs="{'invisible': [('state', '!=', 'preview')]}" />
+                    <button name="action_back" type="object" string="Back" attrs="{'invisible': [('state', '!=', 'preview')]}" />
                     <button string="Close" special="cancel" class="btn-secondary"/>
                 </footer>
             </form>

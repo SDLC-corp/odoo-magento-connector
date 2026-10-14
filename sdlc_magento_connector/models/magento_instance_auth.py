@@ -21,6 +21,7 @@ from odoo.tools.sql import column_exists, create_column, table_exists
 
 from ..services import magento_auth
 from ..services.magento_api import MagentoAPI, MagentoCapabilityError
+from . import sql_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -125,12 +126,12 @@ class MagentoInstanceAuth(models.Model):
         cr = self.env.cr
         if table_exists(cr, self._table) and not column_exists(cr, self._table, "auth_method"):
             create_column(cr, self._table, "auth_method", "varchar")
-            cr.execute(f'UPDATE "{self._table}" SET auth_method = %s', ["bearer"])
+            sql_compat.execute(cr, f'UPDATE "{self._table}" SET auth_method = %s', ["bearer"])
             _logger.info("magento_instance: %s existing instance(s) kept on Bearer auth", cr.rowcount)
 
     def init(self):
         super().init()
-        self.env.cr.execute(
+        sql_compat.execute(self.env.cr, 
             f'UPDATE "{self._table}" SET auth_method = %s WHERE auth_method IS NULL', ["bearer"]
         )
 

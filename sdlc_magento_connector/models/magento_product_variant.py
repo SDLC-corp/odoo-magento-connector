@@ -43,12 +43,14 @@ import requests
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
-from odoo.tools import SQL
+from .sql_compat import SQL
 
 from ..services.magento_api import MagentoAPI
 from .magento_instance import _SYNC_BATCH_SIZE, _SyncStats, _short_reason
 from .magento_product import magento_variant_products
 from .sql_compat import UniqueIndex
+from . import sql_compat
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -290,7 +292,7 @@ class MagentoProductMap(models.Model):
     def _compute_magento_child_count(self):
         counts = {}
         if self.ids:
-            for parent, count in self.env["magento.product.link"]._read_group(
+            for parent, count in orm_compat.read_group(self.env["magento.product.link"], 
                 [("parent_map_id", "in", self.ids)], ["parent_map_id"], ["__count"],
             ):
                 counts[parent.id] = count
@@ -964,7 +966,6 @@ class MagentoInstance(models.Model):
                     "product_tmpl_id": template.id,
                     "attribute_id": attribute.id,
                     "value_ids": [(6, 0, used.ids)],
-                    "sequence": index,
                 })
         self._magento_ensure_template_values(touched)
 
@@ -984,7 +985,7 @@ class MagentoInstance(models.Model):
                     to_create.append({
                         "product_attribute_value_id": value.id,
                         "attribute_line_id": line.id,
-                        "price_extra": value.default_extra_price,
+                        "price_extra": 0.0,  # Odoo 16: no default_extra_price on values
                     })
                 elif not ptav.ptav_active:
                     ptav.ptav_active = True
@@ -1114,11 +1115,11 @@ class MagentoInstance(models.Model):
             for field in template._fields.values()
             if field.type == "many2many" and field.store
         }
-        cr.execute(_TEMPLATE_FK_SQL)
+        sql_compat.execute(cr, _TEMPLATE_FK_SQL)
         for table, column in cr.fetchall():
             if (table, column) in own:
                 continue
-            cr.execute(SQL("SELECT 1 FROM %s WHERE %s = %s LIMIT 1",
+            sql_compat.execute(cr, SQL("SELECT 1 FROM %s WHERE %s = %s LIMIT 1",
                            SQL.identifier(table), SQL.identifier(column), template.id))
             if cr.fetchone():
                 return True

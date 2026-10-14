@@ -68,6 +68,7 @@ from odoo.tools import float_compare
 
 from ..services.magento_api import MagentoAPI
 from .magento_pricing import ALL_GROUPS, _PRICED_TYPES
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -181,7 +182,7 @@ class MagentoInstance(models.Model):
     tier_import_count = fields.Integer(string="Imported Tier Prices", compute="_compute_tier_import_count")
 
     def _compute_tier_import_count(self):
-        counts = dict(self.env["magento.tier.price.import"]._read_group(
+        counts = dict(orm_compat.read_group(self.env["magento.tier.price.import"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"],
         ))
         for instance in self:

@@ -1,12 +1,11 @@
 /** @odoo-module **/
 
-import { loadBundle } from "@web/core/assets";
+import { loadJS } from "@web/core/assets";
 import { _t } from "@web/core/l10n/translation";
 import { deserializeDateTime, formatDateTime } from "@web/core/l10n/dates";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { formatInteger, formatMonetary } from "@web/views/fields/formatters";
-import { standardActionServiceProps } from "@web/webclient/actions/action_service";
 import { Component, onWillStart, onWillUnmount, useEffect, useRef, useState } from "@odoo/owl";
 
 const { DateTime } = luxon;
@@ -16,7 +15,7 @@ const INSTANCE_DOTS = ["#eb5202", "#514943", "#007bdb", "#79a22e", "#b84002", "#
 
 export class MagentoConsole extends Component {
     static template = "sdlc_magento_connector.MagentoConsole";
-    static props = { ...standardActionServiceProps };
+    static props = ["*"];  // Odoo 16: action props are not standardised
 
     setup() {
         this.orm = useService("orm");
@@ -39,7 +38,7 @@ export class MagentoConsole extends Component {
         onWillStart(async () => {
             const [navLinks] = await Promise.all([
                 this.orm.call("magento.dashboard", "get_nav_links", []).catch(() => []),
-                loadBundle("web.chartjs_lib"),
+                loadJS("/web/static/lib/Chart/Chart.js"),  // Odoo 16 has no chartjs bundle
             ]);
             this.state.navLinks = navLinks;
             await this.load();

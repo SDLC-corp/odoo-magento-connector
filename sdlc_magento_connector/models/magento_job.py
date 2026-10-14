@@ -18,9 +18,11 @@ import requests
 from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 from odoo.modules import module as odoo_module
-from odoo.tools import SQL, mute_logger
+from odoo.tools import mute_logger
+from .sql_compat import SQL
 from .sql_compat import Index, UniqueIndex
 from . import cron_compat
+from . import sql_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -324,7 +326,7 @@ class MagentoJob(models.Model):
         """Lock the next ready job (priority, eta, id) of a channel with no started job."""
         self.flush_model()
         now = fields.Datetime.now()
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             """
             SELECT j.id, j.channel
               FROM magento_job j
@@ -346,7 +348,7 @@ class MagentoJob(models.Model):
                 continue
             tried.add(channel)
             # Serialises two workers that both saw the channel idle.
-            self.env.cr.execute(SQL(
+            sql_compat.execute(self.env.cr, SQL(
                 "SELECT pg_try_advisory_xact_lock(hashtext(%s))", "magento.job.channel:%s" % channel
             ))
             if self.env.cr.fetchone()[0]:
@@ -365,7 +367,7 @@ class MagentoJob(models.Model):
         candidates = self.search([("state", "=", "started"), ("date_started", "<", now - _STALE_AFTER)])
         if not candidates:
             return candidates
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             "SELECT id FROM magento_job WHERE id IN %s FOR UPDATE SKIP LOCKED",
             tuple(candidates.ids),
         ))
@@ -392,7 +394,7 @@ class MagentoJob(models.Model):
         # The commit above released the row lock taken when the job was acquired;
         # hold it again for the whole run so other workers never treat a
         # long-running job as interrupted (``_requeue_stale_jobs``).
-        self.env.cr.execute(SQL("SELECT id FROM magento_job WHERE id = %s FOR UPDATE", job.id))
+        sql_compat.execute(self.env.cr, SQL("SELECT id FROM magento_job WHERE id = %s FOR UPDATE", job.id))
         try:
             with self.env.cr.savepoint():
                 result = job._perform()
@@ -470,7 +472,7 @@ class MagentoJob(models.Model):
         if not self.ids:
             return set()
         self.flush_recordset()
-        self.env.cr.execute(SQL(
+        sql_compat.execute(self.env.cr, SQL(
             "SELECT id FROM magento_job WHERE id IN %s FOR UPDATE SKIP LOCKED", tuple(self.ids),
         ))
         return {row[0] for row in self.env.cr.fetchall()}

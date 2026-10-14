@@ -32,7 +32,7 @@
                 <field name="event_uid" optional="hide"/>
                 <field name="delivery_id" optional="hide"/>
                 <field name="instance_id" optional="hide"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
             </tree>
         </field>
@@ -44,8 +44,7 @@
         <field name="arch" type="xml">
             <form string="Real-time Event" create="0" edit="0">
                 <header>
-                    <button name="action_open_job" type="object" string="Open Job"
-                            invisible="not job_id"/>
+                    <button name="action_open_job" type="object" string="Open Job" attrs="{'invisible': [('job_id', '=', False)]}" />
                     <field name="state" widget="statusbar"/>
                 </header>
                 <sheet>
@@ -56,8 +55,8 @@
                             <field name="event_type"/>
                             <field name="magento_id"/>
                             <field name="magento_ref"/>
-                            <field name="note" invisible="not note"/>
-                            <field name="return_to_stock_items" invisible="entity != 'creditmemo'"/>
+                            <field name="note" attrs="{'invisible': [('note', '=', False)]}" />
+                            <field name="return_to_stock_items" attrs="{'invisible': [('entity', '!=', 'creditmemo')]}" />
                         </group>
                         <group string="Delivery">
                             <field name="occurred_at"/>
@@ -120,22 +119,20 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_webhook_events" type="object"
-                        class="oe_stat_button" icon="fa-bolt"
-                        invisible="not webhook_enabled">
+                        class="oe_stat_button" icon="fa-bolt" attrs="{'invisible': [('webhook_enabled', '=', False)]}">
                     <field name="webhook_event_count" widget="statinfo" string="Pushes (24 h)"/>
                 </button>
             </div>
             <page name="scheduling" position="after">
                 <page string="Real-time" name="magento_realtime">
-                    <div class="alert alert-info mb-3" role="status" invisible="webhook_enabled">
+                    <div class="alert alert-info mb-3" role="status" attrs="{'invisible': [('webhook_enabled', '!=', False)]}">
                         Magento Open Source has no outgoing webhooks. The free
                         <b>SDLC_OdooConnector</b> Magento module (folder
                         <code>magento_extension/SDLC/OdooConnector</code> of this connector) records
                         each change in an outbox and pushes it here, signed, about once a minute.
                         Scheduled polling keeps running as the safety net.
                     </div>
-                    <div class="alert alert-danger mb-3" role="alert"
-                         invisible="webhook_health != 'rejecting'">
+                    <div class="alert alert-danger mb-3" role="alert" attrs="{'invisible': [('webhook_health', '!=', 'rejecting')]}">
                         <strong>Odoo is rejecting pushes.</strong>
                         <field name="last_webhook_rejection" readonly="1" class="d-block"/>
                         Check that the secret and URL in Magento match this tab and that both clocks are on time.
@@ -143,28 +140,26 @@
                     <group>
                         <group string="Real-time Push">
                             <field name="webhook_enabled" widget="boolean_toggle"/>
-                            <field name="webhook_health" widget="badge" invisible="not webhook_enabled"
+                            <field name="webhook_health" widget="badge"
                                    decoration-success="webhook_health == 'healthy'"
                                    decoration-warning="webhook_health in ('waiting', 'stale')"
-                                   decoration-danger="webhook_health == 'rejecting'"/>
-                            <field name="webhook_base_url" invisible="not webhook_enabled"
-                                   placeholder="Defaults to web.base.url"/>
-                            <field name="webhook_url" widget="CopyClipboardChar"
-                                   invisible="not webhook_enabled"/>
+                                   decoration-danger="webhook_health == 'rejecting'" attrs="{'invisible': [('webhook_enabled', '=', False)]}" />
+                            <field name="webhook_base_url"
+                                   placeholder="Defaults to web.base.url" attrs="{'invisible': [('webhook_enabled', '=', False)]}" />
+                            <field name="webhook_url" widget="CopyClipboardChar" attrs="{'invisible': [('webhook_enabled', '=', False)]}" />
                             <field name="webhook_secret" widget="CopyClipboardChar" password="True"
-                                   invisible="not webhook_enabled"
-                                   groups="sdlc_magento_connector.group_magento_manager"/>
+                                   groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('webhook_enabled', '=', False)]}" />
                         </group>
-                        <group string="Activity (24 h)" invisible="not webhook_enabled">
+                        <group string="Activity (24 h)" attrs="{'invisible': [('webhook_enabled', '=', False)]}">
                             <field name="last_webhook_at"/>
                             <field name="webhook_event_count" class="o_field_integer"/>
                             <field name="webhook_queued_count" class="o_field_integer"/>
                             <field name="webhook_rejected_count" class="o_field_integer"/>
-                            <field name="last_webhook_rejected_at" invisible="not last_webhook_rejected_at"/>
+                            <field name="last_webhook_rejected_at" attrs="{'invisible': [('last_webhook_rejected_at', '=', False)]}" />
                         </group>
                     </group>
-                    <div class="d-flex flex-wrap gap-2 mb-3" invisible="not webhook_enabled"
-                         groups="sdlc_magento_connector.group_magento_manager">
+                    <div class="d-flex flex-wrap gap-2 mb-3"
+                         groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('webhook_enabled', '=', False)]}">
                         <button name="action_webhook_regenerate_secret" type="object"
                                 string="Regenerate Secret" icon="fa-refresh" class="btn-secondary"
                                 confirm="Magento pushes are rejected until the new secret is saved in Magento. Continue?"/>
@@ -174,16 +169,15 @@
                         <button name="action_view_webhook_events" type="object"
                                 string="All Events" icon="fa-list" class="btn-link"/>
                     </div>
-                    <group invisible="not webhook_enabled">
+                    <group attrs="{'invisible': [('webhook_enabled', '=', False)]}">
                         <group string="Polling Fallback">
                             <field name="webhook_reduces_polling"/>
-                            <field name="webhook_poll_interval_hours"
-                                   invisible="not webhook_reduces_polling"/>
-                            <field name="webhook_last_poll_at" invisible="not webhook_reduces_polling"/>
+                            <field name="webhook_poll_interval_hours" attrs="{'invisible': [('webhook_reduces_polling', '=', False)]}" />
+                            <field name="webhook_last_poll_at" attrs="{'invisible': [('webhook_reduces_polling', '=', False)]}" />
                         </group>
                     </group>
-                    <separator string="Latest Events" invisible="not webhook_enabled"/>
-                    <field name="webhook_recent_event_ids" nolabel="1" readonly="1" invisible="not webhook_enabled">
+                    <separator string="Latest Events" attrs="{'invisible': [('webhook_enabled', '=', False)]}" />
+                    <field name="webhook_recent_event_ids" nolabel="1" readonly="1" attrs="{'invisible': [('webhook_enabled', '=', False)]}">
                         <tree decoration-danger="state == 'rejected'"
                               decoration-muted="state == 'ignored'">
                             <field name="received_at"/>

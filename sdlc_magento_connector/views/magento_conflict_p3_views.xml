@@ -20,7 +20,7 @@
                 <field name="magento_increment_id" optional="show"/>
                 <field name="partner_id" optional="hide"/>
                 <field name="instance_id" optional="hide"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="conflict_type" string="Type"/>
                 <field name="summary"/>
@@ -89,20 +89,15 @@
                 <header>
                     <button name="action_accept" type="object" string="Apply Magento changes"
                             class="btn-primary"
-                            invisible="state != 'open' or not can_accept or conflict_type in ('address_changed', 'customer_changed', 'status_regressed', 'payment_changed')"
-                            confirm="The order is unlocked and its lines are rewritten from Magento. Continue?"/>
+                            confirm="The order is unlocked and its lines are rewritten from Magento. Continue?" attrs="{'invisible': ['|', '|', ('state', '!=', 'open'), ('can_accept', '=', False), ('conflict_type', 'in', ['address_changed', 'customer_changed', 'status_regressed', 'payment_changed'])]}" />
                     <button name="action_accept" type="object" string="Apply new address"
-                            class="btn-primary"
-                            invisible="state != 'open' or not can_accept or conflict_type != 'address_changed'"/>
+                            class="btn-primary" attrs="{'invisible': ['|', '|', ('state', '!=', 'open'), ('can_accept', '=', False), ('conflict_type', '!=', 'address_changed')]}" />
                     <button name="action_accept" type="object" string="Use Magento customer"
                             class="btn-primary"
-                            invisible="state != 'open' or not can_accept or conflict_type != 'customer_changed'"
-                            confirm="The Odoo order is re-assigned to the Magento customer. Continue?"/>
+                            confirm="The Odoo order is re-assigned to the Magento customer. Continue?" attrs="{'invisible': ['|', '|', ('state', '!=', 'open'), ('can_accept', '=', False), ('conflict_type', '!=', 'customer_changed')]}" />
                     <button name="action_accept" type="object" string="Accept Magento"
-                            class="btn-primary"
-                            invisible="state != 'open' or not can_accept or conflict_type not in ('status_regressed', 'payment_changed')"/>
-                    <button name="action_keep" type="object" string="Keep Odoo"
-                            invisible="state != 'open'"/>
+                            class="btn-primary" attrs="{'invisible': ['|', '|', ('state', '!=', 'open'), ('can_accept', '=', False), ('conflict_type', 'not in', ['status_regressed', 'payment_changed'])]}" />
+                    <button name="action_keep" type="object" string="Keep Odoo" attrs="{'invisible': [('state', '!=', 'open')]}" />
                     <field name="state" widget="statusbar" statusbar_visible="open,accepted,kept"/>
                 </header>
                 <sheet>
@@ -121,13 +116,11 @@
                         </span>
                         <h1><field name="order_id" readonly="1" options="{'no_open': True}"/></h1>
                     </div>
-                    <div role="alert" class="alert alert-danger"
-                         invisible="state != 'open' or severity != 'crit'">
+                    <div role="alert" class="alert alert-danger" attrs="{'invisible': ['|', ('state', '!=', 'open'), ('severity', '!=', 'crit')]}">
                         <strong>Critical.</strong>
                         <field name="guidance" nolabel="1" readonly="1" class="d-block mt-1"/>
                     </div>
-                    <div role="status" class="alert alert-warning"
-                         invisible="state != 'open' or severity == 'crit'">
+                    <div role="status" class="alert alert-warning" attrs="{'invisible': ['|', ('state', '!=', 'open'), ('severity', '=', 'crit')]}">
                         <field name="guidance" nolabel="1" readonly="1" class="d-block"/>
                     </div>
                     <group>
@@ -147,8 +140,8 @@
                             <field name="can_accept"/>
                             <field name="detected_at"/>
                             <field name="magento_updated_at"/>
-                            <field name="resolved_by" invisible="state == 'open'" placeholder="Automatic"/>
-                            <field name="resolved_date" invisible="state == 'open'"/>
+                            <field name="resolved_by" placeholder="Automatic" attrs="{'invisible': [('state', '=', 'open')]}" />
+                            <field name="resolved_date" attrs="{'invisible': [('state', '=', 'open')]}" />
                         </group>
                     </group>
                     <notebook>
@@ -201,7 +194,7 @@
                 <field name="magento_state" optional="hide"/>
                 <field name="source" widget="badge"/>
                 <field name="is_regression" widget="boolean" optional="show"/>
-                <field name="is_transition" column_invisible="1"/>
+                <field name="is_transition" invisible="1"/>
                 <field name="comment" optional="show"/>
             </tree>
         </field>
@@ -215,25 +208,23 @@
         <field name="arch" type="xml">
             <xpath expr="//div[@name='button_box']" position="inside">
                 <button name="action_view_magento_conflicts" type="object" class="oe_stat_button"
-                        icon="fa-exchange" invisible="not is_magento_order"
-                        groups="sdlc_magento_connector.group_magento_user">
+                        icon="fa-exchange"
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('is_magento_order', '=', False)]}">
                     <field name="magento_conflict_count" widget="statinfo" string="Conflicts"/>
                 </button>
             </xpath>
             <xpath expr="//div[field[@name='magento_conflict_note']]" position="replace">
-                <div class="alert alert-danger" role="alert" invisible="not magento_sync_conflict">
+                <div class="alert alert-danger" role="alert" attrs="{'invisible': [('magento_sync_conflict', '=', False)]}">
                     <strong>Magento conflict.</strong>
                     This order and its Magento order differ; nothing was overwritten in Odoo.
                     <button name="action_view_magento_conflicts" type="object" class="btn btn-link p-0 align-baseline"
                             string="Review the conflicts" groups="sdlc_magento_connector.group_magento_user"/>
-                    <field name="magento_conflict_note" nolabel="1" readonly="1" class="d-block mt-1"
-                           invisible="not magento_conflict_note"/>
+                    <field name="magento_conflict_note" nolabel="1" readonly="1" class="d-block mt-1" attrs="{'invisible': [('magento_conflict_note', '=', False)]}" />
                 </div>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="Magento Status History" name="magento_status_history"
-                      invisible="not is_magento_order"
-                      groups="sdlc_magento_connector.group_magento_user">
+                      groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('is_magento_order', '=', False)]}">
                     <field name="magento_status_event_ids" readonly="1">
                         <tree string="Magento Status History" create="0" edit="0" delete="0"
                               decoration-danger="is_regression" decoration-muted="not is_transition">
@@ -244,7 +235,7 @@
                             <field name="magento_state" optional="hide"/>
                             <field name="source" widget="badge"/>
                             <field name="is_regression" widget="boolean" optional="show"/>
-                            <field name="is_transition" column_invisible="1"/>
+                            <field name="is_transition" invisible="1"/>
                             <field name="comment" optional="show"/>
                         </tree>
                     </field>

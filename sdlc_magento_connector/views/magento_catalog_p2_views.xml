@@ -38,52 +38,46 @@
                            decoration-info="type_id == 'configurable'"
                            decoration-primary="type_id == 'bundle'"
                            decoration-muted="type_id == 'grouped'"/>
-                    <span class="badge rounded-pill text-bg-light" invisible="magento_child_count == 0">
+                    <span class="badge rounded-pill text-bg-light" attrs="{'invisible': [('magento_child_count', '=', 0)]}">
                         <field name="magento_child_count" class="o_field_integer"/>
-                        <span invisible="type_id != 'configurable'"> variants</span>
-                        <span invisible="type_id == 'configurable'"> components</span>
+                        <span attrs="{'invisible': [('type_id', '!=', 'configurable')]}"> variants</span>
+                        <span attrs="{'invisible': [('type_id', '=', 'configurable')]}"> components</span>
                     </span>
                 </div>
             </xpath>
             <field name="odoo_product_id" position="after">
-                <field name="odoo_template_id" readonly="1" invisible="not odoo_template_id"/>
-                <field name="odoo_categ_id" invisible="not odoo_template_id"/>
+                <field name="odoo_template_id" readonly="1" attrs="{'invisible': [('odoo_template_id', '=', False)]}" />
+                <field name="odoo_categ_id" attrs="{'invisible': [('odoo_template_id', '=', False)]}" />
             </field>
             <xpath expr="//notebook" position="inside">
-                <page string="Variants / Components" name="magento_children"
-                      invisible="type_id not in ('configurable', 'bundle', 'grouped')">
-                    <div class="text-muted small mb-2" invisible="type_id != 'configurable'">
+                <page string="Variants / Components" name="magento_children" attrs="{'invisible': [('type_id', 'not in', ['configurable', 'bundle', 'grouped'])]}">
+                    <div class="text-muted small mb-2" attrs="{'invisible': [('type_id', '!=', 'configurable')]}">
                         Each child SKU of the configurable is a variant of the Odoo template and
                         keeps its own Magento binding, so orders resolve by child SKU.
                     </div>
-                    <div class="text-muted small mb-2" invisible="type_id != 'bundle'">
+                    <div class="text-muted small mb-2" attrs="{'invisible': [('type_id', '!=', 'bundle')]}">
                         Bundle options and their products. With Manufacturing installed, the
                         default selection becomes a kit bill of materials.
                     </div>
-                    <div class="text-muted small mb-2" invisible="type_id != 'grouped'">
+                    <div class="text-muted small mb-2" attrs="{'invisible': [('type_id', '!=', 'grouped')]}">
                         Products shown together by this grouped product. Magento sells the
                         products, not the group.
                     </div>
                     <field name="child_link_ids" nolabel="1" readonly="1">
                         <tree string="Variants and Components" decoration-muted="not child_map_id">
-                            <field name="option_title" optional="show"
-                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="option_title" optional="show" attrs="{'column_invisible': [('parent.type_id', '!=', 'bundle')]}" />
                             <field name="child_sku"/>
                             <field name="child_map_id" optional="hide"/>
                             <field name="child_product_id" string="Odoo Product / Variant"/>
-                            <field name="qty" optional="show"
-                                   column_invisible="parent.type_id == 'configurable'"/>
-                            <field name="is_default" optional="show"
-                                   column_invisible="parent.type_id != 'bundle'"/>
-                            <field name="option_required" optional="hide"
-                                   column_invisible="parent.type_id != 'bundle'"/>
-                            <field name="price" optional="hide"
-                                   column_invisible="parent.type_id != 'bundle'"/>
+                            <field name="qty" optional="show" attrs="{'column_invisible': [('parent.type_id', '=', 'configurable')]}" />
+                            <field name="is_default" optional="show" attrs="{'column_invisible': [('parent.type_id', '!=', 'bundle')]}" />
+                            <field name="option_required" optional="hide" attrs="{'column_invisible': [('parent.type_id', '!=', 'bundle')]}" />
+                            <field name="price" optional="hide" attrs="{'column_invisible': [('parent.type_id', '!=', 'bundle')]}" />
                             <field name="position" optional="hide"/>
                         </tree>
                     </field>
                 </page>
-                <page string="Part Of" name="magento_part_of" invisible="not parent_link_ids">
+                <page string="Part Of" name="magento_part_of" attrs="{'invisible': [('parent_link_ids', '=', False)]}">
                     <field name="parent_link_ids" nolabel="1" readonly="1">
                         <tree string="Part Of">
                             <field name="parent_map_id" string="Configurable / Bundle / Grouped"/>
@@ -211,7 +205,7 @@
                 <field name="odoo_attribute_id"/>
                 <field name="option_count" class="o_field_integer"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
             </tree>
         </field>
@@ -298,9 +292,9 @@
                 <group name="catalog_import_p2">
                     <group string="Categories">
                         <field name="magento_mirror_categories"/>
-                        <field name="magento_categ_root_id" invisible="not magento_mirror_categories"/>
+                        <field name="magento_categ_root_id" attrs="{'invisible': [('magento_mirror_categories', '=', False)]}" />
                         <field name="magento_product_categ_policy"/>
-                        <field name="magento_public_categories" invisible="not magento_mirror_categories"/>
+                        <field name="magento_public_categories" attrs="{'invisible': [('magento_mirror_categories', '=', False)]}" />
                     </group>
                     <group string="Configurable, Bundle and Grouped Products">
                         <field name="import_products_storable"/>

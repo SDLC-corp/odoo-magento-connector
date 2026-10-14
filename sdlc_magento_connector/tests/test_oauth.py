@@ -14,6 +14,7 @@ from odoo.addons.sdlc_magento_connector.services import magento_auth
 from odoo.addons.sdlc_magento_connector.services.magento_api import MagentoAPI
 
 from .common import MAGENTO_BASE_URL, MagentoTestCommon, make_response
+from odoo.addons.sdlc_magento_connector.models import sql_compat
 
 USER_GROUP = "sdlc_magento_connector.group_magento_user"
 MANAGER_GROUP = "sdlc_magento_connector.group_magento_manager"
@@ -197,13 +198,13 @@ class TestOAuthApi(MagentoTestCommon):
         Instance = self.env["magento.instance"]
         cr = self.env.cr
         # Upgrade from a version without the column: _auto_init keeps old rows on Bearer.
-        cr.execute("ALTER TABLE magento_instance DROP COLUMN auth_method")
+        sql_compat.execute(cr, "ALTER TABLE magento_instance DROP COLUMN auth_method")
         Instance._keep_existing_instances_on_bearer()  # the step _auto_init runs first
         self.env.invalidate_all()
         self.assertEqual(self.oauth_instance.auth_method, "bearer")
         self.assertEqual(self.instance.auth_method, "bearer")
         # A NULL left behind is repaired on update (init) and read as Bearer meanwhile.
-        cr.execute("UPDATE magento_instance SET auth_method = NULL WHERE id = %s", [self.instance.id])
+        sql_compat.execute(cr, "UPDATE magento_instance SET auth_method = NULL WHERE id = %s", [self.instance.id])
         self.env.invalidate_all()
         self.assertFalse(self.instance.auth_method)
         recorder = self._record(lambda prepared: make_response(200, []))

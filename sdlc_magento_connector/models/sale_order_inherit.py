@@ -7,11 +7,14 @@ from markupsafe import Markup, escape
 
 from odoo import Command, api, fields, models, _
 from odoo.exceptions import UserError
-from odoo.tools import SQL, email_normalize, float_compare
+from odoo.tools import email_normalize, float_compare
+from .sql_compat import SQL
 
 from ..services.magento_api import MagentoAPI
 from .magento_instance import _SyncStats
 from .sql_compat import Constraint
+from . import sql_compat
+from . import orm_compat
 
 
 _logger = logging.getLogger(__name__)
@@ -166,7 +169,7 @@ class SaleOrder(models.Model):
         open_orders = set()
         ids = [order_id for order_id in self.ids if order_id]
         if ids:
-            groups = self.env["magento.order.conflict"].sudo()._read_group(
+            groups = orm_compat.read_group(self.env["magento.order.conflict"].sudo(), 
                 [("order_id", "in", ids), ("state", "=", "open")], ["order_id"], ["__count"],
             )
             open_orders = {order.id for order, count in groups if count}
@@ -177,7 +180,7 @@ class SaleOrder(models.Model):
         counts = {}
         ids = [order_id for order_id in self.ids if order_id]
         if ids:
-            groups = self.env["magento.order.conflict"].sudo()._read_group(
+            groups = orm_compat.read_group(self.env["magento.order.conflict"].sudo(), 
                 [("order_id", "in", ids), ("state", "=", "open")], ["order_id"], ["__count"],
             )
             counts = {order.id: count for order, count in groups}
@@ -937,7 +940,7 @@ class SaleOrder(models.Model):
         keep_removed = self.env.context.get("magento_keep_removed_lines")
         for key, line in existing.items():
             if key not in seen:
-                if keep_removed and self.state == "sale":
+                if keep_removed and self.state in ("sale", "done"):
                     # Confirmed lines cannot be deleted: a removed Magento item gets qty 0.
                     if line.product_uom_qty:
                         commands.append(Command.update(line.id, {"product_uom_qty": 0.0}))
@@ -1659,7 +1662,7 @@ class SaleOrder(models.Model):
         for order in self:
             if order.state == "cancel":
                 continue
-            if order.locked:
+            if order.state == "done":  # locked
                 order.action_unlock()
             order.with_context(skip_magento_sync=True, magento_skip_push=True)._action_cancel()
 
@@ -1671,7 +1674,7 @@ class SaleOrder(models.Model):
         invoice yet. The workflow never pushes it to Magento.
         """
         for order in self:
-            if order.state != "sale" or order.magento_invoice_state in ("partial", "invoiced"):
+            if order.state not in ("sale", "done") or order.magento_invoice_state in ("partial", "invoiced"):
                 continue
             existing = order.invoice_ids.filtered(
                 lambda m: m.move_type == "out_invoice" and m.state != "cancel"
@@ -1696,14 +1699,14 @@ class SaleOrder(models.Model):
         """Validate the deliveries Magento shipped (imported Magento shipments only, so
         nothing is ever pushed back as a new Magento shipment)."""
         for order in self:
-            if order.state != "sale":
+            if order.state not in ("sale", "done"):
                 continue
             order._magento_sync_shipments(api)
 
     def _magento_wf_lock(self):
         for order in self:
-            if order.state == "sale" and not order.locked:
-                order.action_lock()
+            if order.state == "sale":  # Odoo 16: a locked order is "done"
+                order.action_done()  # Odoo 16: lock
 
     # -------------------------
     # SHIPMENTS
@@ -1742,9 +1745,8 @@ class SaleOrder(models.Model):
                 qty = sale_line.product_uom._compute_quantity(
                     qty, move.product_uom, rounding_method="HALF-UP"
                 )
-            move.quantity = qty
+            move.quantity_done = qty  # Odoo 16: done quantity, no picked flag
             if qty:
-                move.picked = True
                 applied = True
         return applied
 
@@ -1863,7 +1865,7 @@ class SaleOrder(models.Model):
         record.ensure_one()
         try:
             with self.env.cr.savepoint(flush=False):
-                self.env.cr.execute(
+                sql_compat.execute(self.env.cr, 
                     SQL(
                         "SELECT id FROM %s WHERE id = %s FOR UPDATE NOWAIT",
                         SQL.identifier(record._table),

@@ -24,6 +24,7 @@ from odoo.modules import module as odoo_module
 
 from ..services.magento_api import MagentoAPI
 from . import cron_compat
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -456,7 +457,7 @@ class MagentoInstance(models.Model):
                 raise ValidationError(_("The Magento stock location must be an internal location."))
 
     def _compute_bulk_operation_count(self):
-        rows = self.env["magento.bulk.operation"]._read_group(
+        rows = orm_compat.read_group(self.env["magento.bulk.operation"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"]
         )
         counts = {inst.id: n for inst, n in rows}

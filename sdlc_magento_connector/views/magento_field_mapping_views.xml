@@ -189,13 +189,11 @@ action = env['magento.field.mapping'].with_context(
                         <button name="%(action_magento_field_mapping_test_all)d"
                                 type="action"
                                 string="Test"
-                                class="btn-secondary me-2"
-                                display="always"/>
+                                class="btn-secondary me-2"/>
                         <button name="action_sync_magento_fields"
                                 type="object"
                                 string="Load New Fields"
-                                class="btn-success"
-                                display="always"/>
+                                class="btn-success"/>
                         <!-- Acts on the selected mappings. -->
                         <button name="action_apply_to_existing"
                                 type="object"
@@ -205,7 +203,7 @@ action = env['magento.field.mapping'].with_context(
                     </header>
                     <field name="mapping_type" readonly="1" optional="show"/>
                     <field name="instance_id" optional="show"/>
-                    <field name="odoo_model_id" column_invisible="1"/>
+                    <field name="odoo_model_id" invisible="1"/>
                     <field name="odoo_field" domain="[('model_id', '=', odoo_model_id)]"/>
                     <field name="magento_field_id"
                            domain="[('instance_id', '=', instance_id), ('mapping_type', '=', mapping_type)]"/>

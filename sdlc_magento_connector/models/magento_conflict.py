@@ -185,6 +185,11 @@ class MagentoOrderConflict(models.Model):
             row.severity_rank = sev.get(row.severity, 0)
             row.state_rank = 0 if row.state == "open" else 1
 
+    def name_get(self):
+        # Odoo 16 labels many2one values through name_get().
+        self._compute_display_name()
+        return [(record.id, record.display_name) for record in self]
+
     @api.depends("order_id.name", "conflict_type")
     def _compute_display_name(self):
         labels = dict(self._fields["conflict_type"]._description_selection(self.env))
@@ -604,7 +609,7 @@ class SaleOrder(models.Model):
         snapshot = snapshot or {}
         types = set(types or dict(CONFLICT_TYPES))
         currency = self.currency_id or self.env.company.currency_id
-        fulfilled = bool(self._magento_conflict_fulfilment()) if self.state == "sale" else False
+        fulfilled = bool(self._magento_conflict_fulfilment()) if self.state in ("sale", "done") else False
         exported = self.magento_exported_from_odoo
         now_items = self._magento_conflict_items_view(data)
         snap_items = snapshot.get("items") or {}
@@ -722,7 +727,7 @@ class SaleOrder(models.Model):
             rows, magento_side = [], {}
             done_delivery = bool(self.picking_ids.filtered(
                 lambda p: p.state == "done" and p.picking_type_code == "outgoing"))
-            posted_invoice = bool(self._magento_get_customer_invoices()) if self.state == "sale" else False
+            posted_invoice = bool(self._magento_get_customer_invoices()) if self.state in ("sale", "done") else False
             blocked = False
             for kind, address, partner, text in (
                     ("shipping_address", shipping, self.partner_shipping_id, _("Shipping")),
@@ -1076,7 +1081,7 @@ class SaleOrder(models.Model):
             raise UserError(_("The Magento order has no items to apply."))
         before = {line.id: (line.product_id.display_name, line.product_uom_qty, line.price_unit)
                   for line in self.order_line if not line.display_type}
-        was_locked = self.locked
+        was_locked = self.state == "done"  # Odoo 16: locked orders are "done"
         if was_locked:
             self.action_unlock()
         order = self.with_context(skip_magento_sync=True, magento_skip_push=True,
@@ -1084,7 +1089,7 @@ class SaleOrder(models.Model):
         order._magento_write_order_lines(items, data=data)
         order._magento_update_total_difference(data)
         if was_locked:
-            self.action_lock()
+            self.action_done()  # Odoo 16: locking sets the state to done
         changes = []
         for line in self.order_line.filtered(lambda l: not l.display_type):
             old = before.get(line.id)
@@ -1117,7 +1122,7 @@ class SaleOrder(models.Model):
             if delivery != self.partner_shipping_id:
                 vals["partner_shipping_id"] = delivery.id
         if billing and not self._magento_conflict_partner_matches(self.partner_invoice_id, billing):
-            if self.state != "sale" or not self._magento_get_customer_invoices():
+            if self.state not in ("sale", "done") or not self._magento_get_customer_invoices():
                 invoice_partner = self._magento_get_address_partner(partner, billing, "invoice")
                 if invoice_partner != self.partner_invoice_id:
                     vals["partner_invoice_id"] = invoice_partner.id

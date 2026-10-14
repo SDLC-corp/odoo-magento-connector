@@ -14,29 +14,25 @@
                         type="object"
                         string="Create in Magento"
                         class="oe_highlight"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="magento_order_id"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_order_id', '!=', False)]}" />
                 <button name="action_pull_magento_order"
                         type="object"
                         string="Pull from Magento"
                         class="btn-secondary"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_order_id"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_order_id', '=', False)]}" />
                 <button name="action_update_magento_order"
                         type="object"
                         string="Update in Magento"
                         class="btn-secondary"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_order_id"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_order_id', '=', False)]}" />
             </xpath>
 
             <!-- Conflict: Magento changed an order that is no longer a draft in Odoo. -->
             <xpath expr="//form/sheet/div[@name='button_box']" position="after">
-                <widget name="web_ribbon" title="Magento conflict" bg_color="text-bg-danger"
-                        invisible="not magento_sync_conflict"/>
+                <widget name="web_ribbon" title="Magento conflict" bg_color="text-bg-danger" attrs="{'invisible': [('magento_sync_conflict', '=', False)]}" />
             </xpath>
             <xpath expr="//form/sheet/div[hasclass('oe_title')]" position="before">
-                <div class="alert alert-danger" role="alert" invisible="not magento_sync_conflict">
+                <div class="alert alert-danger" role="alert" attrs="{'invisible': [('magento_sync_conflict', '=', False)]}">
                     <strong>Magento conflict.</strong>
                     Magento changed this order after it left draft in Odoo, so the Odoo lines were not overwritten.
                     Review the differences below, then correct the order manually.
@@ -45,7 +41,7 @@
             </xpath>
 
             <xpath expr="//form/sheet/group" position="after">
-                <group string="Magento" name="magento_info" invisible="not is_magento_order">
+                <group string="Magento" name="magento_info" attrs="{'invisible': [('is_magento_order', '=', False)]}">
                     <group>
                         <field name="magento_instance_id"/>
                         <field name="magento_order_id" readonly="1"/>
@@ -74,10 +70,10 @@
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//button[@id='create_invoice']" position="attributes">
-                <attribute name="invisible">invoice_status != 'to invoice' or magento_invoice_state in ('partial','invoiced')</attribute>
+                <attribute name="attrs">{'invisible': ['|', ('invoice_status', '!=', 'to invoice'), ('magento_invoice_state', 'in', ['partial', 'invoiced'])]}</attribute>
             </xpath>
             <xpath expr="//button[@id='create_invoice_percentage']" position="attributes">
-                <attribute name="invisible">invoice_status != 'no' or state != 'sale' or magento_invoice_state in ('partial','invoiced')</attribute>
+                <attribute name="attrs">{'invisible': ['|', '|', ('invoice_status', '!=', 'no'), ('state', '!=', 'sale'), ('magento_invoice_state', 'in', ['partial', 'invoiced'])]}</attribute>
             </xpath>
         </field>
     </record>
@@ -99,14 +95,14 @@
         <field name="inherit_id" eval="False"/>
         <field name="arch" type="xml">
             <tree string="Magento Orders" import="0" decoration-danger="magento_sync_conflict">
-                <field name="currency_id" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="name"/>
                 <field name="magento_increment_id"/>
                 <field name="date_order"/>
                 <field name="partner_id"/>
                 <field name="magento_order_id" optional="hide"/>
                 <field name="magento_instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="magento_status" widget="badge" optional="show"
                        decoration-success="magento_status == 'complete'"
@@ -135,7 +131,7 @@
         <field name="model">sale.order</field>
         <field name="arch" type="xml">
             <tree string="Magento Cancelled Orders" create="0" edit="0" delete="0" import="0">
-                <field name="currency_id" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="name"/>
                 <field name="date_order"/>
                 <field name="magento_increment_id"/>

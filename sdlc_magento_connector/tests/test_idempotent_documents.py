@@ -114,8 +114,7 @@ class TestIdempotentDocuments(MagentoTestCommon):
         picking.write({"sale_id": self.order.id})
         picking.action_confirm()
         for move in picking.move_ids:
-            move.quantity = move.product_uom_qty
-            move.picked = True
+            move.quantity_done = move.product_uom_qty
         picking._action_done()
         picking = picking.with_env(self.env)
         self.assertEqual(picking.state, "done")

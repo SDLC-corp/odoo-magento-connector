@@ -8,6 +8,7 @@ from odoo.exceptions import UserError, ValidationError
 from ..services.magento_api import MagentoAPI
 from .magento_product import magento_push_skipped, schedule_magento_push
 from .sql_compat import Constraint, UniqueIndex
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -900,7 +901,7 @@ class MagentoCustomerGroup(models.Model):
     partner_count = fields.Integer(string="Contacts", compute="_compute_partner_count")
 
     def _compute_partner_count(self):
-        counts = dict(self.env["res.partner"].sudo()._read_group(
+        counts = dict(orm_compat.read_group(self.env["res.partner"].sudo(), 
             [("magento_customer_group_id", "in", self.ids)], ["magento_customer_group_id"], ["__count"],
         ))
         for group in self:
@@ -1024,7 +1025,7 @@ class MagentoInstance(models.Model):
     customer_group_count = fields.Integer(compute="_compute_customer_group_count")
 
     def _compute_customer_group_count(self):
-        counts = dict(self.env["magento.customer.group"]._read_group(
+        counts = dict(orm_compat.read_group(self.env["magento.customer.group"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"],
         ))
         for instance in self:

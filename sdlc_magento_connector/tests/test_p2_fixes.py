@@ -16,7 +16,7 @@ class TestP2Fixes(MagentoTestCommon):
                          "the group is reused, not recreated")
         base = company.account_sale_tax_id.tax_group_id
         if base:
-            self.assertEqual(group.tax_payable_account_id, base.tax_payable_account_id,
+            self.assertEqual(group.property_tax_payable_account_id, base.property_tax_payable_account_id,
                              "the group keeps the default sale group's accounts")
 
     def test_translated_name_does_not_leak_into_magento_default(self):

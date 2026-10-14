@@ -10,6 +10,7 @@ import pytz
 
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError
+from . import orm_compat
 
 PERIODS = (7, 30, 90)
 DEFAULT_PERIOD = 30
@@ -318,7 +319,7 @@ class MagentoDashboard(models.AbstractModel):
     # ------------------------------------------------------------------
     def _trend(self, period_orders, rate, date_from_local, today):
         SaleOrder = self.env["sale.order"]
-        rows = SaleOrder._read_group(
+        rows = orm_compat.read_group(SaleOrder, 
             period_orders,
             ["date_order:day", "currency_id", "state"],
             ["amount_total:sum", "__count"],
@@ -348,7 +349,7 @@ class MagentoDashboard(models.AbstractModel):
         return trend, {"orders": orders, "revenue": round(revenue, 2)}
 
     def _by_status(self, period_orders):
-        rows = self.env["sale.order"]._read_group(
+        rows = orm_compat.read_group(self.env["sale.order"], 
             period_orders, ["magento_status"], ["__count"], order="__count desc"
         )
         result = []
@@ -366,9 +367,9 @@ class MagentoDashboard(models.AbstractModel):
         return result
 
     def _by_category(self, live_period_orders, rate):
-        rows = self.env["sale.order.line"]._read_group(
+        rows = orm_compat.read_group(self.env["sale.order.line"], 
             [
-                ("order_id", "any", live_period_orders),
+                ("order_id", "in", self.env["sale.order"]._search(live_period_orders)),  # Odoo 16: no "any"
                 ("magento_product_id.magento_category_ids", "!=", False),
                 ("display_type", "=", False),
             ],
@@ -402,7 +403,7 @@ class MagentoDashboard(models.AbstractModel):
         ]
 
     def _by_country(self, live_period_orders, rate):
-        rows = self.env["sale.order"]._read_group(
+        rows = orm_compat.read_group(self.env["sale.order"], 
             live_period_orders,
             ["partner_shipping_id", "currency_id", "date_order:day"],
             ["amount_total:sum", "__count"],
@@ -459,7 +460,7 @@ class MagentoDashboard(models.AbstractModel):
         }
         if hidden:
             return stats
-        rows = self.env[ISSUE_MODEL]._read_group(
+        rows = orm_compat.read_group(self.env[ISSUE_MODEL], 
             [
                 ("instance_id", "in", all_instances.ids),
                 ("company_id", "in", companies.ids),
@@ -514,7 +515,7 @@ class MagentoDashboard(models.AbstractModel):
         """Queued or running jobs, and jobs that failed in the period."""
         if not self._readable(JOB_MODEL):
             return {"active": 0, "failed": 0}
-        rows = self.env[JOB_MODEL]._read_group(
+        rows = orm_compat.read_group(self.env[JOB_MODEL], 
             job_scope + [
                 "|", ("state", "in", ACTIVE_JOB_STATES),
                 "&", ("state", "=", "failed"), ("date_done", ">=", date_from),
@@ -754,7 +755,7 @@ class MagentoDashboard(models.AbstractModel):
         ]
         measures = ["revenue_untaxed", "refund_amount", "cogs", "shipping_cost", "payment_fee",
                     "net_profit", "revenue_total"]
-        rows = self.env[NET_PROFIT_MODEL]._read_group(
+        rows = orm_compat.read_group(self.env[NET_PROFIT_MODEL], 
             domain, ["currency_id"], ["%s:sum" % m for m in measures] + ["order_count:sum"])
         rate = self._rate_getter(currency, company)
         today = fields.Date.context_today(self)
@@ -765,7 +766,7 @@ class MagentoDashboard(models.AbstractModel):
             for name, value in zip(measures, values[:-1]):
                 totals[name] += (value or 0.0) * factor
             orders += values[-1] or 0.0
-        estimated = len(self.env[NET_PROFIT_MODEL]._read_group(
+        estimated = len(orm_compat.read_group(self.env[NET_PROFIT_MODEL], 
             domain + [("shipping_estimated", "=", True)], ["order_id"], []))
         action = NET_PROFIT_ACTION if self._user_can_open(NET_PROFIT_ACTION) else False
 

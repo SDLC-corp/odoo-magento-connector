@@ -22,14 +22,14 @@
                        decoration-warning="category not in ('unexplained', 'currency_rounding')"
                        decoration-muted="category == 'currency_rounding'"/>
                 <field name="name"/>
-                <field name="currency_id" column_invisible="1"/>
-                <field name="negligible" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="negligible" invisible="1"/>
                 <field name="amount" sum="Total"/>
                 <field name="evidence" optional="show"/>
-                <field name="fix_type" column_invisible="1"/>
+                <field name="fix_type" invisible="1"/>
                 <field name="fix_label" optional="show"/>
                 <button name="action_apply_fix" type="object" string="Fix" icon="fa-wrench"
-                        class="btn-link" title="Apply the suggested fix" invisible="not fix_type"/>
+                        class="btn-link" title="Apply the suggested fix" attrs="{'invisible': [('fix_type', '=', False)]}" />
             </tree>
         </field>
     </record>
@@ -65,9 +65,9 @@
                 <field name="sale_order_id"/>
                 <field name="magento_increment_id"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
-                <field name="currency_id" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="magento_grand_total" sum="Magento"/>
                 <field name="odoo_total" sum="Odoo"/>
                 <field name="difference" sum="Difference"/>
@@ -130,17 +130,16 @@
                         <label for="name" string="Why does this differ?"/>
                         <h1><field name="name" readonly="1"/></h1>
                     </div>
-                    <div role="status" class="alert alert-success" invisible="not matches">
+                    <div role="status" class="alert alert-success" attrs="{'invisible': [('matches', '=', False)]}">
                         The Odoo total equals the Magento grand total.
                     </div>
-                    <div role="status" class="alert alert-info"
-                         invisible="matches or state != 'explained'">
+                    <div role="status" class="alert alert-info" attrs="{'invisible': ['|', ('matches', '!=', False), ('state', '!=', 'explained')]}">
                         Every cent of the difference has a cause below. No adjustment line was added.
                     </div>
-                    <div role="alert" class="alert alert-warning" invisible="state != 'partially'">
+                    <div role="alert" class="alert alert-warning" attrs="{'invisible': [('state', '!=', 'partially')]}">
                         Part of the difference is explained; the unexplained remainder is shown as is.
                     </div>
-                    <div role="alert" class="alert alert-danger" invisible="state != 'unexplained'">
+                    <div role="alert" class="alert alert-danger" attrs="{'invisible': [('state', '!=', 'unexplained')]}">
                         No known cause reproduces the difference. Compare the order with Magento.
                     </div>
                     <group>
@@ -160,7 +159,7 @@
                                    decoration-success="state == 'explained'"
                                    decoration-warning="state == 'partially'"
                                    decoration-danger="state == 'unexplained'"/>
-                            <field name="calibration_gap" invisible="calibration_gap == 0"/>
+                            <field name="calibration_gap" attrs="{'invisible': [('calibration_gap', '=', 0)]}" />
                             <field name="instance_id"/>
                             <field name="source"/>
                             <field name="date_explained"/>
@@ -178,15 +177,15 @@
                                            decoration-warning="category not in ('unexplained', 'currency_rounding')"
                                            decoration-muted="category == 'currency_rounding'"/>
                                     <field name="name"/>
-                                    <field name="currency_id" column_invisible="1"/>
-                                    <field name="negligible" column_invisible="1"/>
+                                    <field name="currency_id" invisible="1"/>
+                                    <field name="negligible" invisible="1"/>
                                     <field name="amount" sum="Difference"/>
                                     <field name="evidence"/>
-                                    <field name="fix_type" column_invisible="1"/>
+                                    <field name="fix_type" invisible="1"/>
                                     <field name="fix_label"/>
                                     <button name="action_apply_fix" type="object" string="Fix"
                                             icon="fa-wrench" class="btn-link"
-                                            title="Apply the suggested fix" invisible="not fix_type"/>
+                                            title="Apply the suggested fix" attrs="{'invisible': [('fix_type', '=', False)]}" />
                                 </tree>
                             </field>
                         </page>
@@ -229,19 +228,16 @@
                 <field name="magento_total_differs" invisible="1"/>
                 <button name="action_magento_explain_totals" type="object"
                         string="Why does this differ?" class="btn-primary"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_order_id or not magento_total_differs"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('magento_total_differs', '=', False)]}" />
                 <button name="action_magento_explain_totals" type="object"
                         string="Explain Totals" class="btn-secondary"
-                        groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_order_id or magento_total_differs"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('magento_total_differs', '!=', False)]}" />
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                 <field name="magento_explanation_id" invisible="1"
                        groups="sdlc_magento_connector.group_magento_user"/>
                 <button name="action_view_magento_explanation" type="object" class="oe_stat_button"
-                        icon="fa-balance-scale" groups="sdlc_magento_connector.group_magento_user"
-                        invisible="not magento_explanation_id">
+                        icon="fa-balance-scale" groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_explanation_id', '=', False)]}">
                     <div class="o_stat_info">
                         <span class="o_stat_value">
                             <field name="magento_explanation_state" readonly="1"/>
@@ -267,10 +263,9 @@
                        decoration-success="explanation_state == 'explained'"
                        decoration-warning="explanation_state == 'partially'"
                        decoration-danger="explanation_state == 'unexplained'"/>
-                <field name="explanation_unexplained" optional="show"
-                       invisible="not explanation_state"/>
+                <field name="explanation_unexplained" optional="show" attrs="{'invisible': [('explanation_state', '=', False)]}" />
                 <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
-                        class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
+                        class="btn-link" attrs="{'invisible': ['|', ('kind', '!=', 'mismatch'), ('sale_order_id', '=', False)]}" />
             </xpath>
         </field>
     </record>
@@ -281,15 +276,14 @@
         <field name="inherit_id" ref="view_magento_reconciliation_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
-                <button name="action_explain" type="object" string="Explain" class="btn-primary"
-                        invisible="kind != 'mismatch' or not sale_order_id"/>
+                <button name="action_explain" type="object" string="Explain" class="btn-primary" attrs="{'invisible': ['|', ('kind', '!=', 'mismatch'), ('sale_order_id', '=', False)]}" />
             </xpath>
             <xpath expr="//field[@name='reconciliation_id']" position="before">
-                <field name="explanation_state" widget="badge" invisible="not explanation_state"
+                <field name="explanation_state" widget="badge"
                        decoration-success="explanation_state == 'explained'"
                        decoration-warning="explanation_state == 'partially'"
-                       decoration-danger="explanation_state == 'unexplained'"/>
-                <field name="explanation_unexplained" invisible="not explanation_state"/>
+                       decoration-danger="explanation_state == 'unexplained'" attrs="{'invisible': [('explanation_state', '=', False)]}" />
+                <field name="explanation_unexplained" attrs="{'invisible': [('explanation_state', '=', False)]}" />
             </xpath>
         </field>
     </record>
@@ -301,12 +295,11 @@
         <field name="inherit_id" ref="view_magento_reconciliation_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header/button[@name='action_reimport_missing']" position="after">
-                <button name="action_explain_all" type="object" string="Explain All Mismatches"
-                        invisible="mismatch_count == 0 or state != 'done'"/>
+                <button name="action_explain_all" type="object" string="Explain All Mismatches" attrs="{'invisible': ['|', ('mismatch_count', '=', 0), ('state', '!=', 'done')]}" />
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                 <button name="action_view_explanations" type="object" class="oe_stat_button"
-                        icon="fa-balance-scale" invisible="explanation_count == 0">
+                        icon="fa-balance-scale" attrs="{'invisible': [('explanation_count', '=', 0)]}">
                     <field name="explanation_count" widget="statinfo" string="Explanations"/>
                 </button>
             </xpath>
@@ -317,7 +310,7 @@
                        decoration-warning="explanation_state == 'partially'"
                        decoration-danger="explanation_state == 'unexplained'"/>
                 <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
-                        class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
+                        class="btn-link" attrs="{'invisible': ['|', ('kind', '!=', 'mismatch'), ('sale_order_id', '=', False)]}" />
             </xpath>
         </field>
     </record>

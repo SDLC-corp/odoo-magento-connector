@@ -162,7 +162,7 @@ class StockPicking(models.Model):
 
     @api.depends(
         "move_ids.product_uom_qty",
-        "move_ids.quantity",
+        "move_ids.quantity_done",
         "move_ids.state",
         "state",
     )
@@ -172,8 +172,8 @@ class StockPicking(models.Model):
             for move in picking.move_ids:
                 if move.state == "cancel":
                     continue
-                if move.quantity:
-                    qty += move.quantity
+                if move.quantity_done:
+                    qty += move.quantity_done
                 else:
                     qty += move.product_uom_qty
             picking.magento_total_qty = qty
@@ -198,7 +198,7 @@ class StockPicking(models.Model):
             sale_line = move.sale_line_id
             if not sale_line or not sale_line.magento_item_id:
                 continue
-            qty = float(move.quantity or 0.0)
+            qty = float(move.quantity_done or 0.0)
             if qty <= 0:
                 qty = float(move.product_uom_qty or 0.0)
             if qty <= 0:

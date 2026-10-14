@@ -13,7 +13,7 @@
                       decoration-danger="state == 'error'" decoration-muted="not active">
                     <field name="name"/>
                     <field name="base_url" optional="show"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="show" groups="base.group_multi_company"/>
                     <field name="state" widget="badge"
                            decoration-success="state == 'connected'"
@@ -22,7 +22,7 @@
                     <field name="auto_sync_enabled" optional="hide"/>
                     <field name="sync_error_count" string="Sync Errors" optional="show"
                            decoration-danger="sync_error_count &gt; 0"/>
-                    <field name="active" column_invisible="1"/>
+                    <field name="active" invisible="1"/>
                 </tree>
             </field>
         </record>
@@ -97,21 +97,18 @@
                             </button>
                             <!-- Same action twice: neutral at zero, danger-coloured once errors exist. -->
                             <button name="action_view_sync_errors" type="object"
-                                    class="oe_stat_button" icon="fa-check-circle"
-                                    invisible="sync_error_count &gt; 0">
+                                    class="oe_stat_button" icon="fa-check-circle" attrs="{'invisible': [('sync_error_count', '&gt;', 0)]}">
                                 <field name="sync_error_count" widget="statinfo" string="Sync Errors"/>
                             </button>
                             <button name="action_view_sync_errors" type="object"
-                                    class="oe_stat_button text-danger" icon="fa-exclamation-triangle"
-                                    invisible="sync_error_count == 0">
+                                    class="oe_stat_button text-danger" icon="fa-exclamation-triangle" attrs="{'invisible': [('sync_error_count', '=', 0)]}">
                                 <field name="sync_error_count" widget="statinfo" string="Sync Errors"/>
                             </button>
                         </div>
-                        <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
-                                invisible="active"/>
+                        <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" attrs="{'invisible': [('active', '!=', False)]}" />
                         <field name="active" invisible="1"/>
 
-                        <div class="alert alert-danger" role="alert" invisible="state != 'error'">
+                        <div class="alert alert-danger" role="alert" attrs="{'invisible': [('state', '!=', 'error')]}">
                             <strong>Connection error.</strong>
                             <field name="last_connection_message" nolabel="1" readonly="1" class="d-block"/>
                         </div>
@@ -128,8 +125,7 @@
                                 <field name="last_sync_at"/>
                             </group>
                             <group>
-                                <field name="last_connection_message" string="Last Connection Test"
-                                       invisible="state == 'error' or not last_connection_message"/>
+                                <field name="last_connection_message" string="Last Connection Test" attrs="{'invisible': ['|', ('state', '=', 'error'), ('last_connection_message', '=', False)]}" />
                             </group>
                         </group>
 
@@ -164,15 +160,12 @@
                                     <group string="Payment Sync">
                                         <field name="auto_register_magento_payment"/>
                                         <field name="payment_journal_id"
-                                               invisible="not auto_register_magento_payment"
-                                               options="{'no_create': True}"/>
+                                               options="{'no_create': True}" attrs="{'invisible': [('auto_register_magento_payment', '=', False)]}" />
                                         <field name="payment_method_line_id"
-                                               invisible="not auto_register_magento_payment"
                                                domain="[('journal_id', '=', payment_journal_id), ('payment_type', '=', 'inbound')]"
-                                               options="{'no_create': True}"/>
+                                               options="{'no_create': True}" attrs="{'invisible': [('auto_register_magento_payment', '=', False)]}" />
                                         <field name="update_magento_status_on_paid"/>
-                                        <field name="magento_paid_status" placeholder="e.g. complete"
-                                               invisible="not update_magento_status_on_paid"/>
+                                        <field name="magento_paid_status" placeholder="e.g. complete" attrs="{'invisible': [('update_magento_status_on_paid', '=', False)]}" />
                                     </group>
                                 </group>
                             </page>
@@ -191,29 +184,19 @@
                                 <group>
                                     <group>
                                         <field name="auto_sync_enabled"/>
-                                        <field name="auto_sync_frequency"
-                                               invisible="not auto_sync_enabled"
-                                               required="auto_sync_enabled"/>
-                                        <field name="auto_sync_tz"
-                                               invisible="not auto_sync_enabled"/>
-                                        <field name="auto_sync_hour_interval"
-                                               invisible="not auto_sync_enabled or auto_sync_frequency != 'hourly'"/>
-                                        <field name="auto_sync_hour"
-                                               invisible="not auto_sync_enabled or auto_sync_frequency == 'hourly'"/>
-                                        <field name="auto_sync_minute"
-                                               invisible="not auto_sync_enabled or auto_sync_frequency == 'hourly'"/>
+                                        <field name="auto_sync_frequency" attrs="{'invisible': [('auto_sync_enabled', '=', False)], 'required': [('auto_sync_enabled', '!=', False)]}" />
+                                        <field name="auto_sync_tz" attrs="{'invisible': [('auto_sync_enabled', '=', False)]}" />
+                                        <field name="auto_sync_hour_interval" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '!=', 'hourly')]}" />
+                                        <field name="auto_sync_hour" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '=', 'hourly')]}" />
+                                        <field name="auto_sync_minute" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '=', 'hourly')]}" />
                                         <field name="auto_sync_weekly_date"
-                                               widget="date"
-                                               invisible="not auto_sync_enabled or auto_sync_frequency != 'weekly'"/>
+                                               widget="date" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '!=', 'weekly')]}" />
                                         <field name="auto_sync_monthly_date"
-                                               widget="date"
-                                               invisible="not auto_sync_enabled or auto_sync_frequency != 'monthly'"/>
+                                               widget="date" attrs="{'invisible': ['|', ('auto_sync_enabled', '=', False), ('auto_sync_frequency', '!=', 'monthly')]}" />
                                         <field name="auto_sync_cron_id" readonly="1"
-                                               invisible="not auto_sync_enabled"
-                                               groups="base.group_system"/>
+                                               groups="base.group_system" attrs="{'invisible': [('auto_sync_enabled', '=', False)]}" />
                                     </group>
-                                    <group string="Auto Sync Scope (select one or more)"
-                                           invisible="not auto_sync_enabled">
+                                    <group string="Auto Sync Scope (select one or more)" attrs="{'invisible': [('auto_sync_enabled', '=', False)]}">
                                         <field name="auto_sync_products"/>
                                         <field name="auto_sync_customers"/>
                                         <field name="auto_sync_categories"/>
@@ -222,8 +205,7 @@
                                 </group>
                                 <button name="action_apply_auto_sync_cron" type="object"
                                         string="Apply Schedule" class="btn-secondary"
-                                        invisible="not auto_sync_enabled"
-                                        groups="sdlc_magento_connector.group_magento_manager"/>
+                                        groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auto_sync_enabled', '=', False)]}" />
                                 <group>
                                     <group string="Incremental Sync">
                                         <field name="sync_page_size"/>
@@ -276,7 +258,7 @@
                     <field name="sku"/>
                     <field name="name"/>
                     <field name="instance_id" optional="show"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="hide"/>
                     <field name="odoo_product_id" optional="show"/>
@@ -308,11 +290,9 @@
                             <div class="oe_kanban_global_click d-flex">
                             <div class="me-2" style="width: 64px;">
                                 <field name="image_1920" widget="image" alt="Product"
-                                       options="{'img_class': 'w-100 object-fit-contain'}"
-                                       invisible="not image_1920"/>
+                                       options="{'img_class': 'w-100 object-fit-contain'}" attrs="{'invisible': [('image_1920', '=', False)]}" />
                                 <span class="fa fa-cube fa-3x text-muted" role="img"
-                                      aria-label="No image" title="No image"
-                                      invisible="image_1920"/>
+                                      aria-label="No image" title="No image" attrs="{'invisible': [('image_1920', '!=', False)]}" />
                             </div>
                             <div class="flex-grow-1">
                                 <div class="h5 mb-1">
@@ -392,22 +372,18 @@
                 <form string="Magento Product">
                     <header>
                         <button name="action_create_magento_product" type="object"
-                                string="Create in Magento" class="btn-primary"
-                                invisible="magento_id"/>
+                                string="Create in Magento" class="btn-primary" attrs="{'invisible': [('magento_id', '!=', False)]}" />
                         <button name="action_update_magento_product" type="object"
-                                string="Update in Magento"
-                                invisible="not magento_id"/>
+                                string="Update in Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                         <button name="action_pull_magento_product" type="object"
-                                string="Pull from Magento"
-                                invisible="not magento_id"/>
+                                string="Pull from Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                         <button name="action_sync_attribute_sets" type="object"
                                 string="Sync Attribute Sets"
                                 groups="sdlc_magento_connector.group_magento_manager"/>
                     </header>
                     <sheet>
-                        <widget name="web_ribbon" title="Disabled" bg_color="text-bg-secondary"
-                                invisible="status != '2'"/>
-                        <div class="alert alert-warning" role="alert" invisible="not magento_last_error">
+                        <widget name="web_ribbon" title="Disabled" bg_color="text-bg-secondary" attrs="{'invisible': [('status', '!=', '2')]}" />
+                        <div class="alert alert-warning" role="alert" attrs="{'invisible': [('magento_last_error', '=', False)]}">
                             <strong>Last push to Magento failed.</strong>
                             <field name="magento_last_error" nolabel="1" readonly="1" class="d-block"/>
                         </div>
@@ -482,7 +458,7 @@
                         <button name="action_pull_magento_product" type="object"
                                 string="Refresh Product"/>
                         <button name="action_refresh_inventory" type="object"
-                                string="Refresh Inventory" class="btn-primary" display="always"/>
+                                string="Refresh Inventory" class="btn-primary"/>
                     </header>
                     <field name="stock_status" widget="badge"
                            decoration-success="stock_status == 'in_stock'"
@@ -508,7 +484,7 @@
                     <field name="name"/>
                     <field name="parent_id" optional="show"/>
                     <field name="instance_id" optional="show"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="show"/>
                     <field name="is_active" widget="boolean_toggle" optional="show"/>
@@ -548,19 +524,15 @@
                 <form string="Magento Category">
                     <header>
                         <button name="action_create_magento_category" type="object"
-                                string="Create in Magento" class="btn-primary"
-                                invisible="magento_id"/>
+                                string="Create in Magento" class="btn-primary" attrs="{'invisible': [('magento_id', '!=', False)]}" />
                         <button name="action_update_magento_category" type="object"
-                                string="Update in Magento"
-                                invisible="not magento_id"/>
+                                string="Update in Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                         <button name="action_pull_magento_category" type="object"
-                                string="Pull from Magento"
-                                invisible="not magento_id"/>
+                                string="Pull from Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                     </header>
                     <sheet>
-                        <widget name="web_ribbon" title="Inactive" bg_color="text-bg-secondary"
-                                invisible="is_active"/>
-                        <div class="alert alert-warning" role="alert" invisible="not magento_last_error">
+                        <widget name="web_ribbon" title="Inactive" bg_color="text-bg-secondary" attrs="{'invisible': [('is_active', '!=', False)]}" />
+                        <div class="alert alert-warning" role="alert" attrs="{'invisible': [('magento_last_error', '=', False)]}">
                             <strong>Last push to Magento failed.</strong>
                             <field name="magento_last_error" nolabel="1" readonly="1" class="d-block"/>
                         </div>
@@ -598,7 +570,7 @@
                     <field name="name"/>
                     <field name="instance_id" optional="show"/>
                     <field name="magento_id" optional="show"/>
-                    <field name="active" column_invisible="1"/>
+                    <field name="active" invisible="1"/>
                 </tree>
             </field>
         </record>
@@ -609,8 +581,7 @@
             <field name="arch" type="xml">
                 <form string="Magento Attribute Set">
                     <sheet>
-                        <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
-                                invisible="active"/>
+                        <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" attrs="{'invisible': [('active', '!=', False)]}" />
                         <field name="active" invisible="1"/>
                         <div class="oe_title">
                             <label for="name"/>
@@ -819,14 +790,14 @@
             <field name="model">account.move</field>
             <field name="arch" type="xml">
                 <tree string="Magento Invoices" create="false" import="0">
-                    <field name="company_currency_id" column_invisible="1"/>
-                    <field name="currency_id" column_invisible="1"/>
+                    <field name="company_currency_id" invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
                     <field name="name" string="Invoice"/>
                     <field name="invoice_date" string="Invoice Date"/>
                     <field name="magento_sale_order_name" string="Order #"/>
                     <field name="magento_sale_order_date" string="Order Date" optional="show"/>
                     <field name="partner_id" string="Bill-to Name"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="payment_state" string="Status" widget="badge"
                            decoration-success="payment_state in ('paid', 'in_payment')"
@@ -848,14 +819,14 @@
             <field name="model">account.move</field>
             <field name="arch" type="xml">
                 <tree string="Magento Credit Memos" create="false" import="0">
-                    <field name="currency_id" column_invisible="1"/>
-                    <field name="company_currency_id" column_invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="company_currency_id" invisible="1"/>
                     <field name="magento_credit_memo_display"/>
                     <field name="magento_credit_memo_created_at" optional="show"/>
                     <field name="magento_sale_order_name"/>
                     <field name="magento_sale_order_created_at" optional="hide"/>
                     <field name="partner_id" string="Bill-to Name"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_refund_state" widget="badge"
                            decoration-success="magento_refund_state == 'refunded'"
@@ -885,7 +856,7 @@
                     <field name="magento_ship_to_name" string="Ship-to Name"/>
                     <field name="magento_customer_email" string="Customer Email" optional="show"/>
                     <field name="magento_customer_phone" string="Customer Phone" optional="hide"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_total_qty" string="Total Quantity" sum="Total quantity"/>
                     <button name="action_open_magento_shipment" type="object" string="View"
@@ -970,7 +941,7 @@
                     <field name="region" string="State/Province" optional="hide"/>
                     <field name="country_id" optional="hide"/>
                     <field name="instance_id" optional="show"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="show"/>
                     <field name="magento_last_error" optional="hide"/>
@@ -1009,17 +980,14 @@
                 <form string="Magento Customer">
                     <header>
                         <button name="action_create_magento_customer" type="object"
-                                string="Create in Magento" class="btn-primary"
-                                invisible="magento_id"/>
+                                string="Create in Magento" class="btn-primary" attrs="{'invisible': [('magento_id', '!=', False)]}" />
                         <button name="action_update_magento_customer" type="object"
-                                string="Update in Magento"
-                                invisible="not magento_id"/>
+                                string="Update in Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                         <button name="action_pull_magento_customer" type="object"
-                                string="Pull from Magento"
-                                invisible="not magento_id"/>
+                                string="Pull from Magento" attrs="{'invisible': [('magento_id', '=', False)]}" />
                     </header>
                     <sheet>
-                        <div class="alert alert-warning" role="alert" invisible="not magento_last_error">
+                        <div class="alert alert-warning" role="alert" attrs="{'invisible': [('magento_last_error', '=', False)]}">
                             <strong>Last push to Magento failed.</strong>
                             <field name="magento_last_error" nolabel="1" readonly="1" class="d-block"/>
                         </div>
@@ -1088,7 +1056,7 @@
                       decoration-danger="errors &gt; 0">
                     <field name="synced_at" string="Created On"/>
                     <field name="instance_id" string="Magento Instance"/>
-                    <field name="company_id" column_invisible="1"/>
+                    <field name="company_id" invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="sync_type" string="Sync Type" widget="badge"/>
                     <field name="mode" string="Mode" optional="show"/>
@@ -1137,7 +1105,7 @@
             <field name="arch" type="xml">
                 <form string="Magento Sync Report" create="0">
                     <sheet>
-                        <div class="alert alert-danger" role="alert" invisible="errors == 0">
+                        <div class="alert alert-danger" role="alert" attrs="{'invisible': [('errors', '=', 0)]}">
                             This run reported <field name="errors" class="fw-bold"/> error(s).
                         </div>
                         <group>

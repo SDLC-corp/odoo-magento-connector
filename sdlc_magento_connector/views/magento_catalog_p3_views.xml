@@ -11,7 +11,7 @@
         <field name="model">magento.tier.price.import</field>
         <field name="arch" type="xml">
             <tree string="Imported Tier Prices" create="0" edit="0" import="0">
-                <field name="instance_id" column_invisible="context.get('default_instance_id')"/>
+                <field name="instance_id" invisible="context.get('default_instance_id')" />
                 <field name="sku"/>
                 <field name="product_id" optional="show"/>
                 <field name="customer_group" widget="badge"
@@ -25,7 +25,7 @@
                 <field name="pricelist_id" optional="show"/>
                 <field name="item_id" optional="hide"/>
                 <field name="imported_at" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
             </tree>
         </field>
@@ -80,8 +80,7 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_tier_imports" type="object"
-                        class="oe_stat_button" icon="fa-sort-amount-asc"
-                        invisible="tier_import_count == 0">
+                        class="oe_stat_button" icon="fa-sort-amount-asc" attrs="{'invisible': [('tier_import_count', '=', 0)]}">
                     <field name="tier_import_count" widget="statinfo" string="Tier Prices"/>
                 </button>
             </div>
@@ -115,23 +114,22 @@
         <field name="inherit_id" ref="sdlc_magento_connector.view_magento_product_map_form_p2"/>
         <field name="arch" type="xml">
             <field name="child_link_ids" position="attributes">
-                <attribute name="readonly">type_id not in ('bundle', 'grouped')</attribute>
+                <attribute name="attrs">{'readonly': [('type_id', 'not in', ['bundle', 'grouped'])]}</attribute>
                 <attribute name="context">{'default_link_type': type_id}</attribute>
             </field>
             <xpath expr="//field[@name='child_link_ids']/tree" position="attributes">
                 <attribute name="editable">bottom</attribute>
             </xpath>
             <xpath expr="//field[@name='child_link_ids']/tree/field[@name='child_sku']" position="before">
-                <field name="link_type" column_invisible="True"/>
-                <field name="option_type" optional="hide" placeholder="select"
-                       column_invisible="parent.type_id != 'bundle'"/>
+                <field name="link_type" invisible="1"/>
+                <field name="option_type" optional="hide" placeholder="select" attrs="{'column_invisible': [('parent.type_id', '!=', 'bundle')]}" />
             </xpath>
             <xpath expr="//field[@name='child_link_ids']/tree/field[@name='child_map_id']" position="attributes">
                 <attribute name="domain">[('instance_id', '=', parent.instance_id), ('type_id', 'not in', ('configurable', 'bundle', 'grouped'))]</attribute>
                 <attribute name="options">{'no_create': True}</attribute>
             </xpath>
             <xpath expr="//page[@name='magento_children']/div[last()]" position="after">
-                <div class="text-muted small mb-2" invisible="type_id not in ('bundle', 'grouped')">
+                <div class="text-muted small mb-2" attrs="{'invisible': [('type_id', 'not in', ['bundle', 'grouped'])]}">
                     Export sends these components with the product (a kit bill of materials, when
                     the product has one, takes precedence). Every component SKU must already exist
                     in Magento.
@@ -155,8 +153,7 @@
                         <group string="Magento Product Type">
                             <field name="magento_composite_type" widget="radio"
                                    placeholder="Simple product"/>
-                            <field name="magento_bundle_price_type" widget="radio"
-                                   invisible="magento_composite_type != 'bundle'"/>
+                            <field name="magento_bundle_price_type" widget="radio" attrs="{'invisible': [('magento_composite_type', '!=', 'bundle')]}" />
                         </group>
                         <group>
                             <div class="text-muted small" colspan="2">
@@ -167,11 +164,10 @@
                             </div>
                             <button name="action_magento_export_composite" type="object"
                                     string="Export to Magento" class="btn-primary" colspan="2"
-                                    invisible="not magento_composite_type or not id"
-                                    groups="sdlc_magento_connector.group_magento_manager"/>
+                                    groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': ['|', ('magento_composite_type', '=', False), ('id', '=', False)]}" />
                         </group>
                     </group>
-                    <div invisible="not magento_composite_type">
+                    <div attrs="{'invisible': [('magento_composite_type', '=', False)]}">
                         <div class="o_form_label text-uppercase small fw-bold text-muted mb-1"
                              style="letter-spacing: .07em">Components</div>
                         <field name="magento_composite_preview" nolabel="1" readonly="1"/>

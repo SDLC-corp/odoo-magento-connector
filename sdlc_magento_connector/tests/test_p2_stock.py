@@ -10,6 +10,7 @@ from odoo.tests import tagged
 
 from .common import MagentoTestCommon, make_response
 from .test_bulk import _sync_ok
+from odoo.addons.sdlc_magento_connector.models import sql_compat
 
 
 @tagged("post_install", "-at_install", "magento")
@@ -59,7 +60,7 @@ class TestStockPushP2(MagentoTestCommon):
     def _dirty(self, instance=None):
         instance = instance or self.instance
         self.env.flush_all()
-        self.env.cr.execute("SELECT product_id FROM magento_stock_dirty WHERE instance_id = %s ORDER BY id",
+        sql_compat.execute(self.env.cr, "SELECT product_id FROM magento_stock_dirty WHERE instance_id = %s ORDER BY id",
                             [instance.id])
         return [row[0] for row in self.env.cr.fetchall()]
 
@@ -91,8 +92,7 @@ class TestStockPushP2(MagentoTestCommon):
             })],
         })
         picking.action_confirm()
-        picking.move_ids.quantity = qty
-        picking.move_ids.picked = True
+        picking.move_ids.quantity_done = qty
         picking.button_validate()
         self.assertEqual(picking.state, "done")
         return picking
@@ -339,14 +339,14 @@ class TestStockPushP2(MagentoTestCommon):
         _p2, m2 = self._mapped("DL-2", qty=9.0)
         p3, _m3 = self._mapped("DL-3", qty=1.0)
         self.env.flush_all()
-        self.env.cr.execute("DELETE FROM magento_stock_dirty")
+        sql_compat.execute(self.env.cr, "DELETE FROM magento_stock_dirty")
         self._new_transaction()
         self.Dirty._magento_mark(p1.ids)
         self.assertEqual(self._dirty(), [p1.id])
 
         def push_and_change(api, method, route, items, store_code=None):
             # A change committed while the job pushes must survive the cleanup.
-            self.env.cr.execute(
+            sql_compat.execute(self.env.cr, 
                 "INSERT INTO magento_stock_dirty (instance_id, product_id, date) VALUES (%s, %s, now())",
                 [self.instance.id, p3.id])
             return _sync_ok(api, method, route, items, store_code)

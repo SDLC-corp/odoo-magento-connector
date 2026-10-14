@@ -17,8 +17,8 @@
                 <field name="restock" widget="boolean_toggle"/>
                 <field name="instance_id" options="{'no_create': True}" placeholder="All instances"
                        optional="show"/>
-                <field name="company_id" column_invisible="1"/>
-                <field name="active" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <field name="active" invisible="1"/>
             </tree>
         </field>
     </record>
@@ -59,7 +59,7 @@
             <tree string="Return Locations" editable="bottom" decoration-muted="not active">
                 <field name="sequence" widget="handle"/>
                 <field name="instance_id" options="{'no_create': True}"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="warehouse_id" options="{'no_create': True}" placeholder="Any warehouse"/>
                 <field name="categ_id" options="{'no_create': True}" placeholder="Any category"/>
                 <field name="reason_id" options="{'no_create': True}" placeholder="Any reason"/>
@@ -142,7 +142,7 @@
                     <field name="return_location_rule_ids" context="{'default_instance_id': id}">
                         <tree editable="bottom" decoration-muted="not active">
                             <field name="sequence" widget="handle"/>
-                            <field name="company_id" column_invisible="1"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="warehouse_id" options="{'no_create': True}"
                                    placeholder="Any warehouse"/>
                             <field name="categ_id" options="{'no_create': True}" placeholder="Any category"/>
@@ -180,21 +180,17 @@
         <field name="inherit_id" ref="view_move_form_magento_inherit"/>
         <field name="arch" type="xml">
             <xpath expr="//page[.//field[@name='magento_credit_memo_created_at']]" position="inside">
-                <group string="Return" invisible="move_type != 'out_refund'">
+                <group string="Return" attrs="{'invisible': [('move_type', '!=', 'out_refund')]}">
                     <group>
                         <field name="magento_refund_mode" widget="badge" readonly="1"
-                               invisible="not magento_refund_mode"
                                decoration-info="magento_refund_mode == 'online'"
-                               decoration-muted="magento_refund_mode == 'offline'"/>
+                               decoration-muted="magento_refund_mode == 'offline'" attrs="{'invisible': [('magento_refund_mode', '=', False)]}" />
                         <field name="magento_restock" readonly="1"/>
-                        <field name="magento_restock_waiting" readonly="1"
-                               invisible="not magento_restock_waiting" decoration-warning="1"/>
+                        <field name="magento_restock_waiting" readonly="1" decoration-warning="1" attrs="{'invisible': [('magento_restock_waiting', '=', False)]}" />
                     </group>
                     <group>
-                        <field name="magento_return_reason_id" options="{'no_create': True}"
-                               readonly="magento_credit_memo_id"/>
-                        <field name="magento_return_picking_ids" widget="many2many_tags"
-                               invisible="not magento_return_picking_ids"/>
+                        <field name="magento_return_reason_id" options="{'no_create': True}" attrs="{'readonly': [('magento_credit_memo_id', '!=', False)]}" />
+                        <field name="magento_return_picking_ids" widget="many2many_tags" attrs="{'invisible': [('magento_return_picking_ids', '=', False)]}" />
                     </group>
                 </group>
             </xpath>
@@ -208,13 +204,12 @@
         <field name="inherit_id" ref="view_stock_picking_form_magento"/>
         <field name="arch" type="xml">
             <xpath expr="//sheet" position="inside">
-                <group string="Magento Return"
-                       invisible="not magento_order_id or picking_type_code != 'incoming'">
+                <group string="Magento Return" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('picking_type_code', '!=', 'incoming')]}">
                     <group>
                         <field name="magento_return_reason_id" options="{'no_create': True}"/>
                     </group>
                     <group>
-                        <field name="magento_refund_move_id" invisible="not magento_refund_move_id"/>
+                        <field name="magento_refund_move_id" attrs="{'invisible': [('magento_refund_move_id', '=', False)]}" />
                     </group>
                 </group>
             </xpath>
@@ -229,7 +224,7 @@
         <field name="arch" type="xml">
             <field name="product_return_moves" position="before">
                 <field name="magento_order" invisible="1"/>
-                <group invisible="not magento_order">
+                <group attrs="{'invisible': [('magento_order', '=', False)]}">
                     <field name="magento_return_reason_id" options="{'no_create': True}"/>
                 </group>
             </field>

@@ -33,7 +33,7 @@
                        decoration-danger="status == 'missing'"
                        decoration-warning="status == 'mismatch'"/>
                 <button name="action_view_findings" type="object" icon="fa-search"
-                        title="Orders behind this line" invisible="status == 'match'"/>
+                        title="Orders behind this line" attrs="{'invisible': [('status', '=', 'match')]}" />
             </tree>
         </field>
     </record>
@@ -86,7 +86,7 @@
                 <field name="store_id" optional="hide"/>
                 <field name="magento_status" optional="show"/>
                 <field name="canceled" optional="hide"/>
-                <field name="currency_id" column_invisible="True"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="magento_total" sum="Magento Total"/>
                 <field name="odoo_total" sum="Odoo Total"/>
                 <field name="difference" sum="Difference"/>
@@ -106,13 +106,12 @@
         <field name="arch" type="xml">
             <form string="Reconciliation Finding" create="0" edit="0" delete="0">
                 <header>
-                    <button name="action_reimport" type="object" string="Re-import" class="btn-primary"
-                            invisible="kind == 'extra'"/>
+                    <button name="action_reimport" type="object" string="Re-import" class="btn-primary" attrs="{'invisible': [('kind', '=', 'extra')]}" />
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_order" type="object" class="oe_stat_button"
-                                icon="fa-external-link" invisible="not sale_order_id">
+                                icon="fa-external-link" attrs="{'invisible': [('sale_order_id', '=', False)]}">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Odoo Order</span>
                             </div>
@@ -140,8 +139,8 @@
                             <field name="odoo_total"/>
                             <field name="difference"/>
                             <field name="sale_order_id"/>
-                            <field name="job_id" invisible="not job_id"/>
-                            <field name="job_state" invisible="not job_id"/>
+                            <field name="job_id" attrs="{'invisible': [('job_id', '=', False)]}" />
+                            <field name="job_state" attrs="{'invisible': [('job_id', '=', False)]}" />
                             <field name="reconciliation_id"/>
                         </group>
                     </group>
@@ -180,7 +179,7 @@
                   decoration-danger="state == 'failed' or missing_count &gt; 0"
                   decoration-warning="state == 'done' and missing_count == 0 and (mismatch_count &gt; 0 or extra_count &gt; 0)">
                 <field name="instance_id"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
@@ -225,41 +224,33 @@
         <field name="arch" type="xml">
             <form string="Reconciliation">
                 <header>
-                    <button name="action_run" type="object" string="Run" class="btn-primary"
-                            invisible="state != 'draft'"/>
-                    <button name="action_run" type="object" string="Run Again"
-                            invisible="state not in ('done', 'failed')"/>
-                    <button name="action_run_in_background" type="object" string="Run in Background"
-                            invisible="state == 'running'"/>
+                    <button name="action_run" type="object" string="Run" class="btn-primary" attrs="{'invisible': [('state', '!=', 'draft')]}" />
+                    <button name="action_run" type="object" string="Run Again" attrs="{'invisible': [('state', 'not in', ['done', 'failed'])]}" />
+                    <button name="action_run_in_background" type="object" string="Run in Background" attrs="{'invisible': [('state', '=', 'running')]}" />
                     <button name="action_reimport_missing" type="object" string="Re-import Missing"
-                            class="btn-primary" invisible="missing_count == 0 or state != 'done'"/>
+                            class="btn-primary" attrs="{'invisible': ['|', ('missing_count', '=', 0), ('state', '!=', 'done')]}" />
                     <field name="state" widget="statusbar" statusbar_visible="draft,running,done"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_missing" type="object"
-                                class="oe_stat_button text-danger" icon="fa-exclamation-circle"
-                                invisible="missing_count == 0">
+                                class="oe_stat_button text-danger" icon="fa-exclamation-circle" attrs="{'invisible': [('missing_count', '=', 0)]}">
                             <field name="missing_count" widget="statinfo" string="Missing Orders"/>
                         </button>
                         <button name="action_view_missing" type="object"
-                                class="oe_stat_button" icon="fa-check-circle"
-                                invisible="missing_count &gt; 0 or state != 'done'">
+                                class="oe_stat_button" icon="fa-check-circle" attrs="{'invisible': ['|', ('missing_count', '&gt;', 0), ('state', '!=', 'done')]}">
                             <field name="missing_count" widget="statinfo" string="Missing Orders"/>
                         </button>
                         <button name="action_view_mismatch_orders" type="object"
-                                class="oe_stat_button text-warning" icon="fa-balance-scale"
-                                invisible="mismatch_count == 0">
+                                class="oe_stat_button text-warning" icon="fa-balance-scale" attrs="{'invisible': [('mismatch_count', '=', 0)]}">
                             <field name="mismatch_count" widget="statinfo" string="Total Mismatches"/>
                         </button>
                         <button name="action_view_extra_orders" type="object"
-                                class="oe_stat_button text-warning" icon="fa-question-circle"
-                                invisible="extra_count == 0">
+                                class="oe_stat_button text-warning" icon="fa-question-circle" attrs="{'invisible': [('extra_count', '=', 0)]}">
                             <field name="extra_count" widget="statinfo" string="Not in Magento"/>
                         </button>
                         <button name="action_view_lines" type="object"
-                                class="oe_stat_button" icon="fa-money"
-                                invisible="line_count == 0">
+                                class="oe_stat_button" icon="fa-money" attrs="{'invisible': [('line_count', '=', 0)]}">
                             <field name="line_count" widget="statinfo" string="By Currency"/>
                         </button>
                     </div>
@@ -267,40 +258,37 @@
                         <label for="name" string="Reconciliation"/>
                         <h1><field name="name" readonly="1" placeholder="Instance and period"/></h1>
                     </div>
-                    <div role="alert" class="alert alert-danger" invisible="state != 'failed'">
+                    <div role="alert" class="alert alert-danger" attrs="{'invisible': [('state', '!=', 'failed')]}">
                         <field name="note" nolabel="1" readonly="1"/>
                     </div>
-                    <div role="status" class="alert alert-warning"
-                         invisible="state != 'done' or issue_count == 0">
+                    <div role="status" class="alert alert-warning" attrs="{'invisible': ['|', ('state', '!=', 'done'), ('issue_count', '=', 0)]}">
                         <field name="note" nolabel="1" readonly="1"/>
                     </div>
-                    <div role="status" class="alert alert-success"
-                         invisible="state != 'done' or issue_count != 0">
+                    <div role="status" class="alert alert-success" attrs="{'invisible': ['|', ('state', '!=', 'done'), ('issue_count', '!=', 0)]}">
                         Every Magento order of the period is in Odoo with the same total.
                     </div>
-                    <div role="status" class="alert alert-info" invisible="state != 'running'">
+                    <div role="status" class="alert alert-info" attrs="{'invisible': [('state', '!=', 'running')]}">
                         <field name="note" nolabel="1" readonly="1"/>
                     </div>
                     <group>
                         <group string="Period">
-                            <field name="instance_id" readonly="state == 'running'"
-                                   options="{'no_create': True}"/>
+                            <field name="instance_id"
+                                   options="{'no_create': True}" attrs="{'readonly': [('state', '=', 'running')]}" />
                             <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="date_from" string="Created (UTC)" widget="daterange"
-                                   options="{'end_date_field': 'date_to'}"
-                                   readonly="state == 'running'"/>
+                                   options="{'end_date_field': 'date_to'}" attrs="{'readonly': [('state', '=', 'running')]}" />
                             <field name="date_to" invisible="1"/>
-                            <field name="include_canceled" readonly="state == 'running'"/>
+                            <field name="include_canceled" attrs="{'readonly': [('state', '=', 'running')]}" />
                         </group>
                         <group string="Orders">
                             <field name="magento_count"/>
                             <field name="odoo_count"/>
                             <field name="matched_count"/>
                             <field name="canceled_count"/>
-                            <field name="date_run" invisible="not date_run"/>
+                            <field name="date_run" attrs="{'invisible': [('date_run', '=', False)]}" />
                             <field name="trigger"/>
-                            <field name="job_id" invisible="not job_id"/>
+                            <field name="job_id" attrs="{'invisible': [('job_id', '=', False)]}" />
                             <field name="issue_count" invisible="1"/>
                         </group>
                     </group>
@@ -330,7 +318,7 @@
                                 </tree>
                             </field>
                         </page>
-                        <page string="Findings" name="findings" invisible="issue_count == 0">
+                        <page string="Findings" name="findings" attrs="{'invisible': [('issue_count', '=', 0)]}">
                             <field name="finding_ids" readonly="1">
                                 <tree decoration-danger="kind == 'missing'"
                                       decoration-warning="kind == 'mismatch'"
@@ -343,8 +331,8 @@
                                     <field name="magento_order_id"/>
                                     <field name="magento_created_at"/>
                                     <field name="magento_status" optional="show"/>
-                                    <field name="canceled" column_invisible="True"/>
-                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="canceled" invisible="1"/>
+                                    <field name="currency_id" invisible="1"/>
                                     <field name="magento_total"/>
                                     <field name="odoo_total"/>
                                     <field name="difference"/>
@@ -388,7 +376,7 @@
                 <group>
                     <group string="Order Reconciliation" name="reconciliation">
                         <field name="reconcile_daily"/>
-                        <field name="reconcile_lookback_days" invisible="not reconcile_daily"/>
+                        <field name="reconcile_lookback_days" attrs="{'invisible': [('reconcile_daily', '=', False)]}" />
                         <div class="text-muted small" colspan="2">
                             Each night, Magento and Odoo orders of the last days are compared.
                             Orders missing in Odoo open an Error Center issue, ready to retry.

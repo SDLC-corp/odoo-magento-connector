@@ -43,6 +43,7 @@ from odoo.tools import html2plaintext
 
 from ..services.magento_api import DRY_RUN, MagentoAPI, MagentoDryRunWriteBlocked
 from .magento_instance import OWNERSHIP_ENTITIES, _short_reason, _SyncStats
+from . import orm_compat
 
 _logger = logging.getLogger(__name__)
 
@@ -203,7 +204,7 @@ class MagentoDryRun(models.Model):
 
     @api.depends("line_ids.action", "job_ids")
     def _compute_counts(self):
-        rows = self.env["magento.dryrun.line"]._read_group(
+        rows = orm_compat.read_group(self.env["magento.dryrun.line"], 
             [("dryrun_id", "in", self.ids)], ["dryrun_id", "action"], ["__count"],
         )
         counts = {}
@@ -685,7 +686,7 @@ class MagentoInstance(models.Model):
     dryrun_count = fields.Integer(string="Previews", compute="_compute_dryrun_count")
 
     def _compute_dryrun_count(self):
-        rows = self.env["magento.dryrun"]._read_group(
+        rows = orm_compat.read_group(self.env["magento.dryrun"], 
             [("instance_id", "in", self.ids)], ["instance_id"], ["__count"])
         counts = {instance.id: count for instance, count in rows}
         for instance in self:

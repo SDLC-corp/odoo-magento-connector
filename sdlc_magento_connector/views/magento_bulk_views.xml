@@ -14,7 +14,7 @@
                 <field name="create_date" string="Submitted"/>
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="operation" optional="show"/>
                 <field name="transport" widget="badge" optional="show"
@@ -74,30 +74,25 @@
             <form string="Bulk Operation" create="0" edit="0">
                 <header>
                     <button name="action_poll_now" type="object" string="Check Status" class="btn-primary"
-                            invisible="state != 'accepted' or transport != 'async'"
-                            groups="sdlc_magento_connector.group_magento_manager"/>
+                            groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': ['|', ('state', '!=', 'accepted'), ('transport', '!=', 'async')]}" />
                     <field name="state" widget="statusbar" statusbar_visible="accepted,done"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_issues" type="object" class="oe_stat_button"
-                                icon="fa-exclamation-circle"
-                                invisible="not failed_count and not retriable_count and not rejected_count and state != 'failed'">
+                                icon="fa-exclamation-circle" attrs="{'invisible': ['&amp;', '&amp;', '&amp;', ('failed_count', '=', False), ('retriable_count', '=', False), ('rejected_count', '=', False), ('state', '!=', 'failed')]}">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Error Center</span>
                             </div>
                         </button>
                     </div>
-                    <div class="alert alert-danger" role="alert"
-                         invisible="state not in ('failed', 'rejected') or not message">
+                    <div class="alert alert-danger" role="alert" attrs="{'invisible': ['|', ('state', 'not in', ['failed', 'rejected']), ('message', '=', False)]}">
                         <field name="message" nolabel="1" readonly="1" class="d-block"/>
                     </div>
-                    <div class="alert alert-info" role="status"
-                         invisible="state != 'accepted'">
+                    <div class="alert alert-info" role="status" attrs="{'invisible': [('state', '!=', 'accepted')]}">
                         Magento queued these items. Their result is checked every two minutes
                         (<field name="poll_attempts" nolabel="1" readonly="1" class="d-inline"/> checks so far).
-                        <field name="message" nolabel="1" readonly="1" class="d-block mt-1"
-                               invisible="not message"/>
+                        <field name="message" nolabel="1" readonly="1" class="d-block mt-1" attrs="{'invisible': [('message', '=', False)]}" />
                     </div>
                     <div class="oe_title">
                         <label for="name"/>
@@ -112,7 +107,7 @@
                             <field name="transport"/>
                             <field name="method"/>
                             <field name="route"/>
-                            <field name="bulk_uuid" invisible="not bulk_uuid"/>
+                            <field name="bulk_uuid" attrs="{'invisible': [('bulk_uuid', '=', False)]}" />
                         </group>
                         <group string="Items">
                             <field name="item_count"/>
@@ -135,7 +130,7 @@
                             <field name="items_pretty" nolabel="1" readonly="1"
                                    class="font-monospace text-break"/>
                         </page>
-                        <page string="Magento Result" name="result" invisible="not result_json">
+                        <page string="Magento Result" name="result" attrs="{'invisible': [('result_json', '=', False)]}">
                             <field name="result_pretty" nolabel="1" readonly="1"
                                    class="font-monospace text-break"/>
                         </page>
@@ -169,8 +164,7 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_bulk_operations" type="object"
-                        class="oe_stat_button" icon="fa-cloud-upload"
-                        invisible="bulk_operation_count == 0">
+                        class="oe_stat_button" icon="fa-cloud-upload" attrs="{'invisible': [('bulk_operation_count', '=', 0)]}">
                     <field name="bulk_operation_count" widget="statinfo" string="Bulk Ops"/>
                 </button>
             </div>
@@ -183,8 +177,7 @@
                     <group>
                         <field name="stock_push_mode"/>
                         <field name="stock_location_id" options="{'no_create': True}"/>
-                        <field name="msi_source_code" invisible="stock_push_mode != 'msi'"
-                               required="stock_push_mode == 'msi'"/>
+                        <field name="msi_source_code" attrs="{'invisible': [('stock_push_mode', '!=', 'msi')], 'required': [('stock_push_mode', '=', 'msi')]}" />
                     </group>
                 </group>
                 <button name="action_push_stock_bulk" type="object" string="Push Stock Now"

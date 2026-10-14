@@ -14,20 +14,19 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_b2b_companies" type="object" class="oe_stat_button"
-                        icon="fa-building" invisible="not b2b_enabled">
+                        icon="fa-building" attrs="{'invisible': [('b2b_enabled', '=', False)]}">
                     <field name="b2b_company_count" widget="statinfo" string="B2B Companies"/>
                 </button>
                 <button name="action_view_b2b_quotes" type="object" class="oe_stat_button"
-                        icon="fa-handshake-o" invisible="not b2b_enabled">
+                        icon="fa-handshake-o" attrs="{'invisible': [('b2b_enabled', '=', False)]}">
                     <field name="b2b_quote_count" widget="statinfo" string="Negotiable Quotes"/>
                 </button>
             </div>
             <field name="access_token" position="attributes">
-                <attribute name="invisible">auth_method == 'ims'</attribute>
-                <attribute name="required">auth_method != 'ims'</attribute>
+                <attribute name="attrs">{'invisible': [('auth_method', '=', 'ims')], 'required': [('auth_method', '!=', 'ims')]}</attribute>
             </field>
             <xpath expr="//page[@name='connection']/group[@name='authentication']" position="after">
-                <div class="alert alert-info mb-3" role="status" invisible="auth_method != 'ims'">
+                <div class="alert alert-info mb-3" role="status" attrs="{'invisible': [('auth_method', '!=', 'ims')]}">
                     Adobe IMS credentials, the tenant ID and the token status are on the
                     <b>Adobe Commerce</b> tab.
                 </div>
@@ -37,13 +36,12 @@
                     <group>
                         <group string="Platform">
                             <field name="platform" widget="radio"/>
-                            <field name="accs_tenant_id" invisible="platform != 'accs'"
-                                   required="platform == 'accs'" placeholder="AbCYab34cdEfGHiJ27123"/>
+                            <field name="accs_tenant_id" placeholder="AbCYab34cdEfGHiJ27123" attrs="{'invisible': [('platform', '!=', 'accs')], 'required': [('platform', '=', 'accs')]}" />
                         </group>
-                        <group string="Adobe IMS (server-to-server)" invisible="auth_method != 'ims'"
-                               groups="sdlc_magento_connector.group_magento_manager">
-                            <field name="ims_client_id" password="True" required="auth_method == 'ims'"/>
-                            <field name="ims_client_secret" password="True" required="auth_method == 'ims'"/>
+                        <group string="Adobe IMS (server-to-server)"
+                               groups="sdlc_magento_connector.group_magento_manager" attrs="{'invisible': [('auth_method', '!=', 'ims')]}">
+                            <field name="ims_client_id" password="True" attrs="{'required': [('auth_method', '=', 'ims')]}" />
+                            <field name="ims_client_secret" password="True" attrs="{'required': [('auth_method', '=', 'ims')]}" />
                             <field name="ims_org_id"/>
                             <field name="ims_scopes"/>
                             <field name="ims_token_url"/>
@@ -55,14 +53,14 @@
                             </div>
                         </group>
                     </group>
-                    <div class="alert alert-warning mb-3" role="status" invisible="platform != 'accs'">
+                    <div class="alert alert-warning mb-3" role="status" attrs="{'invisible': [('platform', '!=', 'accs')]}">
                         <strong>Adobe Commerce as a Cloud Service.</strong>
                         Requests go to <code>&lt;base URL&gt;/&lt;tenant&gt;/V1/…</code> (no <code>/rest</code>,
                         store scope in the <code>Store</code> header) with an Adobe IMS bearer token.
                         Validated against Adobe's documented API with simulated responses; not yet tested
                         against a live ACCS tenant.
                     </div>
-                    <group string="Capabilities on this platform" invisible="platform != 'accs'">
+                    <group string="Capabilities on this platform" attrs="{'invisible': [('platform', '!=', 'accs')]}">
                         <field name="accs_capability_html" nolabel="1" colspan="2"/>
                     </group>
 
@@ -73,8 +71,8 @@
                                    decoration-success="b2b_status == 'present'"
                                    decoration-warning="b2b_status == 'absent'"
                                    decoration-danger="b2b_status == 'error'"/>
-                            <field name="b2b_status_message" invisible="not b2b_status_message"/>
-                            <field name="b2b_checked_at" invisible="not b2b_checked_at"/>
+                            <field name="b2b_status_message" attrs="{'invisible': [('b2b_status_message', '=', False)]}" />
+                            <field name="b2b_checked_at" attrs="{'invisible': [('b2b_checked_at', '=', False)]}" />
                             <div class="o_row" colspan="2">
                                 <button name="action_b2b_detect" type="object" string="Detect B2B"
                                         icon="fa-search" class="btn-secondary"
@@ -82,7 +80,7 @@
                                 <span class="text-muted">Probes <code>/V1/company</code>; nothing is written.</span>
                             </div>
                         </group>
-                        <group string="B2B Sync" invisible="not b2b_enabled">
+                        <group string="B2B Sync" attrs="{'invisible': [('b2b_enabled', '=', False)]}">
                             <field name="b2b_credit_payment_term_id"/>
                             <field name="b2b_quotes_watermark"/>
                             <div class="o_row" colspan="2">
@@ -112,8 +110,7 @@
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
                 <page string="Magento Company" name="magento_b2b_company"
-                      invisible="not is_company"
-                      groups="sdlc_magento_connector.group_magento_user">
+                      groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('is_company', '=', False)]}">
                     <div class="alert alert-info mb-3" role="status">
                         Requires Adobe Commerce with B2B. Validated against Adobe's documented API with
                         simulated responses; not yet tested against a live Adobe Commerce store.
@@ -122,8 +119,7 @@
                         <group string="Binding">
                             <field name="magento_company_instance_id" options="{'no_create': True}"/>
                             <field name="magento_company_id" readonly="1"/>
-                            <field name="magento_company_status" readonly="1"
-                                   invisible="not magento_company_id"/>
+                            <field name="magento_company_status" readonly="1" attrs="{'invisible': [('magento_company_id', '=', False)]}" />
                             <field name="magento_b2b_export"/>
                             <field name="magento_company_admin_id" options="{'no_create': True}"/>
                             <field name="magento_shared_catalog_id" options="{'no_create': True}"/>
@@ -132,10 +128,9 @@
                             <field name="magento_company_legal_name"/>
                             <field name="magento_company_vat"/>
                             <field name="magento_company_reseller_id"/>
-                            <field name="magento_company_group_id" readonly="1"
-                                   invisible="not magento_company_id"/>
+                            <field name="magento_company_group_id" readonly="1" attrs="{'invisible': [('magento_company_id', '=', False)]}" />
                         </group>
-                        <group string="Company Credit (informational)" invisible="not magento_company_id">
+                        <group string="Company Credit (informational)" attrs="{'invisible': [('magento_company_id', '=', False)]}">
                             <field name="magento_company_credit_limit"/>
                             <field name="magento_company_credit_balance"/>
                             <field name="magento_company_credit_available"/>
@@ -144,10 +139,9 @@
                     </group>
                     <div class="o_row">
                         <button name="action_magento_b2b_export" type="object" string="Export to Magento"
-                                icon="fa-upload" class="btn-secondary"
-                                invisible="not magento_b2b_export or not magento_company_instance_id"/>
+                                icon="fa-upload" class="btn-secondary" attrs="{'invisible': ['|', ('magento_b2b_export', '=', False), ('magento_company_instance_id', '=', False)]}" />
                         <button name="action_magento_b2b_pull" type="object" string="Re-sync from Magento"
-                                icon="fa-refresh" class="btn-secondary" invisible="not magento_company_id"/>
+                                icon="fa-refresh" class="btn-secondary" attrs="{'invisible': [('magento_company_id', '=', False)]}" />
                     </div>
                 </page>
             </xpath>
@@ -212,7 +206,7 @@
                 <field name="last_import_at" optional="show"/>
                 <field name="last_export_at" optional="show"/>
                 <field name="instance_id" optional="hide"/>
-                <field name="company_id" column_invisible="1"/>
+                <field name="company_id" invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
             </tree>
         </field>
@@ -225,8 +219,7 @@
             <form string="Shared Catalog" create="0">
                 <header>
                     <button name="action_import" type="object" string="Import from Magento" class="btn-primary"/>
-                    <button name="action_export" type="object" string="Export Pricelist to Magento"
-                            invisible="not pricelist_id"/>
+                    <button name="action_export" type="object" string="Export Pricelist to Magento" attrs="{'invisible': [('pricelist_id', '=', False)]}" />
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -259,7 +252,7 @@
                             <field name="last_result"/>
                         </group>
                     </group>
-                    <field name="description" readonly="1" invisible="not description"/>
+                    <field name="description" readonly="1" attrs="{'invisible': [('description', '=', False)]}" />
                     <separator string="Companies"/>
                     <field name="company_partner_ids" readonly="1">
                         <tree>
@@ -304,7 +297,7 @@
                 <field name="magento_quote_expiration" optional="show"/>
                 <field name="magento_quote_original_total" optional="show"/>
                 <field name="amount_untaxed" sum="Total"/>
-                <field name="currency_id" column_invisible="1"/>
+                <field name="currency_id" invisible="1"/>
                 <field name="state" optional="hide"/>
                 <field name="magento_quote_instance_id" optional="hide"/>
             </tree>
@@ -338,24 +331,21 @@
                 <field name="magento_quote_seller_turn" invisible="1"/>
                 <button name="action_magento_quote_wizard" type="object" string="Send Proposal to Magento"
                         class="btn-primary" context="{'magento_quote_mode': 'proposal'}"
-                        invisible="not magento_quote_seller_turn"
-                        groups="sdlc_magento_connector.group_magento_user"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_quote_seller_turn', '=', False)]}" />
                 <button name="action_magento_quote_wizard" type="object" string="Decline in Magento"
                         context="{'magento_quote_mode': 'decline'}"
-                        invisible="not magento_quote_seller_turn"
-                        groups="sdlc_magento_connector.group_magento_user"/>
+                        groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': [('magento_quote_seller_turn', '=', False)]}" />
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="Magento Negotiation" name="magento_negotiation"
-                      invisible="not magento_quote_id and not magento_source_quotation_id"
-                      groups="sdlc_magento_connector.group_magento_user">
+                      groups="sdlc_magento_connector.group_magento_user" attrs="{'invisible': ['&amp;', ('magento_quote_id', '=', False), ('magento_source_quotation_id', '=', False)]}">
                     <div class="alert alert-info mb-3" role="status">
                         Requires Adobe Commerce with B2B. Validated against Adobe's documented API with
                         simulated responses; not yet tested against a live Adobe Commerce store.
                         Magento negotiates one price for the whole quote: Odoo sends a percentage when every
                         line has the same discount, otherwise the proposed untaxed total.
                     </div>
-                    <group invisible="not magento_quote_id">
+                    <group attrs="{'invisible': [('magento_quote_id', '=', False)]}">
                         <group string="Negotiable Quote">
                             <field name="magento_quote_instance_id"/>
                             <field name="magento_quote_id"/>
@@ -371,19 +361,19 @@
                             <field name="magento_quote_negotiated_total"/>
                         </group>
                     </group>
-                    <div class="o_row" invisible="not magento_quote_id">
+                    <div class="o_row" attrs="{'invisible': [('magento_quote_id', '=', False)]}">
                         <button name="action_magento_quote_resync" type="object" string="Re-sync from Magento"
                                 icon="fa-refresh" class="btn-secondary"/>
                     </div>
-                    <group invisible="not magento_source_quotation_id">
+                    <group attrs="{'invisible': [('magento_source_quotation_id', '=', False)]}">
                         <field name="magento_source_quotation_id"/>
                     </group>
-                    <field name="magento_placed_order_ids" invisible="not magento_placed_order_ids" readonly="1">
+                    <field name="magento_placed_order_ids" readonly="1" attrs="{'invisible': [('magento_placed_order_ids', '=', False)]}">
                         <tree>
                             <field name="name"/>
                             <field name="magento_increment_id"/>
                             <field name="amount_total"/>
-                            <field name="currency_id" column_invisible="1"/>
+                            <field name="currency_id" invisible="1"/>
                             <field name="state"/>
                         </tree>
                     </field>
@@ -399,18 +389,15 @@
             <form string="Magento Negotiable Quote">
                 <field name="order_id" invisible="1"/>
                 <field name="mode" invisible="1"/>
-                <div class="alert alert-info mb-3" role="status" invisible="mode != 'proposal'">
+                <div class="alert alert-info mb-3" role="status" attrs="{'invisible': [('mode', '!=', 'proposal')]}">
                     <field name="summary" readonly="1"/>
                 </div>
                 <group>
-                    <field name="comment" placeholder="Message shown to the buyer in Magento"
-                           required="mode == 'decline'"/>
+                    <field name="comment" placeholder="Message shown to the buyer in Magento" attrs="{'required': [('mode', '=', 'decline')]}" />
                 </group>
                 <footer>
-                    <button name="action_confirm" type="object" string="Send Proposal" class="btn-primary"
-                            invisible="mode != 'proposal'"/>
-                    <button name="action_confirm" type="object" string="Decline Quote" class="btn-primary"
-                            invisible="mode != 'decline'"/>
+                    <button name="action_confirm" type="object" string="Send Proposal" class="btn-primary" attrs="{'invisible': [('mode', '!=', 'proposal')]}" />
+                    <button name="action_confirm" type="object" string="Decline Quote" class="btn-primary" attrs="{'invisible': [('mode', '!=', 'decline')]}" />
                     <button string="Cancel" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>
