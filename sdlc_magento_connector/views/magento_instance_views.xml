@@ -304,16 +304,17 @@
                     <field name="magento_id"/>
                     <field name="magento_last_error"/>
                     <templates>
-                        <t t-name="card" class="flex-row">
-                            <aside class="me-2">
+                        <t t-name="kanban-box">
+                            <div class="oe_kanban_global_click d-flex">
+                            <div class="me-2" style="width: 64px;">
                                 <field name="image_1920" widget="image" alt="Product"
                                        options="{'img_class': 'w-100 object-fit-contain'}"
                                        invisible="not image_1920"/>
                                 <span class="fa fa-cube fa-3x text-muted" role="img"
                                       aria-label="No image" title="No image"
                                       invisible="image_1920"/>
-                            </aside>
-                            <main>
+                            </div>
+                            <div class="flex-grow-1">
                                 <div class="h5 mb-1">
                                     <field name="name"/>
                                 </div>
@@ -343,7 +344,8 @@
                                           class="badge rounded-pill text-bg-danger"
                                           t-att-title="record.magento_last_error.raw_value">Push error</span>
                                 </div>
-                            </main>
+                            </div>
+                            </div>
                         </t>
                     </templates>
                 </kanban>
