@@ -1,9 +1,18 @@
 {
-    'name': 'SDLC Magento 2 Connector',
+    'name': 'Magento 2 Connector',
     'version': '19.0.1.1.0',
     'category': 'Connector',
-    'summary': 'Magento 2 Connector for Odoo',
+    'summary': 'Synchronize Magento 2 sales, catalog, customers, stock and accounting',
     'author': 'SDLC Corp',
+    'support': 'sales@sdlccorp.com',
+    'description': """
+Magento 2 Connector for Odoo 19
+================================
+
+Connect Odoo with Magento Open Source or Adobe Commerce through Magento's REST API.
+Manage scheduled and manual synchronization, mappings, queues, reconciliation, errors,
+multi-store catalog data, inventory, orders, invoices, shipments and refunds from Odoo.
+""",
     'license': 'LGPL-3',
     'depends': ['base', 'product', 'sale', 'sale_stock', 'account', 'stock'],
     'data': [
@@ -54,5 +63,11 @@
     'pre_init_hook': 'pre_init_hook',
     'installable': True,
     'application': True,
-    "images":["static/description/banner.gif"],
+    'images': [
+        'static/description/banner.gif',
+        'static/description/01_console_screenshot.png',
+        'static/description/02_instance_screenshot.png',
+        'static/description/03_orders_screenshot.png',
+        'static/description/04_error_center_screenshot.png',
+    ],
 }
