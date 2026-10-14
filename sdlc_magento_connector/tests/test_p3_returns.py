@@ -165,14 +165,13 @@ class TestP3Returns(MagentoTestCommon):
         return move.with_env(self.env)
 
     def _odoo_return(self, qty=1.0, reason=None):
-        """Odoo return (stock.return.picking) of ``qty`` bags, validated."""
-        wizard = self.env["stock.return.picking"].with_context(
-            active_id=self.delivery.id, active_ids=self.delivery.ids, active_model="stock.picking",
-        ).create({"picking_id": self.delivery.id})
-        wizard.product_return_moves.write({"quantity": qty})
+        """Odoo return of ``qty`` bags, validated. Odoo 20 has no return wizard: the
+        return picking is created from the delivery and edited directly."""
+        picking = self.delivery._create_return()
+        for move in picking.move_ids:
+            move.product_uom_qty = qty
         if reason:
-            wizard.magento_return_reason_id = reason
-        picking = self.env["stock.picking"].browse(wizard.action_create_returns()["res_id"])
+            picking.magento_return_reason_id = reason
         for move in picking.move_ids:
             move.quantity = move.product_uom_qty
             move.picked = True

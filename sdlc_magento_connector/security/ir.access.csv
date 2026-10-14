@@ -1,0 +1,146 @@
+id,name,model_id,group_id/id,operation,domain
+access_magento_instance_user,magento.instance user,magento.instance,group_magento_user,r,
+access_magento_instance_manager,magento.instance manager,magento.instance,group_magento_manager,crud,
+access_magento_field_mapping_user,magento.field.mapping user,magento.field.mapping,group_magento_user,r,
+access_magento_field_mapping_manager,magento.field.mapping manager,magento.field.mapping,group_magento_manager,crud,
+access_magento_available_field_user,magento.available.field user,magento.available.field,group_magento_user,r,
+access_magento_available_field_manager,magento.available.field manager,magento.available.field,group_magento_manager,crud,
+access_magento_attribute_set_user,magento.attribute.set user,magento.attribute.set,group_magento_user,r,
+access_magento_attribute_set_manager,magento.attribute.set manager,magento.attribute.set,group_magento_manager,crud,
+access_magento_product_map_user,magento.product.map user,magento.product.map,group_magento_user,cru,
+access_magento_product_map_manager,magento.product.map manager,magento.product.map,group_magento_manager,crud,
+access_magento_customer_user,magento.customer user,magento.customer,group_magento_user,cru,
+access_magento_customer_manager,magento.customer manager,magento.customer,group_magento_manager,crud,
+access_magento_category_user,magento.category user,magento.category,group_magento_user,cru,
+access_magento_category_manager,magento.category manager,magento.category,group_magento_manager,crud,
+access_magento_sync_report_user,magento.sync.report user,magento.sync.report,group_magento_user,cru,
+access_magento_sync_report_manager,magento.sync.report manager,magento.sync.report,group_magento_manager,crud,
+access_magento_mapping_report_user,magento.mapping.report user,magento.mapping.report,group_magento_user,cru,
+access_magento_mapping_report_manager,magento.mapping.report manager,magento.mapping.report,group_magento_manager,crud,
+access_magento_mapping_report_line_user,magento.mapping.report.line user,magento.mapping.report.line,group_magento_user,cru,
+access_magento_mapping_report_line_manager,magento.mapping.report.line manager,magento.mapping.report.line,group_magento_manager,crud,
+access_magento_job_user,magento.job user,magento.job,group_magento_user,r,
+access_magento_job_manager,magento.job manager,magento.job,group_magento_manager,crud,
+access_magento_sync_issue_user,magento.sync.issue user,magento.sync.issue,group_magento_user,ru,
+access_magento_sync_issue_manager,magento.sync.issue manager,magento.sync.issue,group_magento_manager,crud,
+access_magento_bulk_operation_user,magento.bulk.operation user,magento.bulk.operation,group_magento_user,r,
+access_magento_bulk_operation_manager,magento.bulk.operation manager,magento.bulk.operation,group_magento_manager,crud,
+access_magento_reconciliation_user,magento.reconciliation user,magento.reconciliation,group_magento_user,cru,
+access_magento_reconciliation_manager,magento.reconciliation manager,magento.reconciliation,group_magento_manager,crud,
+access_magento_reconciliation_line_user,magento.reconciliation.line user,magento.reconciliation.line,group_magento_user,cru,
+access_magento_reconciliation_line_manager,magento.reconciliation.line manager,magento.reconciliation.line,group_magento_manager,crud,
+access_magento_reconciliation_order_user,magento.reconciliation.order user,magento.reconciliation.order,group_magento_user,cru,
+access_magento_reconciliation_order_manager,magento.reconciliation.order manager,magento.reconciliation.order,group_magento_manager,crud,
+access_magento_customer_group_user,magento.customer.group user,magento.customer.group,group_magento_user,r,
+access_magento_customer_group_manager,magento.customer.group manager,magento.customer.group,group_magento_manager,crud,
+access_magento_stock_source_map_user,magento.stock.source.map user,magento.stock.source.map,group_magento_user,r,
+access_magento_stock_source_map_manager,magento.stock.source.map manager,magento.stock.source.map,group_magento_manager,crud,
+access_magento_stock_dirty_user,magento.stock.dirty user,magento.stock.dirty,group_magento_user,r,
+access_magento_stock_dirty_manager,magento.stock.dirty manager,magento.stock.dirty,group_magento_manager,crud,
+access_magento_tax_map_user,magento.tax.map user,magento.tax.map,group_magento_user,r,
+access_magento_tax_map_manager,magento.tax.map manager,magento.tax.map,group_magento_manager,crud,
+access_magento_payment_map_user,magento.payment.map user,magento.payment.map,group_magento_user,r,
+access_magento_payment_map_manager,magento.payment.map manager,magento.payment.map,group_magento_manager,crud,
+access_magento_carrier_map_user,magento.carrier.map user,magento.carrier.map,group_magento_user,r,
+access_magento_carrier_map_manager,magento.carrier.map manager,magento.carrier.map,group_magento_manager,crud,
+access_magento_order_workflow_user,magento.order.workflow user,magento.order.workflow,group_magento_user,r,
+access_magento_order_workflow_manager,magento.order.workflow manager,magento.order.workflow,group_magento_manager,crud,
+access_magento_product_attribute_user,magento.product.attribute user,magento.product.attribute,group_magento_user,cru,
+access_magento_product_attribute_manager,magento.product.attribute manager,magento.product.attribute,group_magento_manager,crud,
+access_magento_product_attribute_option_user,magento.product.attribute.option user,magento.product.attribute.option,group_magento_user,cru,
+access_magento_product_attribute_option_manager,magento.product.attribute.option manager,magento.product.attribute.option,group_magento_manager,crud,
+access_magento_product_link_user,magento.product.link user,magento.product.link,group_magento_user,crud,
+access_magento_product_link_manager,magento.product.link manager,magento.product.link,group_magento_manager,crud,
+access_magento_price_rule_user,magento.price.rule user,magento.price.rule,group_magento_user,r,
+access_magento_price_rule_manager,magento.price.rule manager,magento.price.rule,group_magento_manager,crud,
+access_magento_price_push_state_user,magento.price.push.state user,magento.price.push.state,group_magento_user,r,
+access_magento_price_push_state_manager,magento.price.push.state manager,magento.price.push.state,group_magento_manager,crud,
+access_magento_website_user,magento.website user,magento.website,group_magento_user,r,
+access_magento_website_manager,magento.website manager,magento.website,group_magento_manager,crud,
+access_magento_store_group_user,magento.store.group user,magento.store.group,group_magento_user,r,
+access_magento_store_group_manager,magento.store.group manager,magento.store.group,group_magento_manager,crud,
+access_magento_store_view_user,magento.store.view user,magento.store.view,group_magento_user,r,
+access_magento_store_view_manager,magento.store.view manager,magento.store.view,group_magento_manager,crud,
+access_magento_product_media_user,magento.product.media user,magento.product.media,group_magento_user,crud,
+access_magento_product_media_manager,magento.product.media manager,magento.product.media,group_magento_manager,crud,
+access_magento_setup_wizard_manager,magento.setup.wizard manager,magento.setup.wizard,group_magento_manager,crud,
+access_magento_setup_wizard_store_manager,magento.setup.wizard.store manager,magento.setup.wizard.store,group_magento_manager,crud,
+access_magento_setup_wizard_mapping_manager,magento.setup.wizard.mapping manager,magento.setup.wizard.mapping,group_magento_manager,crud,
+access_magento_setup_wizard_check_manager,magento.setup.wizard.check manager,magento.setup.wizard.check,group_magento_manager,crud,
+access_magento_setup_wizard_issue_manager,magento.setup.wizard.issue manager,magento.setup.wizard.issue,group_magento_manager,crud,
+access_magento_order_conflict_user,magento.order.conflict user,magento.order.conflict,group_magento_user,ru,
+access_magento_order_conflict_manager,magento.order.conflict manager,magento.order.conflict,group_magento_manager,crud,
+access_magento_order_status_event_user,magento.order.status.event user,magento.order.status.event,group_magento_user,r,
+access_magento_order_status_event_manager,magento.order.status.event manager,magento.order.status.event,group_magento_manager,crud,
+access_magento_totals_explanation_user,magento.totals.explanation user,magento.totals.explanation,group_magento_user,cru,
+access_magento_totals_explanation_manager,magento.totals.explanation manager,magento.totals.explanation,group_magento_manager,crud,
+access_magento_totals_explanation_line_user,magento.totals.explanation.line user,magento.totals.explanation.line,group_magento_user,crud,
+access_magento_totals_explanation_line_manager,magento.totals.explanation.line manager,magento.totals.explanation.line,group_magento_manager,crud,
+access_magento_return_reason_user,magento.return.reason user,magento.return.reason,base.group_user,r,
+access_magento_return_reason_manager,magento.return.reason manager,magento.return.reason,group_magento_manager,crud,
+access_magento_return_location_rule_user,magento.return.location.rule user,magento.return.location.rule,group_magento_user,r,
+access_magento_return_location_rule_manager,magento.return.location.rule manager,magento.return.location.rule,group_magento_manager,crud,
+access_magento_webhook_event_user,magento.webhook.event user,magento.webhook.event,group_magento_user,r,
+access_magento_webhook_event_manager,magento.webhook.event manager,magento.webhook.event,group_magento_manager,rd,
+access_magento_tier_price_import_user,magento.tier.price.import user,magento.tier.price.import,group_magento_user,r,
+access_magento_tier_price_import_manager,magento.tier.price.import manager,magento.tier.price.import,group_magento_manager,crud,
+access_magento_shared_catalog_user,magento.shared.catalog user,magento.shared.catalog,group_magento_user,r,
+access_magento_shared_catalog_manager,magento.shared.catalog manager,magento.shared.catalog,group_magento_manager,crud,
+access_magento_b2b_quote_wizard_user,magento.b2b.quote.wizard user,magento.b2b.quote.wizard,group_magento_user,cru,
+access_magento_b2b_quote_wizard_manager,magento.b2b.quote.wizard manager,magento.b2b.quote.wizard,group_magento_manager,crud,
+access_magento_dryrun_user,magento.dryrun user,magento.dryrun,group_magento_user,r,
+access_magento_dryrun_manager,magento.dryrun manager,magento.dryrun,group_magento_manager,crud,
+access_magento_dryrun_line_user,magento.dryrun.line user,magento.dryrun.line,group_magento_user,r,
+access_magento_dryrun_line_manager,magento.dryrun.line manager,magento.dryrun.line,group_magento_manager,crud,
+access_magento_digest_user,magento.digest user,magento.digest,group_magento_user,r,
+access_magento_digest_manager,magento.digest manager,magento.digest,group_magento_manager,crud,
+access_magento_digest_link_user,magento.digest.link user,magento.digest.link,group_magento_user,r,
+access_magento_digest_link_manager,magento.digest.link manager,magento.digest.link,group_magento_manager,crud,
+access_magento_net_profit_user,magento.net.profit user,magento.net.profit,group_magento_user,r,
+access_magento_settings_transfer_manager,magento.settings.transfer manager,magento.settings.transfer,group_magento_manager,crud,
+access_magento_settings_transfer_line_manager,magento.settings.transfer.line manager,magento.settings.transfer.line,group_magento_manager,crud,
+rule_magento_instance_company,Magento instance: multi-company,magento.instance,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_product_map_company,Magento product binding: multi-company,magento.product.map,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_customer_company,Magento customer binding: multi-company,magento.customer,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_category_company,Magento category binding: multi-company,magento.category,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_sync_report_company,Magento sync report: multi-company,magento.sync.report,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_attribute_set_company,Magento attribute set: multi-company,magento.attribute.set,,crud,"[('instance_id.company_id', 'in', company_ids)]"
+rule_magento_field_mapping_company,Magento field mapping: multi-company,magento.field.mapping,,crud,"[('instance_id.company_id', 'in', company_ids)]"
+rule_magento_available_field_company,Magento available field: multi-company,magento.available.field,,crud,"[('instance_id.company_id', 'in', company_ids)]"
+rule_magento_mapping_report_company,Magento mapping report: multi-company,magento.mapping.report,,crud,"[('instance_id.company_id', 'in', company_ids)]"
+rule_magento_job_company,Magento job: multi-company,magento.job,,crud,"['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]"
+rule_magento_sync_issue_company,Magento sync issue: multi-company,magento.sync.issue,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_bulk_operation_company,Magento bulk operation: multi-company,magento.bulk.operation,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_reconciliation_company,Magento reconciliation: multi-company,magento.reconciliation,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_reconciliation_line_company,Magento reconciliation line: multi-company,magento.reconciliation.line,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_reconciliation_order_company,Magento reconciliation finding: multi-company,magento.reconciliation.order,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_customer_group_company,Magento customer group: multi-company,magento.customer.group,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_stock_source_map_company,Magento MSI source mapping: multi-company,magento.stock.source.map,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_stock_dirty_company,Magento stock change: multi-company,magento.stock.dirty,,crud,"[('instance_id.company_id', 'in', company_ids)]"
+rule_magento_tax_map_company,Magento tax mapping: multi-company,magento.tax.map,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_payment_map_company,Magento payment mapping: multi-company,magento.payment.map,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_carrier_map_company,Magento carrier mapping: multi-company,magento.carrier.map,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_order_workflow_company,Magento order workflow: multi-company,magento.order.workflow,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_product_attribute_company,Magento product attribute: multi-company,magento.product.attribute,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_product_attribute_option_company,Magento product attribute option: multi-company,magento.product.attribute.option,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_product_link_company,Magento product link: multi-company,magento.product.link,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_price_rule_company,Magento price rule: multi-company,magento.price.rule,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_price_push_state_company,Magento pushed price: multi-company,magento.price.push.state,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_website_company,Magento website: multi-company,magento.website,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_store_group_company,Magento store: multi-company,magento.store.group,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_store_view_company,Magento store view: multi-company,magento.store.view,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_product_media_company,Magento product image: multi-company,magento.product.media,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_order_conflict_company,Magento order conflict: multi-company,magento.order.conflict,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_order_status_event_company,Magento order status event: multi-company,magento.order.status.event,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_totals_explanation_company,Magento totals explanation: multi-company,magento.totals.explanation,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_totals_explanation_line_company,Magento totals explanation component: multi-company,magento.totals.explanation.line,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_return_reason_company,Magento return reason: multi-company,magento.return.reason,,crud,"['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]"
+rule_magento_return_location_rule_company,Magento return location rule: multi-company,magento.return.location.rule,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_webhook_event_company,Magento real-time event: multi-company,magento.webhook.event,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_tier_price_import_company,Magento imported tier price: multi-company,magento.tier.price.import,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_shared_catalog_company,Magento shared catalog: multi-company,magento.shared.catalog,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_dryrun_company,Magento dry-run preview: multi-company,magento.dryrun,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_dryrun_line_company,Magento dry-run preview row: multi-company,magento.dryrun.line,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_digest_company,Magento daily digest: multi-company,magento.digest,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_digest_link_company,Magento digest link: multi-company,magento.digest.link,,crud,"[('company_id', 'in', company_ids)]"
+rule_magento_net_profit_company,Magento net profit: multi-company,magento.net.profit,,crud,"[('company_id', 'in', company_ids)]"

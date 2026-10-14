@@ -1283,7 +1283,7 @@ class MagentoSettingsTransfer(models.TransientModel):
     def _data(self):
         if not self.import_file:
             raise UserError(_("Choose a settings file exported from another instance."))
-        return self.env["magento.settings.io"]._magento_parse(base64.b64decode(self.import_file))
+        return self.env["magento.settings.io"]._magento_parse(self.import_file.content)
 
     def _fill(self, plans, state, missing=()):
         Line = self.env["magento.settings.transfer.line"]

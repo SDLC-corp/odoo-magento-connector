@@ -636,6 +636,8 @@ class MagentoProductMap(models.Model):
         data = self.image_1920
         if not data or not self.sku:
             return None
+        if getattr(data, "content", None) is not None:  # Odoo 20 BinaryValue: raw bytes
+            data = base64.b64encode(data.content).decode()
         if isinstance(data, bytes):
             data = data.decode()
         data = data.strip()

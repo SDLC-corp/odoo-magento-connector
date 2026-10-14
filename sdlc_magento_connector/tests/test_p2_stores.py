@@ -218,9 +218,9 @@ class TestP2Stores(MagentoTestCommon):
         self.assertEqual(template.with_context(lang="fr_FR").description_sale, "Un sac de sport")
         self.assertEqual(template.with_context(lang="en_US").description_sale, "A duffle bag")
         names = template._fields["name"]._get_stored_translations(template)
-        self.assertNotIn("de_DE", names, "A value equal to the default is not stored")
+        self.assertNotIn("de_DE", set(names), "A value equal to the default is not stored")  # Odoo 20: "in" falls back
         descriptions = template._fields["description"]._get_stored_translations(template) or {}
-        self.assertNotIn("fr_FR", descriptions, "The French description equals the default")
+        self.assertNotIn("fr_FR", set(descriptions), "The French description equals the default")
         self.assertIn("Eine Sporttasche.", template.with_context(lang="de_DE").description)
         self.assertIn("<li>Leicht</li>", template.with_context(lang="de_DE").description)
         self.assertEqual(template.with_context(lang="en_US").description, "<p>Joust Duffle Bag</p>")
@@ -305,13 +305,13 @@ class TestP2Stores(MagentoTestCommon):
         self.assertEqual(main.roles, "image,small_image,thumbnail")
         self.assertFalse(main.image, "The main image is the product image")
         self.assertEqual(mapping.magento_image_entry_id, "11")
-        self.assertEqual(base64.b64decode(mapping.odoo_product_id.image_1920),
+        self.assertEqual(mapping.odoo_product_id.image_1920.content,
                          base64.b64decode(IMAGES[11]))
         extras = (media - main).sorted("position")
         self.assertEqual(extras.mapped("magento_entry_id"), ["12", "13"])
         self.assertEqual(extras.mapped("origin"), ["magento", "magento"])
         self.assertFalse(any(extras.mapped("created_by_connector")))
-        self.assertEqual([base64.b64decode(e.image) for e in extras],
+        self.assertEqual([e.image.content for e in extras],
                          [base64.b64decode(IMAGES[12]), base64.b64decode(IMAGES[13])])
         # The product import fetched the main image, the gallery import the two others.
         self.assertEqual(sorted(self.media_fetches), [11, 12, 13])
@@ -424,7 +424,7 @@ class TestP2Stores(MagentoTestCommon):
         self.assertFalse(store_calls.called)
         extra = mapping.magento_media_ids.filtered(lambda m: not m.is_main)
         self.assertEqual(extra.magento_entry_id, "12")
-        self.assertEqual(base64.b64decode(extra.image), base64.b64decode(IMAGES[12]))
+        self.assertEqual(extra.image.content, base64.b64decode(IMAGES[12]))
         self.assertEqual(mapping.magento_image_entry_id, "11")
         # The other variant keeps no image of this SKU.
         self.assertFalse(self.env["magento.product.media"].search([("map_id.odoo_product_id", "=", black.id)]))

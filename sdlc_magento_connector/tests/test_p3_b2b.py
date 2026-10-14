@@ -234,7 +234,7 @@ class TestB2B(MagentoTestCommon):
 
     def test_company_export_requires_an_admin(self):
         partner = self.env["res.partner"].create({
-            "name": "Odoo Wholesale", "is_company": True, "email": "buy@wholesale.example",
+            "name": "Odoo Wholesale", "is_company": True, "vat": "US123456789", "email": "buy@wholesale.example",
             "street": "1 Main St", "city": "Austin", "zip": "73301", "country_id": self.country_us.id,
             "phone": "5125550100", "magento_company_instance_id": self.instance.id, "magento_b2b_export": True,
         })
@@ -305,8 +305,8 @@ class TestB2B(MagentoTestCommon):
         items = {(i.product_id.default_code, i.min_quantity): i for i in pricelist.item_ids}
         self.assertEqual(set(items), {("24-MB01", 1.0), ("24-MB01", 10.0), ("24-MB04", 1.0)})
         self.assertEqual(items[("24-MB01", 1.0)].fixed_price, 30.0)
-        self.assertEqual(items[("24-MB04", 1.0)].compute_price, "percentage")
-        self.assertEqual(items[("24-MB04", 1.0)].percent_price, 15.0)
+        self.assertEqual(items[("24-MB04", 1.0)].compute_price, "discount")
+        self.assertEqual(items[("24-MB04", 1.0)].price_discount, 15.0)
         company = self.b2b_company()
         self.assertEqual(company.magento_shared_catalog_id, catalog)
         self.assertEqual(company.with_company(self.instance.company_id).property_product_pricelist, pricelist)

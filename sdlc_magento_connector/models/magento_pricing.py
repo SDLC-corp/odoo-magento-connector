@@ -444,7 +444,7 @@ class MagentoPriceRule(models.Model):
         if not groups:
             return {}
         pricelist = self.pricelist_id.sudo()
-        tier_items = pricelist._get_applicable_rules(products, now).filtered(lambda i: i.min_quantity > 1)
+        tier_items = pricelist._get_applicable_rules(products, None, now).filtered(lambda i: i.min_quantity > 1)
         if not tier_items:
             return {}
         Item = self.env["product.pricelist.item"].sudo()

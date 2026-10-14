@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from odoo import SUPERUSER_ID, fields
 from odoo import http as odoo_http
+from odoo.http import router as odoo_http_router  # Odoo 20: db_filter lives here
 from odoo.exceptions import AccessError
 from odoo.tests import HttpCase, tagged
 from odoo.tools import mute_logger
@@ -426,7 +427,7 @@ class TestWebhookRoute(HttpCase):
         super().setUp()
         dbname = self.env.cr.dbname
         # The server's dbfilter may name another database: accept the test one.
-        self.patch(odoo_http, "db_filter", lambda dbs, host=None: [db for db in dbs if db == dbname])
+        self.patch(odoo_http_router, "db_filter", lambda dbs, host=None: [db for db in dbs if db == dbname])
         self.headers_db = {"X-Odoo-Database": dbname}
 
     def _post(self, key, body, headers):

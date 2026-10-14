@@ -122,7 +122,7 @@ class MagentoBulkOperation(models.Model):
 
     @api.model
     def _max_poll_attempts(self):
-        value = self.env["ir.config_parameter"].sudo().get_param(_MAX_POLLS_PARAM)
+        value = self.env["ir.config_parameter"].sudo().get_str(_MAX_POLLS_PARAM)
         try:
             return max(1, int(value)) if value else _DEFAULT_MAX_POLLS
         except (TypeError, ValueError):

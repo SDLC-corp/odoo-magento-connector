@@ -102,7 +102,7 @@ class TestIdempotentDocuments(MagentoTestCommon):
                 Command.create({
                     "product_id": line.product_id.id,
                     "product_uom_qty": line.product_uom_qty,
-                    "product_uom": line.product_uom_id.id,
+                    "uom_id": line.product_uom_id.id,
                     "sale_line_id": line.id,
                     "location_id": picking_type.default_location_src_id.id,
                     "location_dest_id": self.env.ref("stock.stock_location_customers").id,

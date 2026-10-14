@@ -98,6 +98,8 @@ def _raw(b64_value):
     """Bytes of a base64 value (str or bytes), or None."""
     if not b64_value:
         return None
+    if getattr(b64_value, "content", None) is not None:  # Odoo 20 BinaryValue
+        return b64_value.content or None
     if isinstance(b64_value, str):
         b64_value = b64_value.encode()
     try:
@@ -632,7 +634,8 @@ class MagentoProductMap(models.Model):
                             vals["_content"] = content
             content = vals.pop("_content", None)
             if tracker:
-                changed = {k: v for k, v in vals.items() if tracker[k] != v}
+                changed = {k: v for k, v in vals.items()
+                           if tracker[k] != v and (tracker[k] or v)}  # Odoo 20: empty Binary != False
                 if changed or content:
                     tracker.write(changed)
                     counts["updated"] += 1
@@ -750,7 +753,8 @@ class MagentoProductMap(models.Model):
             }
             if not existing or not tracker or tracker.magento_hash != content_hash:
                 entry["content"] = {
-                    "base64_encoded_data": b64.decode() if isinstance(b64, bytes) else b64,
+                    "base64_encoded_data": (base64.b64encode(b64.content).decode() if hasattr(b64, "content")
+                                            else b64.decode() if isinstance(b64, bytes) else b64),
                     "type": mimetype,
                     "name": "%s-%s.%s" % (safe_sku, content_hash[:8], extension),
                 }

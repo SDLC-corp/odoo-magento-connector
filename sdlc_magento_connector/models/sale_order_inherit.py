@@ -958,8 +958,7 @@ class SaleOrder(models.Model):
                     ids = set(command[2])
             return set(current.ids) != ids
         if fname == "product_uom_qty":
-            rounding = line.product_uom_id.rounding or 0.0001
-            return float_compare(current, value or 0.0, precision_rounding=rounding) != 0
+            return line.product_uom_id.compare(current, value or 0.0) != 0
         if fname == "price_unit":
             currency = line.currency_id or line.order_id.currency_id or self.env.company.currency_id
             return currency.compare_amounts(current, value or 0.0) != 0
@@ -1737,9 +1736,9 @@ class SaleOrder(models.Model):
             if not sale_line or sale_line.id not in line_qty:
                 continue
             qty = line_qty[sale_line.id]
-            if sale_line.product_uom_id and move.product_uom and sale_line.product_uom_id != move.product_uom:
+            if sale_line.product_uom_id and move.uom_id and sale_line.product_uom_id != move.uom_id:
                 qty = sale_line.product_uom_id._compute_quantity(
-                    qty, move.product_uom, rounding_method="HALF-UP"
+                    qty, move.uom_id, rounding_method="HALF-UP"
                 )
             move.quantity = qty
             if qty:

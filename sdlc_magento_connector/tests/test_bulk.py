@@ -251,7 +251,7 @@ class TestBulkOperation(_BulkCase):
         self.assertEqual(op2.state, "done")
 
     def test_gives_up_after_max_polls(self):
-        self.env["ir.config_parameter"].sudo().set_param("sdlc_magento_connector.bulk_max_polls", "3")
+        self.env["ir.config_parameter"].sudo().set_str("sdlc_magento_connector.bulk_max_polls", "3")
         op = self._submit_async(["G1", "G2"], uuid="uuid-stuck")
         self.patch_api("get_bulk_detailed_status", return_value={"operations_list": [
             {"id": 1, "status": 4}, {"id": 2, "status": 4},
@@ -269,7 +269,7 @@ class TestBulkOperation(_BulkCase):
         self.assertEqual(issue.severity, "permanent")
 
     def test_poll_http_error_counts_as_attempt(self):
-        self.env["ir.config_parameter"].sudo().set_param("sdlc_magento_connector.bulk_max_polls", "2")
+        self.env["ir.config_parameter"].sudo().set_str("sdlc_magento_connector.bulk_max_polls", "2")
         op = self._submit_async(["E1"], uuid="uuid-err")
         self.patch_api("get_bulk_detailed_status",
                        side_effect=requests.exceptions.ConnectionError("Connection refused"))

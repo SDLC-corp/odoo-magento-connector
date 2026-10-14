@@ -978,7 +978,7 @@ class MagentoSharedCatalog(models.Model):
             qty = max(_to_float(row.get("quantity"), 1.0), 1.0)
             price = _to_float(row.get("price"))
             if (row.get("price_type") or "fixed") == "discount":
-                vals = {"compute_price": "percentage", "percent_price": price}
+                vals = {"compute_price": "discount", "price_discount": price}
             else:
                 vals = {"compute_price": "fixed", "fixed_price": price}
             desired[(product.id, qty)] = vals
@@ -1037,7 +1037,7 @@ class MagentoSharedCatalog(models.Model):
             price, rule_id = base[product_map.odoo_product_id.id]
             if rule_id:
                 entries[(product_map.sku, 1.0)] = float_round(price, precision_digits=digits)
-        tiers = pricelist._get_applicable_rules(products, now).filtered(lambda i: i.min_quantity > 1)
+        tiers = pricelist._get_applicable_rules(products, None, now).filtered(lambda i: i.min_quantity > 1)
         for qty in sorted(set(tiers.mapped("min_quantity"))):
             prices = pricelist._compute_price_rule(products, qty, date=now)
             for product_map in maps:

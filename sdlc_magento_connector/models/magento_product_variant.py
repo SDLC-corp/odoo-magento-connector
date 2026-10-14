@@ -36,6 +36,7 @@ SKU that already is a variant of another template is left where it is.
 
 Contract for the order import: ``magento.product.map._magento_bundle_components()``.
 """
+import base64
 import logging
 import time
 
@@ -94,6 +95,8 @@ def _to_float(value, default=0.0):
 
 def _b64_text(value):
     """Base64 image value as text (Binary fields read as bytes)."""
+    if getattr(value, "content", None) is not None:  # Odoo 20 BinaryValue: raw bytes
+        return base64.b64encode(value.content).decode() if value.content else ""
     if isinstance(value, bytes):
         return value.decode()
     return value or ""

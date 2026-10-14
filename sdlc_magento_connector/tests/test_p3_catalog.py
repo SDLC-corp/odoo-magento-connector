@@ -180,7 +180,7 @@ class TestP3TierImport(MagentoTestCommon):
         self._import([_tier("TP-A", 10, 10.0, price_type="discount")])
         pricelist = self.instance.magento_tier_pricelist_id
         item = self._items(pricelist, self.product_a)
-        self.assertEqual((item.compute_price, item.percent_price, item.min_quantity), ("percentage", 10.0, 10))
+        self.assertEqual((item.compute_price, item.price_discount, item.min_quantity), ("discount", 10.0, 10))
         self.assertAlmostEqual(pricelist._get_product_price(self.product_a, 10), 45.0)
         # switching to a fixed tier rewrites the same item
         self._import([_tier("TP-A", 10, 44.0)])
@@ -256,7 +256,7 @@ class TestP3TierImport(MagentoTestCommon):
         self.instance._magento_after_product_import(self.map_a, data)
         self.assertEqual(self._items(self.instance.magento_tier_pricelist_id, self.product_a).fixed_price, 40.0)
         group_item = self._items(wholesale, self.product_a)
-        self.assertEqual((group_item.compute_price, group_item.percent_price), ("percentage", 10.0))
+        self.assertEqual((group_item.compute_price, group_item.price_discount), ("discount", 10.0))
         self.assertFalse(self.tiers.called, "the product payload carries the tiers")
 
     def test_action_queues_paged_jobs(self):

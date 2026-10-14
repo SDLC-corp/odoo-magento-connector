@@ -312,7 +312,7 @@ class MagentoInstance(models.Model):
 
     @api.depends("webhook_uuid", "webhook_base_url")
     def _compute_webhook_url(self):
-        default_base = self.env["ir.config_parameter"].sudo().get_param("web.base.url") or ""
+        default_base = self.env["ir.config_parameter"].sudo().get_str("web.base.url")
         for instance in self:
             base = (instance.webhook_base_url or default_base).strip().rstrip("/")
             instance.webhook_url = (

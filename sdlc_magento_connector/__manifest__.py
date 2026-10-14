@@ -1,12 +1,12 @@
 {
     'name': 'Magento 2 Connector',
-    'version': '19.0.1.1.0',
+    'version': '20.0.1.1.0',
     'category': 'Connector',
     'summary': 'Synchronize Magento 2 sales, catalog, customers, stock and accounting',
     'author': 'SDLC Corp',
     'support': 'sales@sdlccorp.com',
     'description': """
-Magento 2 Connector for Odoo 19
+Magento 2 Connector for Odoo 20
 ================================
 
 Connect Odoo with Magento Open Source or Adobe Commerce through Magento's REST API.
@@ -17,7 +17,7 @@ multi-store catalog data, inventory, orders, invoices, shipments and refunds fro
     'depends': ['base', 'product', 'sale', 'sale_stock', 'account', 'stock'],
     'data': [
         'security/magento_security.xml',
-        'security/ir.model.access.csv',
+        'security/ir.access.csv',
         'data/cleanup_billing_agreement.xml',
         'views/magento_sale_order_view.xml',
         'views/magento_stock_picking_view.xml',

@@ -80,12 +80,12 @@
                        column_invisible="context.get('default_move_type') != 'out_refund'"/>
             </xpath>
 
-            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@column_invisible, 'out_invoice')]"
+            <xpath expr="//field[@name='partner_id'][contains(@column_invisible, 'out_invoice')]"
                    position="attributes">
                 <attribute name="string">Bill-to Name</attribute>
             </xpath>
 
-            <xpath expr="//field[@name='invoice_partner_display_name'][contains(@column_invisible, 'out_invoice')]"
+            <xpath expr="//field[@name='partner_id'][contains(@column_invisible, 'out_invoice')]"
                    position="after">
                 <field name="magento_refund_state"
                        string="Status"

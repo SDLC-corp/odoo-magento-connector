@@ -202,8 +202,8 @@ class StockPicking(models.Model):
                 qty = float(move.product_uom_qty or 0.0)
             if qty <= 0:
                 continue
-            if move.product_uom and sale_line.product_uom_id and move.product_uom != sale_line.product_uom_id:
-                qty = move.product_uom._compute_quantity(
+            if move.uom_id and sale_line.product_uom_id and move.uom_id != sale_line.product_uom_id:
+                qty = move.uom_id._compute_quantity(
                     qty, sale_line.product_uom_id, rounding_method="HALF-UP"
                 )
             # Configurable children are shipped through their parent item in Magento.

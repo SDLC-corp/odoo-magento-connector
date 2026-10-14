@@ -465,7 +465,7 @@ class SaleOrder(models.Model):
         for line in lines:
             wanted = _to_float(pending.get(str(line.id)))
             qty = min(wanted, max(line.qty_delivered, 0.0))
-            if float_is_zero(qty, precision_rounding=line.product_uom_id.rounding or 0.01):
+            if line.product_uom_id.is_zero(qty):
                 capped.append(line.product_id.display_name)
                 continue
             if qty < wanted:
@@ -535,7 +535,7 @@ class SaleOrder(models.Model):
                 mv = {
                     "product_id": line.product_id.id,
                     "product_uom_qty": qty,
-                    "product_uom": line.product_uom_id.id,
+                    "uom_id": line.product_uom_id.id,
                     "sale_line_id": line.id,
                     "location_id": customer_location.id,
                     "location_dest_id": location.id,
@@ -613,23 +613,3 @@ class StockPicking(models.Model):
                 order.sudo()._magento_process_pending_returns()
         return res
 
-
-class StockReturnPicking(models.TransientModel):
-    _inherit = "stock.return.picking"
-
-    magento_return_reason_id = fields.Many2one(
-        "magento.return.reason", string="Return Reason",
-        help="Sent to Magento (credit memo comment) with the credit note of this return.",
-    )
-    magento_order = fields.Boolean(compute="_compute_magento_order")
-
-    @api.depends("picking_id")
-    def _compute_magento_order(self):
-        for wizard in self:
-            wizard.magento_order = bool(wizard.picking_id.sale_id.magento_instance_id)
-
-    def _create_return(self):
-        picking = super()._create_return()
-        if self.magento_return_reason_id:
-            picking.magento_return_reason_id = self.magento_return_reason_id
-        return picking

@@ -232,7 +232,7 @@ class TestDashboardPhase1(MagentoTestCommon):
         self.assertIsNone(self._item(self._data(), key), "No auto-sync: the marker is not expected to move")
 
     def test_user_without_issue_rights_sees_no_issue_figures(self):
-        self.env.ref(ISSUE_ACCESS_USER).perm_read = False
+        self.env.ref(ISSUE_ACCESS_USER).for_read = False
         self.assertFalse(self.env["magento.sync.issue"].with_user(self.user).has_access("read"))
         data = self._data()
         self.assertTrue(data["issues_hidden"])

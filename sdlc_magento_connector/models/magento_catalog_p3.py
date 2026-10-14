@@ -421,7 +421,7 @@ class MagentoInstance(models.Model):
             self.env["product.pricelist.item"].sudo().create({
                 "pricelist_id": pricelist.id,
                 "applied_on": "3_global",
-                "compute_price": "formula",
+                "compute_price": "discount",
                 "base": "pricelist",
                 "base_pricelist_id": fallback.id,
             })
@@ -444,9 +444,9 @@ class MagentoInstance(models.Model):
             "min_quantity": row["quantity"],
         }
         if row["price_type"] == "discount":
-            vals.update({"compute_price": "percentage", "percent_price": row["value"], "fixed_price": 0.0})
+            vals.update({"compute_price": "discount", "price_discount": row["value"], "fixed_price": 0.0})
         else:
-            vals.update({"compute_price": "fixed", "fixed_price": row["value"], "percent_price": 0.0})
+            vals.update({"compute_price": "fixed", "fixed_price": row["value"], "price_discount": 0.0})
         return vals
 
     @api.model

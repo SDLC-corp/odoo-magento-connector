@@ -386,7 +386,7 @@ class TestSettingsTransfer(InsightsCase):
     def wizard(self, data, target=None):
         return self.env["magento.settings.transfer"].create({
             "instance_id": (target or self.target).id,
-            "import_file": base64.b64encode(json.dumps(data).encode()),
+            "import_file": base64.b64encode(json.dumps(data).encode()).decode(),
             "import_filename": "settings.json",
         })
 
@@ -420,7 +420,7 @@ class TestSettingsTransfer(InsightsCase):
         action = self.instance.action_export_settings()
         self.assertEqual(action["type"], "ir.actions.act_url")
         attachment = self.env["ir.attachment"].browse(int(re.search(r"/web/content/(\d+)", action["url"]).group(1)))
-        self.assertEqual(json.loads(attachment.raw)["format"], "sdlc_magento_settings/1")
+        self.assertEqual(json.loads(attachment.raw.content)["format"], "sdlc_magento_settings/1")
 
     def test_preview_reports_unresolved_references(self):
         data = self.export()

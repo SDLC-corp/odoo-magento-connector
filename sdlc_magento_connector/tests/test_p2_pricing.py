@@ -74,7 +74,7 @@ class TestPricingP2(MagentoTestCommon):
 
     @staticmethod
     def _global_discount(percent):
-        return {"applied_on": "3_global", "compute_price": "percentage", "percent_price": percent}
+        return {"applied_on": "3_global", "compute_price": "discount", "price_discount": percent}
 
     @staticmethod
     def _fixed(product, price, **extra):
