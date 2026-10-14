@@ -6,121 +6,380 @@
     <title>Magento 2 Connector for Odoo 18</title>
 </head>
 <body>
-<div class="container py-4">
-    <section class="text-center py-5 px-3 mb-4 rounded" style="background-color:#f6f2fa;">
+<div class="container py-4" style="max-width:1140px;overflow-wrap:break-word;color:#1f1b24;">
+
+    <!-- Hero -->
+    <section class="text-center py-5 px-3 mb-5" style="background-color:#f6f2fa;border-radius:12px;">
         <div class="mb-3">
-            <span class="badge badge-pill px-3 py-2 mr-2" style="background-color:#714b67;color:#ffffff;">Odoo 18</span>
-            <span class="badge badge-pill px-3 py-2" style="background-color:#f26322;color:#ffffff;">Magento 2</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 14px;border-radius:999px;background-color:#714b67;color:#ffffff;font-size:13px;font-weight:600;">Odoo 18</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 14px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:13px;font-weight:600;">Magento 2.4.6 – 2.4.9</span>
         </div>
-        <h1 class="display-4 font-weight-bold mb-3" style="color:#2d2430;">Magento 2 Connector</h1>
-        <p class="lead mx-auto mb-4" style="color:#665b63;">
-            Operate your Magento sales, catalog, customers, inventory and accounting flows from Odoo with
-            controlled queues, scheduled synchronization and clear exception handling.
+        <h1 class="mb-3" style="font-size:clamp(2rem,5vw,3rem);font-weight:700;color:#2d2430;">Magento 2 Connector</h1>
+        <p class="mx-auto mb-4" style="max-width:720px;font-size:1.15rem;color:#5f5a66;">
+            Run Magento sales, catalog, customers, inventory and accounting from Odoo, with queued
+            synchronization, incremental imports and an error center that tells you what to fix.
         </p>
-        <div class="row justify-content-center">
-            <div class="col-auto mb-2"><span class="badge badge-light border px-3 py-2">Multi-store</span></div>
-            <div class="col-auto mb-2"><span class="badge badge-light border px-3 py-2">REST API</span></div>
-            <div class="col-auto mb-2"><span class="badge badge-light border px-3 py-2">Job queue</span></div>
-            <div class="col-auto mb-2"><span class="badge badge-light border px-3 py-2">Reconciliation</span></div>
-            <div class="col-auto mb-2"><span class="badge badge-light border px-3 py-2">Error center</span></div>
+        <div class="mx-auto" style="max-width:760px;">
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">Orders &amp; customers</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">Configurable catalog</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">MSI stock</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">Invoices, shipments, refunds</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">Multi-store</span>
+            <span style="display:inline-block;margin:0 4px 8px;padding:6px 12px;border:1px solid #e6e1e8;border-radius:999px;background-color:#ffffff;font-size:13px;color:#2d2430;">Job queue &amp; retry</span>
         </div>
     </section>
 
-    <section class="py-4">
-        <div class="row align-items-center">
-            <div class="col-lg-6 mb-4 mb-lg-0">
-                <p class="text-uppercase font-weight-bold mb-2" style="color:#714b67;">One operational console</p>
-                <h2 class="font-weight-bold mb-3">See what is moving and what needs attention</h2>
-                <p class="text-muted">
-                    Filter by Magento instance and reporting period. Review revenue, orders, net profit,
-                    synchronization health and open issues, then drill directly into the related Odoo records.
-                </p>
-                <ul class="pl-4 text-muted">
-                    <li class="mb-2">Connection state and last synchronization per instance</li>
-                    <li class="mb-2">Operational KPIs, order status, categories and countries</li>
-                    <li class="mb-2">Permission-aware figures and navigation</li>
+    <!-- End-to-end flow -->
+    <section class="mb-5">
+        <div class="text-center mb-4">
+            <p class="mb-2" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#714b67;">End-to-end flow</p>
+            <h2 style="font-weight:700;">Magento → Connector → Odoo</h2>
+        </div>
+        <div class="row align-items-stretch">
+            <div class="col-12 col-lg mb-3 mb-lg-0">
+                <div class="h-100 p-4" style="border:1px solid #f3c7a8;border-top:4px solid #eb5202;border-radius:10px;background-color:#fff8f3;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b34000;">Magento 2</p>
+                    <h3 class="h5 mb-2" style="font-weight:700;">Store activity</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Orders, customers, products, categories, store views, invoices, shipments and credit memos, read through the Magento REST API.</p>
+                </div>
+            </div>
+            <div class="col-12 col-lg-auto d-flex align-items-center justify-content-center mb-3 mb-lg-0" aria-hidden="true">
+                <span class="d-none d-lg-inline" style="font-size:28px;color:#a39aa8;">→</span>
+                <span class="d-lg-none" style="font-size:28px;color:#a39aa8;">↓</span>
+            </div>
+            <div class="col-12 col-lg mb-3 mb-lg-0">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-top:4px solid #41362f;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#41362f;">Connector</p>
+                    <h3 class="h5 mb-2" style="font-weight:700;">Queue, map, verify</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Bounded page jobs with incremental watermarks, field and tax mappings, data ownership rules, retries and a sync report for every run.</p>
+                </div>
+            </div>
+            <div class="col-12 col-lg-auto d-flex align-items-center justify-content-center mb-3 mb-lg-0" aria-hidden="true">
+                <span class="d-none d-lg-inline" style="font-size:28px;color:#a39aa8;">→</span>
+                <span class="d-lg-none" style="font-size:28px;color:#a39aa8;">↓</span>
+            </div>
+            <div class="col-12 col-lg">
+                <div class="h-100 p-4" style="border:1px solid #dccfe0;border-top:4px solid #714b67;border-radius:10px;background-color:#f9f6fb;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#714b67;">Odoo 18</p>
+                    <h3 class="h5 mb-2" style="font-weight:700;">Operational records</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Sale orders, contacts, products and variants, stock, invoices and refunds, with Magento references kept on every record.</p>
+                </div>
+            </div>
+        </div>
+        <p class="text-center mt-3 mb-0 small" style="color:#5f5a66;">The return path runs from Odoo to Magento: stock levels, prices, invoices, shipments with tracking, and credit notes.</p>
+    </section>
+
+    <!-- Side-by-side comparisons -->
+    <section class="mb-4">
+        <div class="text-center mb-4">
+            <p class="mb-2" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#714b67;">Side by side</p>
+            <h2 style="font-weight:700;">What you see in Magento, and where it lands in Odoo</h2>
+            <p class="mx-auto mb-0" style="max-width:760px;color:#5f5a66;">
+                Magento screens come from a Magento 2.4.9 store with Luma sample data. Odoo screens come from a
+                connector demo database, so the two sides show different sample records.
+            </p>
+        </div>
+    </section>
+
+    <!-- Comparison 1: dashboard / console -->
+    <section class="mb-5 pb-4" style="border-bottom:1px solid #e6e1e8;">
+        <h3 class="h4 mb-2" style="font-weight:700;">Store overview → Magento Console</h3>
+        <p class="mb-3" style="color:#5f5a66;max-width:860px;">
+            Magento's dashboard reports the store. The Odoo console adds the connector's view: orders, revenue
+            and net profit per instance and period, plus unconfirmed orders, conflicts, open issues and the job queue.
+        </p>
+        <div class="row">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="05_magento_dashboard.png" alt="Magento admin dashboard with lifetime sales and last orders" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">MAGENTO ADMIN</span>Dashboard: lifetime sales and the latest orders.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-lg-6">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="01_console_screenshot.png" alt="Magento Console in Odoo with KPIs, revenue chart and actions needed" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#714b67;color:#ffffff;font-size:11px;font-weight:700;">ODOO 18</span>Magento Console: KPIs, revenue and orders, and the records that need action.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison 2: orders -->
+    <section class="mb-5 pb-4" style="border-bottom:1px solid #e6e1e8;">
+        <h3 class="h4 mb-2" style="font-weight:700;">Magento orders → Odoo sale orders</h3>
+        <p class="mb-3" style="color:#5f5a66;max-width:860px;">
+            Each Magento order becomes an Odoo sale order with its customer, lines, taxes, shipping and payment
+            mapped. The Magento increment ID, status, invoice and payment state stay visible on the Odoo order.
+        </p>
+        <div class="row">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="07_magento_orders.png" alt="Magento admin order grid" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">MAGENTO ADMIN</span>Sales › Orders: pending, processing and complete orders.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-lg-6">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="03_orders_screenshot.png" alt="Imported Magento orders in Odoo with Magento status columns" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#714b67;color:#ffffff;font-size:11px;font-weight:700;">ODOO 18</span>Magento Orders: increment ID, Magento status, invoice and payment state.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison 3: stores / instance -->
+    <section class="mb-5 pb-4" style="border-bottom:1px solid #e6e1e8;">
+        <h3 class="h4 mb-2" style="font-weight:700;">Websites and store views → Odoo instances</h3>
+        <p class="mb-3" style="color:#5f5a66;max-width:860px;">
+            The connector imports websites, stores and store views, and each Odoo instance is scoped to a Magento
+            website and store. Store views carry their language and currency, so localized product names and
+            descriptions can be imported per view.
+        </p>
+        <div class="row">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="08_magento_stores.png" alt="Magento websites, stores and store views" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">MAGENTO ADMIN</span>Stores › All Stores: one website with English and French store views.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-lg-6">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="02_instance_screenshot.png" alt="Magento instance configuration form in Odoo" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#714b67;color:#ffffff;font-size:11px;font-weight:700;">ODOO 18</span>Instance: authentication, Magento scope and per-area settings.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison 4: failures / error center -->
+    <section class="mb-5 pb-4" style="border-bottom:1px solid #e6e1e8;">
+        <h3 class="h4 mb-2" style="font-weight:700;">Sync failures → Error Center</h3>
+        <p class="mb-3" style="color:#5f5a66;max-width:860px;">
+            A rejected attribute value, a timeout or a missing mapping does not stop the run. The record gets one
+            Error Center row with the message, the payload and a link to the Odoo record, and it resolves itself
+            on the next successful sync.
+        </p>
+        <div class="row">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#faf9fb;">
+                    <h4 class="h6 mb-3" style="font-weight:700;">How recovery works</h4>
+                    <ul class="mb-0" style="padding-left:1.2rem;color:#5f5a66;">
+                        <li class="mb-2"><strong style="color:#2d2430;">Transient</strong> errors, such as timeouts and rate limits, are retried by the job queue with bounded attempts.</li>
+                        <li class="mb-2"><strong style="color:#2d2430;">Permanent</strong> errors, such as rejected data, are flagged for a fix, with optional alerts to chosen users.</li>
+                        <li class="mb-2">Retry replays a failed push or stock job, and fetches a failed import again.</li>
+                        <li class="mb-2">Resolve, ignore or retry issues in bulk, and filter them by entity, instance or error class.</li>
+                        <li class="mb-0">Writes to Magento are idempotent, so a retried invoice, shipment or credit memo is never duplicated.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="04_error_center_screenshot.png" alt="Error Center in Odoo listing transient and permanent issues" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#714b67;color:#ffffff;font-size:11px;font-weight:700;">ODOO 18</span>Error Center: one row per failing Magento record, classified by severity.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <!-- Catalog -->
+    <section class="mb-5 pb-4" style="border-bottom:1px solid #e6e1e8;">
+        <h3 class="h4 mb-2" style="font-weight:700;">Catalog and configurable products</h3>
+        <p class="mb-3" style="color:#5f5a66;max-width:860px;">
+            Products are imported page by page, picking up only records changed since the last run. Data ownership
+            rules decide whether Magento or Odoo is the system of record for each area.
+        </p>
+        <div class="row mb-4">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="06_magento_products.png" alt="Magento admin product grid" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">MAGENTO ADMIN</span>Catalog › Products: SKUs, prices, quantity and salable quantity.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#faf9fb;">
+                    <h4 class="h6 mb-3" style="font-weight:700;">What synchronizes</h4>
+                    <ul class="mb-0" style="padding-left:1.2rem;color:#5f5a66;">
+                        <li class="mb-2">Simple, virtual, downloadable, configurable, bundle and grouped products.</li>
+                        <li class="mb-2">Configurable products become one Odoo template with a variant per child SKU.</li>
+                        <li class="mb-2">Categories, attribute sets, attributes and product images.</li>
+                        <li class="mb-2">Localized names and descriptions per store view.</li>
+                        <li class="mb-2">Base, special and tier prices through price export rules.</li>
+                        <li class="mb-0">Field mappings with transforms for product, customer and category fields.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12 col-md-4 mb-4 mb-md-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="09_magento_storefront_jackets.png" alt="Luma storefront Jackets category" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">STOREFRONT</span>Jackets: configurable products with size and colour options.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-md-4 mb-4 mb-md-0">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="10_magento_storefront_fitness.png" alt="Luma storefront Fitness Equipment category" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">STOREFRONT</span>Fitness Equipment: simple products in a nested category.</figcaption>
+                </figure>
+            </div>
+            <div class="col-12 col-md-4">
+                <figure class="h-100 m-0 p-2" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <img src="11_magento_storefront_watches.png" alt="Luma storefront Watches category" style="display:block;width:100%;height:auto;border-radius:6px;" width="1600" height="1000">
+                    <figcaption class="px-1 pt-2 pb-1 small" style="color:#5f5a66;"><span style="display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background-color:#eb5202;color:#ffffff;font-size:11px;font-weight:700;">STOREFRONT</span>Watches: the category tree is imported into Odoo.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    <!-- Direction of each flow -->
+    <section class="mb-5">
+        <div class="text-center mb-4">
+            <p class="mb-2" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#714b67;">What moves where</p>
+            <h2 style="font-weight:700;">Each flow, and its direction</h2>
+        </div>
+        <div class="row">
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#b34000;">Magento → Odoo</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Orders and customers</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Orders with lines, taxes, shipping and payment mapping. Customers with their addresses become Odoo contacts.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#41362f;">Both directions</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Products and categories</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Import the catalog, or create products and categories in Magento from Odoo. Ownership rules prevent the two sides overwriting each other.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#714b67;">Odoo → Magento</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Inventory and MSI</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Map Odoo warehouses and locations to Magento Multi-Source Inventory sources. Stock changes are pushed as queued jobs.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#714b67;">Odoo → Magento</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Invoices and shipments</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Posted invoices and validated deliveries are sent to Magento, with carrier tracking numbers.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#41362f;">Both directions</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Refunds and returns</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Magento credit memos are imported as Odoo credit notes, and Odoo credit notes can create Magento credit memos. Returns can be routed back to stock.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4 mb-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <p class="mb-2" style="font-size:12px;font-weight:700;color:#714b67;">Odoo → Magento</p>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Prices</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Price export rules publish base, special and tier prices per website and customer group.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Capabilities and reliability -->
+    <section class="py-4 mb-5" style="border-top:1px solid #e6e1e8;">
+        <div class="row">
+            <div class="col-12 col-lg-6 mb-4 mb-lg-0">
+                <h2 class="h4 mb-3" style="font-weight:700;">Included capabilities</h2>
+                <ul class="mb-0" style="padding-left:1.2rem;color:#5f5a66;">
+                    <li class="mb-2">Manual and scheduled synchronization with incremental paging</li>
+                    <li class="mb-2">Multi-company access rules and per-instance configuration</li>
+                    <li class="mb-2">Dry-run preview and configurable system-of-record ownership</li>
+                    <li class="mb-2">Order conflict tracking when items, prices, address, totals or status change after import</li>
+                    <li class="mb-2">Bulk operations, reconciliation and order totals explanations</li>
+                    <li class="mb-2">Daily operational digest and settings export/import</li>
+                    <li class="mb-0">Adobe Commerce B2B entities where the matching Magento APIs are available</li>
                 </ul>
             </div>
-            <div class="col-lg-6">
-                <img src="01_console_screenshot.png" alt="Magento operational console in Odoo 18" class="img-fluid rounded border shadow-sm">
-            </div>
-        </div>
-    </section>
-
-    <section class="py-5 border-top">
-        <div class="text-center mb-5">
-            <p class="text-uppercase font-weight-bold mb-2" style="color:#714b67;">Core workflows</p>
-            <h2 class="font-weight-bold">A connector built for day-to-day operations</h2>
-        </div>
-        <div class="row">
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Orders and customers</h3><p class="text-muted mb-0">Import Magento orders and customer accounts, keep source identifiers, and apply configurable order, tax, payment and carrier mappings.</p></div></div>
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Products and categories</h3><p class="text-muted mb-0">Synchronize categories, attribute sets, attributes, images and simple, virtual, downloadable, configurable, bundle and grouped products.</p></div></div>
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Inventory and MSI</h3><p class="text-muted mb-0">Map Odoo warehouses and locations to Magento Multi-Source Inventory sources and push stock changes through controlled jobs.</p></div></div>
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Invoices and fulfilment</h3><p class="text-muted mb-0">Send invoices, shipments and tracking details to Magento and import credit memos with idempotent document handling.</p></div></div>
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Pricing and store views</h3><p class="text-muted mb-0">Manage price export rules, tier prices, websites, store groups, store views, languages, currencies and localized product content.</p></div></div>
-            <div class="col-md-6 col-lg-4 mb-4"><div class="h-100 border rounded p-4"><h3 class="h5 font-weight-bold">Queue and recovery</h3><p class="text-muted mb-0">Process large data sets in bounded jobs with retry controls, incremental watermarks, sync reports, conflict tracking and an error center.</p></div></div>
-        </div>
-    </section>
-
-    <section class="py-5 px-4 rounded" style="background-color:#fff7f2;">
-        <div class="row align-items-center">
-            <div class="col-lg-5 mb-4 mb-lg-0">
-                <p class="text-uppercase font-weight-bold mb-2" style="color:#c84d12;">Guided configuration</p>
-                <h2 class="font-weight-bold mb-3">Connect safely, then choose what to synchronize</h2>
-                <p class="text-muted">The setup flow validates the store address and API access, discovers store views, proposes mappings and keeps credentials restricted to Magento administrators.</p>
-                <p class="text-muted mb-0">Each instance can use bearer-token or OAuth 1.0 authentication, company isolation, SSL verification, automatic schedules and a selectable synchronization scope.</p>
-            </div>
-            <div class="col-lg-7"><img src="02_instance_screenshot.png" alt="Magento instance configuration in Odoo 18" class="img-fluid rounded border shadow-sm"></div>
-        </div>
-    </section>
-
-    <section class="py-5">
-        <div class="row">
-            <div class="col-lg-6 mb-4"><img src="03_orders_screenshot.png" alt="Imported Magento orders in Odoo 18" class="img-fluid rounded border shadow-sm mb-3"><h3 class="h4 font-weight-bold">Traceable commerce documents</h3><p class="text-muted">Magento references, store context and synchronization state stay visible on the related Odoo sales, invoice and delivery records.</p></div>
-            <div class="col-lg-6 mb-4"><img src="04_error_center_screenshot.png" alt="Magento synchronization error center in Odoo 18" class="img-fluid rounded border shadow-sm mb-3"><h3 class="h4 font-weight-bold">Actionable exception handling</h3><p class="text-muted">Classify failures, inspect the affected entity and instance, retry recoverable work and keep an auditable resolution history.</p></div>
-        </div>
-    </section>
-
-    <section class="py-5 border-top">
-        <div class="row">
-            <div class="col-lg-6 mb-4">
-                <h2 class="font-weight-bold mb-3">Included capabilities</h2>
-                <ul class="pl-4 text-muted">
-                    <li class="mb-2">Manual and scheduled synchronization with incremental paging</li><li class="mb-2">Multi-company access rules and per-instance configuration</li><li class="mb-2">Product, customer and category field mapping with transforms</li><li class="mb-2">Dry-run preview and configurable system-of-record ownership</li><li class="mb-2">Bulk operations, reconciliation and totals explanations</li><li class="mb-2">Returns, refunds and return-to-stock routing</li><li class="mb-2">Daily operational digest and settings export/import</li><li class="mb-2">Adobe Commerce B2B entities where the corresponding Magento APIs are available</li>
-                </ul>
-            </div>
-            <div class="col-lg-6 mb-4">
-                <h2 class="font-weight-bold mb-3">Security and reliability</h2>
-                <ul class="pl-4 text-muted">
-                    <li class="mb-2">Separate User, Manager and Administrator security groups</li><li class="mb-2">Credential fields restricted to connector administrators</li><li class="mb-2">Request timeouts, bounded retries and idempotency controls</li><li class="mb-2">Queued writes decouple Odoo transactions from Magento availability</li><li class="mb-2">Optional signed near-real-time notifications with replay protection</li><li class="mb-2">Scheduled polling remains available as the synchronization safety net</li>
+            <div class="col-12 col-lg-6">
+                <h2 class="h4 mb-3" style="font-weight:700;">Security and reliability</h2>
+                <ul class="mb-0" style="padding-left:1.2rem;color:#5f5a66;">
+                    <li class="mb-2">Separate User and Administrator security groups</li>
+                    <li class="mb-2">Credential fields restricted to connector administrators</li>
+                    <li class="mb-2">OAuth 1.0a or bearer-token authentication, with SSL verification</li>
+                    <li class="mb-2">Request timeouts, bounded retries and idempotent writes</li>
+                    <li class="mb-2">Queued writes decouple Odoo transactions from Magento availability</li>
+                    <li class="mb-0">Optional signed near-real-time notifications, with scheduled polling as the safety net</li>
                 </ul>
             </div>
         </div>
     </section>
 
-    <section class="py-5 px-4 rounded" style="background-color:#f6f2fa;">
-        <div class="text-center mb-4"><p class="text-uppercase font-weight-bold mb-2" style="color:#714b67;">Requirements</p><h2 class="font-weight-bold">Know what is needed before installation</h2></div>
+    <!-- Requirements -->
+    <section class="py-5 px-3 px-md-4 mb-5" style="background-color:#f6f2fa;border-radius:12px;">
+        <div class="text-center mb-4">
+            <p class="mb-2" style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#714b67;">Requirements</p>
+            <h2 style="font-weight:700;">Know what is needed before installation</h2>
+        </div>
         <div class="row">
-            <div class="col-md-4 mb-3"><div class="h-100 bg-white border rounded p-4"><h3 class="h5 font-weight-bold">Odoo</h3><p class="text-muted mb-0">Odoo 18 Community or Enterprise with Sales, Inventory and Invoicing installed. This is a server module and is not compatible with Odoo Online.</p></div></div>
-            <div class="col-md-4 mb-3"><div class="h-100 bg-white border rounded p-4"><h3 class="h5 font-weight-bold">Magento</h3><p class="text-muted mb-0">Magento Open Source or Adobe Commerce 2.4.6–2.4.9 with HTTPS access to the REST API and an integration account with permissions for the selected features.</p></div></div>
-            <div class="col-md-4 mb-3"><div class="h-100 bg-white border rounded p-4"><h3 class="h5 font-weight-bold">Operations</h3><p class="text-muted mb-0">Odoo cron must run for schedules and queues. Near-real-time push additionally needs the compatible Magento companion extension, Magento cron and an HTTPS-reachable Odoo endpoint.</p></div></div>
+            <div class="col-12 col-md-4 mb-3 mb-md-0">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <h3 class="h5 mb-2" style="font-weight:700;">Odoo</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Odoo 18 Community or Enterprise with Sales, Inventory and Invoicing. This is a server module and does not run on Odoo Online.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4 mb-3 mb-md-0">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <h3 class="h5 mb-2" style="font-weight:700;">Magento</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Magento Open Source or Adobe Commerce 2.4.6–2.4.9 with HTTPS access to the REST API and an integration with permissions for the features you use.</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <h3 class="h5 mb-2" style="font-weight:700;">Operations</h3>
+                    <p class="mb-0" style="color:#5f5a66;">Odoo cron must run for schedules and queues. Near-real-time push also needs the companion Magento extension, Magento cron and an HTTPS-reachable Odoo endpoint.</p>
+                </div>
+            </div>
         </div>
     </section>
 
-    <section class="py-5">
-        <h2 class="font-weight-bold text-center mb-4">Typical setup</h2>
+    <!-- Typical setup -->
+    <section class="mb-5">
+        <h2 class="text-center mb-4" style="font-weight:700;">Typical setup</h2>
         <div class="row">
-            <div class="col-md-3 mb-3"><div class="h-100 border rounded p-4"><span class="badge badge-pill mb-3" style="background-color:#714b67;color:#ffffff;">1</span><h3 class="h6 font-weight-bold">Install</h3><p class="small text-muted mb-0">Copy the module to an addons path, update the Apps list and install it.</p></div></div>
-            <div class="col-md-3 mb-3"><div class="h-100 border rounded p-4"><span class="badge badge-pill mb-3" style="background-color:#714b67;color:#ffffff;">2</span><h3 class="h6 font-weight-bold">Authorize</h3><p class="small text-muted mb-0">Create a Magento integration and enter its REST credentials in the guided setup.</p></div></div>
-            <div class="col-md-3 mb-3"><div class="h-100 border rounded p-4"><span class="badge badge-pill mb-3" style="background-color:#714b67;color:#ffffff;">3</span><h3 class="h6 font-weight-bold">Map</h3><p class="small text-muted mb-0">Review stores, taxes, payments, carriers, inventory sources and field ownership.</p></div></div>
-            <div class="col-md-3 mb-3"><div class="h-100 border rounded p-4"><span class="badge badge-pill mb-3" style="background-color:#714b67;color:#ffffff;">4</span><h3 class="h6 font-weight-bold">Synchronize</h3><p class="small text-muted mb-0">Run a controlled initial sync, review reports, then enable the required schedules.</p></div></div>
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;margin-bottom:12px;border-radius:50%;background-color:#714b67;color:#ffffff;text-align:center;font-weight:700;font-size:14px;">1</span>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Install</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Copy the module to an addons path, update the Apps list and install it.</p>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;margin-bottom:12px;border-radius:50%;background-color:#714b67;color:#ffffff;text-align:center;font-weight:700;font-size:14px;">2</span>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Authorize</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Create a Magento integration and enter its REST credentials in the guided setup.</p>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;margin-bottom:12px;border-radius:50%;background-color:#714b67;color:#ffffff;text-align:center;font-weight:700;font-size:14px;">3</span>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Map</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Review stores, taxes, payments, carriers, inventory sources and data ownership.</p>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="h-100 p-4" style="border:1px solid #e6e1e8;border-radius:10px;background-color:#ffffff;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;margin-bottom:12px;border-radius:50%;background-color:#714b67;color:#ffffff;text-align:center;font-weight:700;font-size:14px;">4</span>
+                    <h3 class="h6 mb-2" style="font-weight:700;">Synchronize</h3>
+                    <p class="small mb-0" style="color:#5f5a66;">Preview with a dry run, run the initial sync, review its report, then enable schedules.</p>
+                </div>
+            </div>
         </div>
     </section>
 
-    <section class="text-center py-5 px-4 rounded" style="background-color:#2d2430;color:#ffffff;">
-        <h2 class="font-weight-bold mb-3">Documentation and support</h2>
-        <p class="mb-4" style="color:#ded6dc;">Installation, access permissions, setup and operating procedures are covered in the supplied user guide.</p>
-        <a href="mailto:sales@sdlccorp.com" class="btn mb-2" style="background-color:#f26322;color:#ffffff;">Contact support</a>
+    <!-- Support -->
+    <section class="text-center py-5 px-3" style="background-color:#2d2430;color:#ffffff;border-radius:12px;">
+        <h2 class="mb-3" style="font-weight:700;color:#ffffff;">Documentation and support</h2>
+        <p class="mx-auto mb-4" style="max-width:640px;color:#ded6dc;">Installation, access permissions, setup and day-to-day operation are covered in the user guide shipped with the module.</p>
+        <a href="mailto:sales@sdlccorp.com" style="display:inline-block;padding:10px 22px;border-radius:6px;background-color:#eb5202;color:#ffffff;font-weight:600;text-decoration:none;">Contact support</a>
     </section>
 </div>
 </body>

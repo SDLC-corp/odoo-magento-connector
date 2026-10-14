@@ -66,8 +66,15 @@ multi-store catalog data, inventory, orders, invoices, shipments and refunds fro
     'images': [
         'static/description/banner.gif',
         'static/description/01_console_screenshot.png',
-        'static/description/02_instance_screenshot.png',
         'static/description/03_orders_screenshot.png',
+        'static/description/07_magento_orders.png',
         'static/description/04_error_center_screenshot.png',
+        'static/description/02_instance_screenshot.png',
+        'static/description/08_magento_stores.png',
+        'static/description/05_magento_dashboard.png',
+        'static/description/06_magento_products.png',
+        'static/description/09_magento_storefront_jackets.png',
+        'static/description/10_magento_storefront_fitness.png',
+        'static/description/11_magento_storefront_watches.png',
     ],
 }
