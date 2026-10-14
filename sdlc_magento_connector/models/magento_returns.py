@@ -265,7 +265,7 @@ class MagentoInstance(models.Model):
             product = Product.create({
                 "name": name,
                 "default_code": code,
-                "type": "service",
+                "detailed_type": "service",
                 "sale_ok": True,
                 "purchase_ok": False,
                 "list_price": 0.0,
@@ -393,7 +393,7 @@ class SaleOrder(models.Model):
         return {
             line.id: line_qty[line.id]
             for line in lines
-            if line.product_id.type == "consu" and line_qty[line.id] > 0
+            if line.product_id.type in ("consu", "product") and line_qty[line.id] > 0
         }
 
     def _magento_after_credit_memo_import(self, move, credit_data):
@@ -636,8 +636,9 @@ class StockReturnPicking(models.TransientModel):
         for wizard in self:
             wizard.magento_order = bool(wizard.picking_id.sale_id.magento_instance_id)
 
-    def _create_return(self):
-        picking = super()._create_return()
+    def _create_returns(self):
+        # Odoo 17 hook: returns (new picking id, picking type id).
+        new_picking_id, picking_type_id = super()._create_returns()
         if self.magento_return_reason_id:
-            picking.magento_return_reason_id = self.magento_return_reason_id
-        return picking
+            self.env["stock.picking"].browse(new_picking_id).magento_return_reason_id = self.magento_return_reason_id
+        return new_picking_id, picking_type_id

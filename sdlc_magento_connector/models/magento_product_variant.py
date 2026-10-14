@@ -612,14 +612,14 @@ class MagentoInstance(models.Model):
         stock history, is never flipped."""
         self.ensure_one()
         if magento_type in ("simple", "configurable"):
-            if not self.import_products_storable or "is_storable" not in template._fields:
+            if not self.import_products_storable:
                 return False
-            vals = {"is_storable": True}
+            vals = {"detailed_type": "product"}
         elif magento_type in ("virtual", "downloadable"):
-            vals = {"type": "service"}
+            vals = {"detailed_type": "service"}
         else:
             return False
-        if template.type != "consu" or ("is_storable" in template._fields and template.is_storable):
+        if template.type != "consu":  # Odoo 17: storable goods have type "product"
             return False
         variants = template.with_context(active_test=False).product_variant_ids
         if "stock.move" in self.env and self.env["stock.move"].sudo().search_count(
@@ -935,12 +935,10 @@ class MagentoInstance(models.Model):
         }
         if base:
             vals.update({
-                "type": base.type,
+                "detailed_type": base.detailed_type,
                 "uom_id": base.uom_id.id,
                 "company_id": base.company_id.id or False,
             })
-            if "is_storable" in base._fields:
-                vals["is_storable"] = base.is_storable
         return self.env["product.template"].with_context(**_NO_VARIANTS_CTX).create(vals)
 
     def _magento_update_attribute_lines(self, template, bindings, attributes, rows):
@@ -1013,8 +1011,6 @@ class MagentoInstance(models.Model):
         """Moving ``product`` under ``template`` changes nothing it is measured or
         stocked by."""
         if product.uom_id != template.uom_id or product.type != template.type:
-            return False
-        if "is_storable" in template._fields and product.is_storable != template.is_storable:
             return False
         if product.company_id and template.company_id and product.company_id != template.company_id:
             return False

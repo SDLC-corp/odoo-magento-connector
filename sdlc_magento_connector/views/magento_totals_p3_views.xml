@@ -11,7 +11,7 @@
         <field name="name">magento.totals.explanation.line.list</field>
         <field name="model">magento.totals.explanation.line</field>
         <field name="arch" type="xml">
-            <list string="Difference Components" create="0" edit="0" delete="0"
+            <tree string="Difference Components" create="0" edit="0" delete="0"
                   decoration-danger="category == 'unexplained' and amount != 0"
                   decoration-muted="negligible">
                 <field name="sale_order_id" optional="show"/>
@@ -30,7 +30,7 @@
                 <field name="fix_label" optional="show"/>
                 <button name="action_apply_fix" type="object" string="Fix" icon="fa-wrench"
                         class="btn-link" title="Apply the suggested fix" invisible="not fix_type"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -59,12 +59,13 @@
         <field name="name">magento.totals.explanation.list</field>
         <field name="model">magento.totals.explanation</field>
         <field name="arch" type="xml">
-            <list string="Totals Explanations" create="0"
+            <tree string="Totals Explanations" create="0"
                   decoration-danger="state == 'unexplained'"
                   decoration-warning="state == 'partially'">
                 <field name="sale_order_id"/>
                 <field name="magento_increment_id"/>
                 <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="currency_id" column_invisible="1"/>
                 <field name="magento_grand_total" sum="Magento"/>
@@ -78,7 +79,7 @@
                        decoration-success="state == 'explained'"
                        decoration-warning="state == 'partially'"
                        decoration-danger="state == 'unexplained'"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -169,7 +170,7 @@
                     <notebook>
                         <page string="Components" name="components">
                             <field name="line_ids" readonly="1">
-                                <list decoration-danger="category == 'unexplained' and amount != 0"
+                                <tree decoration-danger="category == 'unexplained' and amount != 0"
                                       decoration-muted="negligible">
                                     <field name="category" widget="badge"
                                            decoration-danger="category == 'unexplained' and amount != 0"
@@ -186,7 +187,7 @@
                                     <button name="action_apply_fix" type="object" string="Fix"
                                             icon="fa-wrench" class="btn-link"
                                             title="Apply the suggested fix" invisible="not fix_type"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                         <page string="Magento Order" name="payload" groups="sdlc_magento_connector.group_magento_manager">
@@ -201,7 +202,7 @@
     <record id="action_magento_totals_explanation" model="ir.actions.act_window">
         <field name="name">Totals Explanations</field>
         <field name="res_model">magento.totals.explanation</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_totals_explanation_search"/>
         <field name="context">{'search_default_differs': 1}</field>
         <field name="help" type="html">
@@ -309,7 +310,7 @@
                     <field name="explanation_count" widget="statinfo" string="Explanations"/>
                 </button>
             </xpath>
-            <xpath expr="//page[@name='findings']/field[@name='finding_ids']/list/field[@name='sale_order_id']"
+            <xpath expr="//page[@name='findings']/field[@name='finding_ids']/tree/field[@name='sale_order_id']"
                    position="after">
                 <field name="explanation_state" widget="badge" optional="show"
                        decoration-success="explanation_state == 'explained'"

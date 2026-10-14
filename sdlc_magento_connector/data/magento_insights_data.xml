@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Opens the records behind one digest figure: /odoo/<link id>/action-<this action>. -->
+    <!-- Opens the records behind one digest figure: /web#action=<this action>&active_id=<link id>. -->
     <record id="action_magento_digest_link_open" model="ir.actions.server">
         <field name="name">Open Magento digest figure</field>
         <field name="model_id" ref="model_magento_digest_link"/>

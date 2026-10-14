@@ -79,8 +79,7 @@ class TestP3Returns(MagentoTestCommon):
         cls.bags = cls.env["product.category"].create({"name": "Bags"})
         Product = cls.env["product.product"].with_context(**ctx)
         cls.bag = Product.create({
-            "name": "Joust Duffle Bag", "default_code": "24-MB01", "type": "consu",
-            "is_storable": True, "list_price": 34.0, "categ_id": cls.bags.id,
+            "name": "Joust Duffle Bag", "default_code": "24-MB01", "detailed_type": "product", "list_price": 34.0, "categ_id": cls.bags.id,
         })
         cls.env["magento.product.map"].with_context(**ctx).create({
             "instance_id": cls.instance.id, "magento_id": "1", "sku": "24-MB01",
@@ -172,7 +171,7 @@ class TestP3Returns(MagentoTestCommon):
         wizard.product_return_moves.write({"quantity": qty})
         if reason:
             wizard.magento_return_reason_id = reason
-        picking = self.env["stock.picking"].browse(wizard.action_create_returns()["res_id"])
+        picking = self.env["stock.picking"].browse(wizard.create_returns()["res_id"])
         for move in picking.move_ids:
             move.quantity = move.product_uom_qty
             move.picked = True

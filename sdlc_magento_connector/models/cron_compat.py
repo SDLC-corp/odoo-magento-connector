@@ -1,38 +1,36 @@
-"""Odoo 18 stand-in for Odoo 19's ``ir.cron._commit_progress``.
+"""Odoo 17 stand-in for Odoo 19's ``ir.cron._commit_progress``.
 
-Odoo 19 commits a cron batch, adds it to the run's progress record and returns
-the seconds left before the run should yield (runs get ``MIN_TIME_PER_JOB``,
-10 s, before the next cron gets a turn). Odoo 18 has the progress record but no
-such call, so the connector keeps the same contract here. Callers use
-``cron_compat.commit_progress(...)`` (module attribute) so tests can patch it.
+Odoo 19 commits a cron batch, records progress and returns the seconds left
+before the run should yield (``MIN_TIME_PER_JOB``, 10 s). Odoo 17 has no
+progress record and gives a cron job only ``lastcall`` in its context, so a
+real cron run is recognised by that key and the time budget is measured from
+the run's first commit on its cursor. Callers use ``cron_compat.<function>``
+(module attribute) so tests can patch it.
 """
 
 import time
+import weakref
 
 # Odoo 19 ir_cron.MIN_TIME_PER_JOB: how long one cron run works before yielding.
 RUN_BUDGET = 10.0
-_MAX_TRACKED_RUNS = 500
 
-_run_started = {}
+_run_started = weakref.WeakKeyDictionary()
+
+
+def in_cron_run(env):
+    """Whether ``env`` belongs to a job started by the cron runner (Odoo 17 puts
+    ``lastcall`` in the context of every cron job)."""
+    return "lastcall" in env.context
 
 
 def commit_progress(env, processed=0):
-    """Commit, add ``processed`` to the running cron's progress, return its time left.
+    """Commit a batch of the running cron job and return its time left.
 
     Outside a cron run it only commits and returns ``inf``, like Odoo 19.
     """
-    progress_id = env.context.get("ir_cron_progress_id")
-    progress = env["ir.cron.progress"].sudo().browse(progress_id).exists() if progress_id else None
-    if not progress:
-        env.cr.commit()
+    env.cr.commit()
+    if not in_cron_run(env):
         return float("inf")
     now = time.monotonic()
-    if len(_run_started) > _MAX_TRACKED_RUNS:
-        _run_started.clear()
-    started = _run_started.setdefault(progress.id, now)
-    progress.write({
-        "done": progress.done + processed,
-        "remaining": max(progress.remaining - processed, 0),
-    })
-    env.cr.commit()
+    started = _run_started.setdefault(env.cr, now)
     return max(started + RUN_BUDGET - now, 0.0)

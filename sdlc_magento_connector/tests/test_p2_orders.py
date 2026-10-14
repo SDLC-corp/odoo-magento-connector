@@ -244,7 +244,7 @@ class TestP2Orders(MagentoTestCommon):
         return order.order_line.filtered(lambda l: l.magento_line_role == role)
 
     def payments_of(self, move):
-        return self.env["account.payment"].search([("invoice_ids", "in", move.ids)])
+        return self.env["account.payment"].search([("reconciled_invoice_ids", "in", move.ids)])
 
     def assertNoPush(self):
         for name, mock in self.push_mocks.items():
@@ -425,7 +425,7 @@ class TestP2Orders(MagentoTestCommon):
         # Mapping the rate fixes the next import.
         tax = self.env["account.tax"].create({
             "name": "MI 8.25", "amount": 8.25, "type_tax_use": "sale",
-            "price_include_override": "tax_excluded",
+            "price_include": False,
         })
         mapping.tax_id = tax
         self.sync(live_order_1())

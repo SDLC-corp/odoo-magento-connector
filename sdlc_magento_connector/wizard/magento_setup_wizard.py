@@ -103,7 +103,7 @@ def normalize_store_url(value, env=None):
     when ``env`` is given).
     """
     def tr(message, *args):
-        return env._(message, *args) if env is not None else (message % args if args else message)
+        return _(message, *args) if env is not None else (message % args if args else message)
 
     url = (value or "").strip()
     if not url:

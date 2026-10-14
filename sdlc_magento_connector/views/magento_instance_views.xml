@@ -9,10 +9,11 @@
             <field name="name">magento.instance.list</field>
             <field name="model">magento.instance</field>
             <field name="arch" type="xml">
-                <list string="Magento Instances" import="0"
+                <tree string="Magento Instances" import="0"
                       decoration-danger="state == 'error'" decoration-muted="not active">
                     <field name="name"/>
                     <field name="base_url" optional="show"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="show" groups="base.group_multi_company"/>
                     <field name="state" widget="badge"
                            decoration-success="state == 'connected'"
@@ -22,7 +23,7 @@
                     <field name="sync_error_count" string="Sync Errors" optional="show"
                            decoration-danger="sync_error_count &gt; 0"/>
                     <field name="active" column_invisible="1"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -140,6 +141,7 @@
                                         <field name="access_token" password="True"
                                                groups="sdlc_magento_connector.group_magento_manager"/>
                                         <field name="verify_ssl"/>
+                                        <field name="company_id" invisible="1"/>
                                         <field name="company_id" options="{'no_create': True}"
                                                groups="base.group_multi_company"/>
                                     </group>
@@ -242,7 +244,10 @@
                             </page>
                         </notebook>
                     </sheet>
-                    <chatter/>
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids"/>
+                        <field name="message_ids"/>
+                    </div>
                 </form>
             </field>
         </record>
@@ -263,7 +268,7 @@
             <field name="model">magento.product.map</field>
             <field name="priority">10</field>
             <field name="arch" type="xml">
-                <list string="Magento Products" import="0" decoration-muted="status == '2'">
+                <tree string="Magento Products" import="0" decoration-muted="status == '2'">
                     <header>
                         <button name="%(action_magento_product_map_new)d" type="action"
                                 string="New Product" class="btn-primary"/>
@@ -271,6 +276,7 @@
                     <field name="sku"/>
                     <field name="name"/>
                     <field name="instance_id" optional="show"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="hide"/>
                     <field name="odoo_product_id" optional="show"/>
@@ -286,7 +292,7 @@
                            decoration-muted="status == '2'"/>
                     <field name="visibility" optional="hide"/>
                     <field name="magento_last_error" optional="hide"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -415,6 +421,7 @@
                             <group>
                                 <field name="sku"/>
                                 <field name="instance_id"/>
+                                <field name="company_id" invisible="1"/>
                                 <field name="company_id" groups="base.group_multi_company"/>
                                 <field name="magento_id" readonly="1"/>
                                 <field name="odoo_product_id" readonly="1"/>
@@ -466,7 +473,7 @@
             <field name="model">magento.product.map</field>
             <field name="priority">20</field>
             <field name="arch" type="xml">
-                <list string="Inventory Report" create="0" import="0">
+                <tree string="Inventory Report" create="0" import="0">
                     <header>
                         <button name="%(action_magento_product_map_new)d" type="action"
                                 string="New Product" class="btn-primary"/>
@@ -484,7 +491,7 @@
                     <field name="instance_id" string="Instance" optional="show"/>
                     <field name="quantity" string="Available" sum="Total available"/>
                     <field name="write_date" string="Last Sync" optional="show"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -495,15 +502,16 @@
             <field name="name">magento.category.list</field>
             <field name="model">magento.category</field>
             <field name="arch" type="xml">
-                <list string="Magento Categories" import="0" decoration-muted="not is_active">
+                <tree string="Magento Categories" import="0" decoration-muted="not is_active">
                     <field name="name"/>
                     <field name="parent_id" optional="show"/>
                     <field name="instance_id" optional="show"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="show"/>
                     <field name="is_active" widget="boolean_toggle" optional="show"/>
                     <field name="magento_last_error" optional="hide"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -567,6 +575,7 @@
                             </group>
                             <group>
                                 <field name="instance_id"/>
+                                <field name="company_id" invisible="1"/>
                                 <field name="company_id" groups="base.group_multi_company"/>
                                 <field name="magento_id" readonly="1"/>
                             </group>
@@ -583,12 +592,12 @@
             <field name="name">magento.attribute.set.list</field>
             <field name="model">magento.attribute.set</field>
             <field name="arch" type="xml">
-                <list string="Magento Attribute Sets" import="0" decoration-muted="not active">
+                <tree string="Magento Attribute Sets" import="0" decoration-muted="not active">
                     <field name="name"/>
                     <field name="instance_id" optional="show"/>
                     <field name="magento_id" optional="show"/>
                     <field name="active" column_invisible="1"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -639,7 +648,7 @@
         <record id="action_magento_attribute_set" model="ir.actions.act_window">
             <field name="name">Attribute Sets</field>
             <field name="res_model">magento.attribute.set</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_attribute_set_search"/>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">No attribute sets yet</p>
@@ -654,7 +663,7 @@
         <record id="action_magento_instance" model="ir.actions.act_window">
             <field name="name">Magento Instances</field>
             <field name="res_model">magento.instance</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_instance_search"/>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">Connect your first Magento store</p>
@@ -671,7 +680,7 @@
         <record id="action_magento_product_map" model="ir.actions.act_window">
             <field name="name">Magento Products</field>
             <field name="res_model">magento.product.map</field>
-            <field name="view_mode">kanban,list,form</field>
+            <field name="view_mode">kanban,tree,form</field>
             <field name="view_id" eval="False"/>
             <field name="search_view_id" ref="view_magento_product_map_search"/>
             <field name="help" type="html">
@@ -690,7 +699,7 @@
 
         <record id="action_magento_product_map_list_view" model="ir.actions.act_window.view">
             <field name="sequence" eval="2"/>
-            <field name="view_mode">list</field>
+            <field name="view_mode">tree</field>
             <field name="view_id" ref="view_magento_product_map_list"/>
             <field name="act_window_id" ref="action_magento_product_map"/>
         </record>
@@ -698,7 +707,7 @@
         <record id="action_magento_inventory" model="ir.actions.act_window">
             <field name="name">Inventory</field>
             <field name="res_model">magento.product.map</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="view_id" ref="view_magento_inventory_list"/>
             <field name="search_view_id" ref="view_magento_product_map_search"/>
             <field name="help" type="html">
@@ -711,7 +720,7 @@
         <record id="action_magento_category" model="ir.actions.act_window">
             <field name="name">Magento Categories</field>
             <field name="res_model">magento.category</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_category_search"/>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">No Magento categories yet</p>
@@ -722,7 +731,7 @@
         <record id="action_magento_order" model="ir.actions.act_window">
             <field name="name">Magento Orders</field>
             <field name="res_model">sale.order</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">[('magento_order_id','!=',False)]</field>
             <field name="context">{'from_magento_order_menu': True}</field>
             <field name="search_view_id" ref="view_sale_order_search_magento"/>
@@ -735,7 +744,7 @@
         <record id="action_magento_order_delivered" model="ir.actions.act_window">
             <field name="name">Delivered Orders</field>
             <field name="res_model">sale.order</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">[('magento_order_id','!=',False),('delivery_status','=','full')]</field>
             <field name="context">{'from_magento_order_menu': True}</field>
             <field name="search_view_id" ref="view_sale_order_search_magento"/>
@@ -748,7 +757,7 @@
         <record id="action_magento_order_not_delivered" model="ir.actions.act_window">
             <field name="name">Not Delivered Orders</field>
             <field name="res_model">sale.order</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">[('magento_order_id','!=',False),('delivery_status','!=','full')]</field>
             <field name="context">{'from_magento_order_menu': True}</field>
             <field name="search_view_id" ref="view_sale_order_search_magento"/>
@@ -760,7 +769,7 @@
 
         <record id="action_magento_order_list_view" model="ir.actions.act_window.view">
             <field name="sequence" eval="1"/>
-            <field name="view_mode">list</field>
+            <field name="view_mode">tree</field>
             <field name="view_id" ref="view_sale_order_tree_magento_only"/>
             <field name="act_window_id" ref="action_magento_order"/>
         </record>
@@ -774,7 +783,7 @@
 
         <record id="action_magento_order_delivered_list_view" model="ir.actions.act_window.view">
             <field name="sequence" eval="1"/>
-            <field name="view_mode">list</field>
+            <field name="view_mode">tree</field>
             <field name="view_id" ref="view_sale_order_tree_magento_only"/>
             <field name="act_window_id" ref="action_magento_order_delivered"/>
         </record>
@@ -788,7 +797,7 @@
 
         <record id="action_magento_order_not_delivered_list_view" model="ir.actions.act_window.view">
             <field name="sequence" eval="1"/>
-            <field name="view_mode">list</field>
+            <field name="view_mode">tree</field>
             <field name="view_id" ref="view_sale_order_tree_magento_only"/>
             <field name="act_window_id" ref="action_magento_order_not_delivered"/>
         </record>
@@ -807,7 +816,7 @@
             <field name="name">magento.invoice.list</field>
             <field name="model">account.move</field>
             <field name="arch" type="xml">
-                <list string="Magento Invoices" create="false" import="0">
+                <tree string="Magento Invoices" create="false" import="0">
                     <field name="company_currency_id" column_invisible="1"/>
                     <field name="currency_id" column_invisible="1"/>
                     <field name="name" string="Invoice"/>
@@ -815,6 +824,7 @@
                     <field name="magento_sale_order_name" string="Order #"/>
                     <field name="magento_sale_order_date" string="Order Date" optional="show"/>
                     <field name="partner_id" string="Bill-to Name"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="payment_state" string="Status" widget="badge"
                            decoration-success="payment_state in ('paid', 'in_payment')"
@@ -827,7 +837,7 @@
                            options="{'currency_field': 'currency_id'}" optional="show"/>
                     <button name="action_open_magento_invoice" type="object" string="View"
                             class="btn-link"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -835,7 +845,7 @@
             <field name="name">magento.credit.memo.list</field>
             <field name="model">account.move</field>
             <field name="arch" type="xml">
-                <list string="Magento Credit Memos" create="false" import="0">
+                <tree string="Magento Credit Memos" create="false" import="0">
                     <field name="currency_id" column_invisible="1"/>
                     <field name="company_currency_id" column_invisible="1"/>
                     <field name="magento_credit_memo_display"/>
@@ -843,6 +853,7 @@
                     <field name="magento_sale_order_name"/>
                     <field name="magento_sale_order_created_at" optional="hide"/>
                     <field name="partner_id" string="Bill-to Name"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_refund_state" widget="badge"
                            decoration-success="magento_refund_state == 'refunded'"
@@ -856,7 +867,7 @@
                             type="object"
                             string="View"
                             class="btn-link"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -864,7 +875,7 @@
             <field name="name">magento.shipment.list</field>
             <field name="model">stock.picking</field>
             <field name="arch" type="xml">
-                <list string="Magento Shipments" create="false" import="0">
+                <tree string="Magento Shipments" create="false" import="0">
                     <field name="name" string="Shipment"/>
                     <field name="magento_ship_date" string="Ship Date"/>
                     <field name="magento_increment_id" string="Order #"/>
@@ -872,18 +883,19 @@
                     <field name="magento_ship_to_name" string="Ship-to Name"/>
                     <field name="magento_customer_email" string="Customer Email" optional="show"/>
                     <field name="magento_customer_phone" string="Customer Phone" optional="hide"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_total_qty" string="Total Quantity" sum="Total quantity"/>
                     <button name="action_open_magento_shipment" type="object" string="View"
                             class="btn-link"/>
-                </list>
+                </tree>
             </field>
         </record>
 
         <record id="action_magento_invoices" model="ir.actions.act_window">
             <field name="name">Magento Invoices</field>
             <field name="res_model">account.move</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">
                 [
                 ('move_type', '=', 'out_invoice'),
@@ -903,7 +915,7 @@
         <record id="action_magento_credit_memos" model="ir.actions.act_window">
             <field name="name">Magento Credit Memos</field>
             <field name="res_model">account.move</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">
                 [
                 ('move_type', '=', 'out_refund'),
@@ -924,7 +936,7 @@
         <record id="action_magento_shipments" model="ir.actions.act_window">
             <field name="name">Magento Shipments</field>
             <field name="res_model">stock.picking</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">
                 [
                 ('picking_type_code', '=', 'outgoing'),
@@ -948,7 +960,7 @@
             <field name="name">magento.customer.list</field>
             <field name="model">magento.customer</field>
             <field name="arch" type="xml">
-                <list string="Magento Customers" import="0">
+                <tree string="Magento Customers" import="0">
                     <field name="name"/>
                     <field name="email"/>
                     <field name="phone" optional="show"/>
@@ -956,10 +968,11 @@
                     <field name="region" string="State/Province" optional="hide"/>
                     <field name="country_id" optional="hide"/>
                     <field name="instance_id" optional="show"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="magento_id" optional="show"/>
                     <field name="magento_last_error" optional="hide"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -1017,6 +1030,7 @@
                         <group>
                             <group string="Identity">
                                 <field name="instance_id"/>
+                                <field name="company_id" invisible="1"/>
                                 <field name="company_id" groups="base.group_multi_company"/>
                                 <field name="magento_id" readonly="1"/>
                                 <field name="prefix"/>
@@ -1053,7 +1067,7 @@
         <record id="action_magento_customer" model="ir.actions.act_window">
             <field name="name">Magento Customers</field>
             <field name="res_model">magento.customer</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_customer_search"/>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">No Magento customers yet</p>
@@ -1068,10 +1082,11 @@
             <field name="name">magento.sync.report.list</field>
             <field name="model">magento.sync.report</field>
             <field name="arch" type="xml">
-                <list string="Magento Sync Reports" import="0" create="0"
+                <tree string="Magento Sync Reports" import="0" create="0"
                       decoration-danger="errors &gt; 0">
                     <field name="synced_at" string="Created On"/>
                     <field name="instance_id" string="Magento Instance"/>
+                    <field name="company_id" column_invisible="1"/>
                     <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                     <field name="sync_type" string="Sync Type" widget="badge"/>
                     <field name="mode" string="Mode" optional="show"/>
@@ -1084,7 +1099,7 @@
                            decoration-danger="errors &gt; 0" decoration-bf="errors &gt; 0"/>
                     <field name="start_time" string="Start Time" optional="hide"/>
                     <field name="end_time" string="End Time" optional="hide"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -1127,6 +1142,7 @@
                             <group>
                                 <field name="synced_at"/>
                                 <field name="instance_id"/>
+                                <field name="company_id" invisible="1"/>
                                 <field name="company_id" groups="base.group_multi_company"/>
                                 <field name="sync_type"/>
                                 <field name="mode"/>
@@ -1171,7 +1187,7 @@
         <record id="action_magento_sync_report" model="ir.actions.act_window">
             <field name="name">Magento Sync Reports</field>
             <field name="res_model">magento.sync.report</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_sync_report_search"/>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">No sync runs yet</p>
@@ -1182,7 +1198,7 @@
         <record id="action_magento_cancelled_orders_report" model="ir.actions.act_window">
             <field name="name">Cancelled Orders</field>
             <field name="res_model">sale.order</field>
-            <field name="view_mode">list</field>
+            <field name="view_mode">tree</field>
             <field name="view_id" ref="view_sale_order_tree_magento_cancelled_report"/>
             <field name="search_view_id" ref="view_sale_order_search_magento"/>
             <field name="domain">

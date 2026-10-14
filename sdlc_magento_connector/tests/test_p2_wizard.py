@@ -289,7 +289,7 @@ class TestSetupWizard(MagentoTestCommon):
         company = self.env.company
         tax = self.env["account.tax"].create({
             "name": "Sales 8.25%", "amount": 8.25, "amount_type": "percent", "type_tax_use": "sale",
-            "company_id": company.id, "price_include_override": "tax_excluded",
+            "company_id": company.id, "price_include": False,
         })
         bank = self.env["account.journal"].search([("type", "=", "bank"), ("company_id", "=", company.id)], limit=1)
         cash = self.env["account.journal"].create({

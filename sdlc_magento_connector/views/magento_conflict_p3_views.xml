@@ -7,7 +7,7 @@
         <field name="name">magento.order.conflict.list</field>
         <field name="model">magento.order.conflict</field>
         <field name="arch" type="xml">
-            <list string="Conflicts" create="0" edit="0" import="0"
+            <tree string="Conflicts" create="0" edit="0" import="0"
                   decoration-muted="state != 'open'">
                 <header>
                     <button name="action_accept" type="object" string="Accept Magento"
@@ -20,6 +20,7 @@
                 <field name="magento_increment_id" optional="show"/>
                 <field name="partner_id" optional="hide"/>
                 <field name="instance_id" optional="hide"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="conflict_type" string="Type"/>
                 <field name="summary"/>
@@ -36,7 +37,7 @@
                        decoration-muted="state == 'kept'"/>
                 <field name="resolved_by" optional="hide"/>
                 <field name="resolved_date" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -134,6 +135,7 @@
                             <field name="magento_increment_id"/>
                             <field name="partner_id"/>
                             <field name="instance_id"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="order_state"/>
                         </group>
@@ -169,7 +171,7 @@
     <record id="action_magento_order_conflict" model="ir.actions.act_window">
         <field name="name">Conflicts</field>
         <field name="res_model">magento.order.conflict</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_order_conflict_search"/>
         <field name="context">{'search_default_open': 1, 'search_default_group_type': 1}</field>
         <field name="help" type="html">
@@ -190,7 +192,7 @@
         <field name="name">magento.order.status.event.list</field>
         <field name="model">magento.order.status.event</field>
         <field name="arch" type="xml">
-            <list string="Magento Status History" create="0" edit="0" delete="0"
+            <tree string="Magento Status History" create="0" edit="0" delete="0"
                   decoration-danger="is_regression" decoration-muted="not is_transition">
                 <field name="sequence" string="#"/>
                 <field name="event_date"/>
@@ -201,7 +203,7 @@
                 <field name="is_regression" widget="boolean" optional="show"/>
                 <field name="is_transition" column_invisible="1"/>
                 <field name="comment" optional="show"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -233,7 +235,7 @@
                       invisible="not is_magento_order"
                       groups="sdlc_magento_connector.group_magento_user">
                     <field name="magento_status_event_ids" readonly="1">
-                        <list string="Magento Status History" create="0" edit="0" delete="0"
+                        <tree string="Magento Status History" create="0" edit="0" delete="0"
                               decoration-danger="is_regression" decoration-muted="not is_transition">
                             <field name="sequence" string="#"/>
                             <field name="event_date"/>
@@ -244,7 +246,7 @@
                             <field name="is_regression" widget="boolean" optional="show"/>
                             <field name="is_transition" column_invisible="1"/>
                             <field name="comment" optional="show"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
             </xpath>

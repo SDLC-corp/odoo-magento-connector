@@ -8,9 +8,10 @@
         <field name="name">magento.customer.group.list</field>
         <field name="model">magento.customer.group</field>
         <field name="arch" type="xml">
-            <list string="Magento Customer Groups" create="0" import="0"
+            <tree string="Magento Customer Groups" create="0" import="0"
                   decoration-muted="not from_magento">
                 <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="magento_group_id" string="Magento ID"/>
                 <field name="name"/>
@@ -19,7 +20,7 @@
                 <field name="pricelist_id" options="{'no_create': True}" optional="show"/>
                 <field name="partner_count" string="Contacts" optional="show"/>
                 <field name="from_magento" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -42,6 +43,7 @@
                     <group>
                         <group string="Magento">
                             <field name="instance_id" readonly="1"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="magento_group_id" readonly="1"/>
                             <field name="tax_class_name" readonly="1"/>
@@ -78,7 +80,7 @@
     <record id="action_magento_customer_group" model="ir.actions.act_window">
         <field name="name">Customer Groups</field>
         <field name="res_model">magento.customer.group</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_customer_group_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No customer groups yet</p>
@@ -175,13 +177,13 @@
                         </group>
                     </group>
                     <field name="magento_customer_ids" readonly="1" invisible="not magento_customer_ids">
-                        <list>
+                        <tree>
                             <field name="instance_id"/>
                             <field name="magento_id"/>
                             <field name="email"/>
                             <field name="customer_group_id"/>
                             <field name="magento_last_error" optional="hide"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
             </xpath>

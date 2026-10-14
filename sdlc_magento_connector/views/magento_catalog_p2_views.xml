@@ -11,7 +11,7 @@
         <field name="name">magento.product.link.list</field>
         <field name="model">magento.product.link</field>
         <field name="arch" type="xml">
-            <list string="Variants and Components" create="0" edit="0"
+            <tree string="Variants and Components" create="0" edit="0"
                   decoration-muted="not child_map_id">
                 <field name="parent_map_id"/>
                 <field name="link_type" widget="badge"/>
@@ -22,7 +22,7 @@
                 <field name="qty" optional="show"/>
                 <field name="is_default" optional="hide"/>
                 <field name="instance_id" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -65,7 +65,7 @@
                         products, not the group.
                     </div>
                     <field name="child_link_ids" nolabel="1" readonly="1">
-                        <list string="Variants and Components" decoration-muted="not child_map_id">
+                        <tree string="Variants and Components" decoration-muted="not child_map_id">
                             <field name="option_title" optional="show"
                                    column_invisible="parent.type_id != 'bundle'"/>
                             <field name="child_sku"/>
@@ -80,17 +80,17 @@
                             <field name="price" optional="hide"
                                    column_invisible="parent.type_id != 'bundle'"/>
                             <field name="position" optional="hide"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
                 <page string="Part Of" name="magento_part_of" invisible="not parent_link_ids">
                     <field name="parent_link_ids" nolabel="1" readonly="1">
-                        <list string="Part Of">
+                        <tree string="Part Of">
                             <field name="parent_map_id" string="Configurable / Bundle / Grouped"/>
                             <field name="link_type"/>
                             <field name="option_title" optional="show"/>
                             <field name="qty" optional="show"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
             </xpath>
@@ -204,15 +204,16 @@
         <field name="name">magento.product.attribute.list</field>
         <field name="model">magento.product.attribute</field>
         <field name="arch" type="xml">
-            <list string="Magento Attributes" create="0">
+            <tree string="Magento Attributes" create="0">
                 <field name="name"/>
                 <field name="attribute_code"/>
                 <field name="magento_attribute_id" optional="hide"/>
                 <field name="odoo_attribute_id"/>
                 <field name="option_count" class="o_field_integer"/>
                 <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -234,18 +235,19 @@
                         </group>
                         <group>
                             <field name="instance_id" readonly="1"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                         </group>
                     </group>
                     <notebook>
                         <page string="Options" name="options">
                             <field name="option_ids" nolabel="1">
-                                <list string="Options" editable="bottom" create="0">
+                                <tree string="Options" editable="bottom" create="0">
                                     <field name="label"/>
                                     <field name="value" readonly="1"/>
                                     <field name="odoo_value_id"
                                            domain="[('attribute_id', '=', parent.odoo_attribute_id)]"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                     </notebook>
@@ -273,7 +275,7 @@
     <record id="action_magento_product_attribute" model="ir.actions.act_window">
         <field name="name">Attributes</field>
         <field name="res_model">magento.product.attribute</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No Magento attribute mapped yet</p>
             <p>Attributes and their options are mapped when the first configurable product is

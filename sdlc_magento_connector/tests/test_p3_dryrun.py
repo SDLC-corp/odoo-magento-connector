@@ -243,8 +243,8 @@ class TestDataOwnership(_P3Common):
         self.assertFalse(self._push_jobs(category))
 
     def test_stock_push_guard(self):
-        maps = self.create_map(self.create_product("ST-1", is_storable=True), 901) | \
-            self.create_map(self.create_product("ST-2", is_storable=True), 902)
+        maps = self.create_map(self.create_product("ST-1", detailed_type="product"), 901) | \
+            self.create_map(self.create_product("ST-2", detailed_type="product"), 902)
         bulk = self.patch_api("async_bulk", return_value=[])
         self._own("stock", "magento_to_odoo")
         result = self.instance._magento_push_stock_maps(maps)
@@ -419,11 +419,11 @@ class TestDryRun(_P3Common):
     def test_preview_queues_no_push_and_no_postcommit(self):
         self.create_map(self.create_product("DR-PC"), 1301)
         self._patch_products(build_product(1301, "DR-PC", name="Renamed"))
-        funcs_before = len(self.env.cr.postcommit)
+        funcs_before = len(self.env.cr.postcommit._funcs)
         jobs_before = self.env["magento.job"].search_count([])
         self._preview()
         self.assertEqual(self.env["magento.job"].search_count([]), jobs_before)
-        self.assertEqual(len(self.env.cr.postcommit), funcs_before)
+        self.assertEqual(len(self.env.cr.postcommit._funcs), funcs_before)
 
     def test_order_preview_consumes_no_sequence(self):
         self.patch_order_side_calls()

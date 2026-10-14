@@ -11,7 +11,7 @@
         <field name="name">magento.store.view.list</field>
         <field name="model">magento.store.view</field>
         <field name="arch" type="xml">
-            <list string="Store Views" editable="bottom" create="0" delete="0"
+            <tree string="Store Views" editable="bottom" create="0" delete="0"
                   decoration-muted="not magento_active or not active_for_sync">
                 <field name="name" readonly="1"/>
                 <field name="code"/>
@@ -33,8 +33,9 @@
                 <field name="magento_active" widget="boolean" optional="show"/>
                 <field name="active_for_sync" widget="boolean_toggle"/>
                 <field name="instance_id" optional="hide" readonly="1"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -64,7 +65,7 @@
     <record id="action_magento_store_view" model="ir.actions.act_window">
         <field name="name">Store Views</field>
         <field name="res_model">magento.store.view</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">tree</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No store view discovered yet</p>
             <p>Open a Magento instance and click <b>Discover Stores</b> (Stores tab). Each store
@@ -82,7 +83,7 @@
         <field name="name">magento.website.list</field>
         <field name="model">magento.website</field>
         <field name="arch" type="xml">
-            <list string="Websites" create="0" delete="0" edit="0">
+            <tree string="Websites" create="0" delete="0" edit="0">
                 <field name="name"/>
                 <field name="code"/>
                 <field name="magento_id" optional="hide"/>
@@ -91,7 +92,7 @@
                 <field name="base_currency_id" optional="show"/>
                 <field name="store_view_count" string="Store Views" class="o_field_integer"/>
                 <field name="instance_id" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -117,14 +118,14 @@
                     </div>
                     <separator string="Websites"/>
                     <field name="magento_website_ids" nolabel="1" readonly="1">
-                        <list string="Websites">
+                        <tree string="Websites">
                             <field name="name"/>
                             <field name="code"/>
                             <field name="is_default"/>
                             <field name="default_group_id" optional="show"/>
                             <field name="base_currency_id" optional="show"/>
                             <field name="store_view_count" string="Store Views" class="o_field_integer"/>
-                        </list>
+                        </tree>
                     </field>
                     <separator string="Store Views"/>
                     <div class="text-muted small mb-2">
@@ -133,7 +134,7 @@
                         descriptions and meta fields, imported and exported per store code.
                     </div>
                     <field name="magento_store_view_ids" nolabel="1">
-                        <list string="Store Views" editable="bottom" create="0" delete="0"
+                        <tree string="Store Views" editable="bottom" create="0" delete="0"
                               decoration-muted="not magento_active or not active_for_sync">
                             <field name="name" readonly="1"/>
                             <field name="code"/>
@@ -150,7 +151,7 @@
                             <field name="is_instance_default" optional="show"/>
                             <field name="magento_active" widget="boolean" optional="show"/>
                             <field name="active_for_sync" widget="boolean_toggle"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
             </page>
@@ -218,7 +219,7 @@
                         never deleted.
                     </div>
                     <field name="magento_media_ids" nolabel="1">
-                        <list string="Images" decoration-muted="disabled">
+                        <tree string="Images" decoration-muted="disabled">
                             <field name="image_preview" widget="image" options="{'size': [48, 48]}"
                                    string="Image"/>
                             <field name="position" class="o_field_integer"/>
@@ -231,7 +232,7 @@
                                    decoration-muted="origin == 'magento'"/>
                             <field name="created_by_connector" optional="hide"/>
                             <field name="magento_entry_id" optional="hide"/>
-                        </list>
+                        </tree>
                     </field>
                     <separator string="Translations"/>
                     <field name="magento_translation_html" nolabel="1" readonly="1"/>

@@ -8,7 +8,7 @@
         <field name="name">magento.stock.source.map.list</field>
         <field name="model">magento.stock.source.map</field>
         <field name="arch" type="xml">
-            <list string="MSI Source Mapping" editable="bottom" decoration-muted="not active">
+            <tree string="MSI Source Mapping" editable="bottom" decoration-muted="not active">
                 <field name="sequence" widget="handle"/>
                 <field name="instance_id" column_invisible="context.get('default_instance_id')"
                        options="{'no_create': True}"/>
@@ -16,7 +16,7 @@
                 <field name="source_code" placeholder="e.g. default"/>
                 <field name="location_ids" widget="many2many_tags" options="{'no_create': True}"/>
                 <field name="active" widget="boolean_toggle" optional="show"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -39,7 +39,7 @@
     <record id="action_magento_stock_source_map" model="ir.actions.act_window">
         <field name="name">MSI Sources</field>
         <field name="res_model">magento.stock.source.map</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_magento_stock_source_map_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No MSI source mapped yet</p>
@@ -59,7 +59,7 @@
         <field name="model">magento.product.map</field>
         <field name="priority">30</field>
         <field name="arch" type="xml">
-            <list string="Stock Push" create="0" import="0" edit="0"
+            <tree string="Stock Push" create="0" import="0" edit="0"
                   decoration-info="stock_push_pending">
                 <field name="sku"/>
                 <field name="name" string="Product"/>
@@ -74,14 +74,14 @@
                 <field name="stock_status" widget="badge" optional="hide"
                        decoration-success="stock_status == 'in_stock'"
                        decoration-danger="stock_status == 'out_of_stock'"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <record id="action_magento_stock_push_maps" model="ir.actions.act_window">
         <field name="name">Stock Push</field>
         <field name="res_model">magento.product.map</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="view_id" ref="view_magento_stock_push_list"/>
         <field name="search_view_id" ref="view_magento_product_map_search"/>
         <field name="help" type="html">
@@ -173,14 +173,15 @@
                        invisible="stock_push_mode != 'msi'">
                     <field name="stock_source_map_ids" nolabel="1" colspan="2"
                            context="{'default_instance_id': id}">
-                        <list editable="bottom" decoration-muted="not active">
+                        <tree editable="bottom" decoration-muted="not active">
                             <field name="sequence" widget="handle"/>
+                            <field name="company_id" column_invisible="1"/>
                             <field name="source_code" placeholder="e.g. default"/>
                             <field name="location_ids" widget="many2many_tags"
                                    options="{'no_create': True}"
                                    domain="[('usage', '=', 'internal'), ('company_id', 'in', [parent.company_id, False])]"/>
                             <field name="active" widget="boolean_toggle"/>
-                        </list>
+                        </tree>
                     </field>
                 </group>
             </group>

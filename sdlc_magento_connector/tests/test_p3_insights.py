@@ -16,7 +16,7 @@ from odoo.tests import tagged
 from .common import MagentoTestCommon
 
 NOW = datetime(2026, 10, 13, 9, 0, 0)
-LINK_URL = re.compile(r"/odoo/(\d+)/action-sdlc_magento_connector\.action_magento_digest_link_open$")
+LINK_URL = re.compile(r"/web#action=sdlc_magento_connector\.action_magento_digest_link_open&active_id=(\d+)$")
 NO_PUSH = {"skip_magento_sync": True, "magento_skip_push": True, "skip_odoo_sync": True}
 
 

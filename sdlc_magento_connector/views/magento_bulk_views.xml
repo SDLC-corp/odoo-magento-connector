@@ -5,7 +5,7 @@
         <field name="name">magento.bulk.operation.list</field>
         <field name="model">magento.bulk.operation</field>
         <field name="arch" type="xml">
-            <list string="Bulk Operations" create="0" edit="0" import="0"
+            <tree string="Bulk Operations" create="0" edit="0" import="0"
                   decoration-muted="state == 'done'">
                 <header>
                     <button name="action_poll_now" type="object" string="Check Status"
@@ -14,6 +14,7 @@
                 <field name="create_date" string="Submitted"/>
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="operation" optional="show"/>
                 <field name="transport" widget="badge" optional="show"
@@ -32,7 +33,7 @@
                        decoration-success="state == 'done'"
                        decoration-warning="state == 'partial'"
                        decoration-danger="state in ('failed', 'rejected')"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -105,6 +106,7 @@
                     <group>
                         <group string="Request">
                             <field name="instance_id"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="operation"/>
                             <field name="transport"/>
@@ -129,6 +131,7 @@
                     </group>
                     <notebook>
                         <page string="Items" name="items">
+                            <field name="result_json" invisible="1"/>
                             <field name="items_pretty" nolabel="1" readonly="1"
                                    class="font-monospace text-break"/>
                         </page>
@@ -145,7 +148,7 @@
     <record id="action_magento_bulk_operation" model="ir.actions.act_window">
         <field name="name">Bulk Operations</field>
         <field name="res_model">magento.bulk.operation</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_bulk_operation_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No bulk operations yet</p>

@@ -141,10 +141,13 @@ def live_order_1(**kwargs):
 
 @tagged("post_install", "-at_install", "magento")
 class TestP3Totals(MagentoTestCommon):
+    # Odoo 17 rounds sale line unit prices to the "Product Price" accuracy (Odoo 18+ keeps
+    # them exact). Magento sends 4-decimal unit prices; stores need 4 digits to match totals.
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.env.ref("product.decimal_price").digits = 4
         ctx = dict(skip_magento_sync=True, magento_skip_push=True, skip_odoo_sync=True)
         Product = cls.env["product.product"].with_context(**ctx)
         Map = cls.env["magento.product.map"].with_context(**ctx)
@@ -324,7 +327,7 @@ class TestP3Totals(MagentoTestCommon):
         order, = self.sync(data)
         self.assertEqual(order.amount_total, 89.18)
         explanation = self.explain(order)
-        self.assertEqual(explanation.difference, 0.82)
+        self.assertAlmostEqual(explanation.difference, 0.82)  # Odoo 17 float_round noise
         dtc = self.components(explanation, "discount_tax")
         self.assertEqual(len(dtc), 1)
         self.assertIn("0.76", dtc.evidence)
@@ -359,7 +362,7 @@ class TestP3Totals(MagentoTestCommon):
         explanation = self.explain(order)
         found = self.components(explanation, "shipping").sorted("sequence")
         self.assertEqual(found.mapped("name"), ["Shipping amount", "Shipping tax"])
-        self.assertEqual(found.mapped("amount"), [1.0, 0.83])
+        self.assertEqual([round(a, 2) for a in found.mapped("amount")], [1.0, 0.83])
         self.assertEqual(explanation.unexplained_amount, 0.0)
 
     def test_missing_extra_and_edited_lines(self):

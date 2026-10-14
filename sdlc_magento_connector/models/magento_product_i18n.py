@@ -903,8 +903,8 @@ class MagentoInstance(models.Model):
 class ProductTemplate(models.Model):
     _inherit = "product.template"
 
-    def _update_field_translations(self, field_name, translations, digest=None, source_lang=""):
-        res = super()._update_field_translations(field_name, translations, digest=digest, source_lang=source_lang)
+    def _update_field_translations(self, field_name, translations, digest=None):
+        res = super()._update_field_translations(field_name, translations, digest=digest)
         if magento_push_skipped(self.env):
             return res
         translatable = {fname for _code, fname in self.env["magento.product.map"]._magento_translatable_fields()}

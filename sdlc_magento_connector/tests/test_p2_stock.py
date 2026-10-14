@@ -36,7 +36,7 @@ class TestStockPushP2(MagentoTestCommon):
     # helpers
     # ------------------------------------------------------------------
     def _storable(self, sku, qty=0.0, location=None):
-        product = self.create_product(sku, is_storable=True)
+        product = self.create_product(sku, detailed_type="product")
         if qty:
             self.env["stock.quant"]._update_available_quantity(product, location or self.stock_location, qty)
         return product
@@ -176,7 +176,7 @@ class TestStockPushP2(MagentoTestCommon):
     def test_kit_with_mrp(self):
         if "mrp.bom" not in self.env:
             self.skipTest("mrp is not installed in this database")
-        kit = self.create_product("MRP-KIT", is_storable=False)
+        kit = self.create_product("MRP-KIT", detailed_type="consu")
         self.create_map(kit, 4101)
         comp_a = self._storable("MRP-A", qty=9.0)
         comp_b = self._storable("MRP-B", qty=20.0)

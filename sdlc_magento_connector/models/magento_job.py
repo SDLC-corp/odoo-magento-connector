@@ -292,8 +292,7 @@ class MagentoJob(models.Model):
         real ``ir.cron`` run, never interactively and never under tests."""
         in_test_mode = getattr(self.env.registry, "in_test_mode", None)
         return bool(
-            self.env.context.get("ir_cron_progress_id")
-            and self.env.context.get("cron_id")
+            cron_compat.in_cron_run(self.env)
             and not odoo_module.current_test
             and not (in_test_mode() if callable(in_test_mode) else False)
         )
@@ -533,5 +532,5 @@ class MagentoJob(models.Model):
         if len(ids) == 1:
             action.update(view_mode="form", res_id=ids[0])
         else:
-            action.update(view_mode="list,form", domain=[("id", "in", ids)])
+            action.update(view_mode="tree,form", domain=[("id", "in", ids)])
         return action

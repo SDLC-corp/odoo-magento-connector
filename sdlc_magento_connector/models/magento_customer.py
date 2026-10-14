@@ -912,7 +912,7 @@ class MagentoCustomerGroup(models.Model):
             "type": "ir.actions.act_window",
             "name": "Contacts: %s" % self.name,
             "res_model": "res.partner",
-            "view_mode": "list,form",
+            "view_mode": "tree,form",
             "domain": [("magento_customer_group_id", "=", self.id)],
         }
 

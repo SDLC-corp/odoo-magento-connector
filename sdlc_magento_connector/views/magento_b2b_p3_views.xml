@@ -160,7 +160,7 @@
         <field name="model">res.partner</field>
         <field name="priority">90</field>
         <field name="arch" type="xml">
-            <list string="B2B Companies" create="0">
+            <tree string="B2B Companies" create="0">
                 <field name="name"/>
                 <field name="magento_company_id"/>
                 <field name="magento_company_legal_name" optional="show"/>
@@ -176,17 +176,17 @@
                 <field name="magento_shared_catalog_id" optional="show"/>
                 <field name="magento_company_credit_limit" optional="show"/>
                 <field name="magento_company_instance_id" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <record id="action_magento_b2b_company" model="ir.actions.act_window">
         <field name="name">B2B Companies</field>
         <field name="res_model">res.partner</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="domain">[('magento_company_instance_id', '!=', False)]</field>
         <field name="view_ids" eval="[(5, 0, 0),
-            (0, 0, {'view_mode': 'list', 'view_id': ref('view_magento_b2b_company_list')}),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_magento_b2b_company_list')}),
             (0, 0, {'view_mode': 'form', 'view_id': ref('base.view_partner_form')})]"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No Adobe Commerce B2B company yet</p>
@@ -201,7 +201,7 @@
         <field name="name">magento.shared.catalog.list</field>
         <field name="model">magento.shared.catalog</field>
         <field name="arch" type="xml">
-            <list string="Shared Catalogs" create="0">
+            <tree string="Shared Catalogs" create="0">
                 <field name="magento_catalog_id"/>
                 <field name="name"/>
                 <field name="catalog_type" widget="badge"/>
@@ -212,8 +212,9 @@
                 <field name="last_import_at" optional="show"/>
                 <field name="last_export_at" optional="show"/>
                 <field name="instance_id" optional="hide"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -250,6 +251,7 @@
                             <field name="tax_class_id"/>
                         </group>
                         <group string="Odoo">
+                            <field name="company_id" invisible="1"/>
                             <field name="pricelist_id"/>
                             <field name="product_count"/>
                             <field name="last_import_at"/>
@@ -260,11 +262,11 @@
                     <field name="description" readonly="1" invisible="not description"/>
                     <separator string="Companies"/>
                     <field name="company_partner_ids" readonly="1">
-                        <list>
+                        <tree>
                             <field name="name"/>
                             <field name="magento_company_id"/>
                             <field name="city"/>
-                        </list>
+                        </tree>
                     </field>
                 </sheet>
             </form>
@@ -274,7 +276,7 @@
     <record id="action_magento_shared_catalog" model="ir.actions.act_window">
         <field name="name">Shared Catalogs</field>
         <field name="res_model">magento.shared.catalog</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No shared catalog yet</p>
             <p>Use <b>Import Shared Catalogs</b> on the instance's Adobe Commerce tab. Each catalog maps to
@@ -289,7 +291,7 @@
         <field name="model">sale.order</field>
         <field name="priority">90</field>
         <field name="arch" type="xml">
-            <list string="Negotiable Quotes" create="0">
+            <tree string="Negotiable Quotes" create="0">
                 <field name="name"/>
                 <field name="magento_quote_id"/>
                 <field name="magento_quote_name" optional="show"/>
@@ -305,18 +307,18 @@
                 <field name="currency_id" column_invisible="1"/>
                 <field name="state" optional="hide"/>
                 <field name="magento_quote_instance_id" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <record id="action_magento_negotiable_quote" model="ir.actions.act_window">
         <field name="name">Negotiable Quotes</field>
         <field name="res_model">sale.order</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="domain">[('magento_quote_id', '!=', False)]</field>
         <field name="context">{'create': False}</field>
         <field name="view_ids" eval="[(5, 0, 0),
-            (0, 0, {'view_mode': 'list', 'view_id': ref('view_magento_negotiable_quote_list')}),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_magento_negotiable_quote_list')}),
             (0, 0, {'view_mode': 'form', 'view_id': ref('sale.view_order_form')})]"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No negotiable quote yet</p>
@@ -377,13 +379,13 @@
                         <field name="magento_source_quotation_id"/>
                     </group>
                     <field name="magento_placed_order_ids" invisible="not magento_placed_order_ids" readonly="1">
-                        <list>
+                        <tree>
                             <field name="name"/>
                             <field name="magento_increment_id"/>
                             <field name="amount_total"/>
                             <field name="currency_id" column_invisible="1"/>
                             <field name="state"/>
-                        </list>
+                        </tree>
                     </field>
                 </page>
             </xpath>

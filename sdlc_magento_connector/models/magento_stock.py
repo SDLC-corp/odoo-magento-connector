@@ -303,7 +303,7 @@ class MagentoInstance(models.Model):
             needed = defaultdict(float)
             for line, line_data in lines:
                 component = line.product_id
-                if not component.is_storable or line.product_uom_id.is_zero(line_data["qty"]):
+                if component.type != "product" or line.product_uom_id.is_zero(line_data["qty"]):
                     continue
                 needed[component] += line.product_uom_id._compute_quantity(
                     line_data["qty"], component.uom_id, round=False, raise_if_failure=False)
@@ -339,7 +339,7 @@ class MagentoInstance(models.Model):
         for code, locations in location_sets:
             scoped = (products | components).with_company(self.company_id).with_context(
                 location=locations.ids)
-            per_source.append((code, {p.id: p[field_name] for p in scoped if p.is_storable}))
+            per_source.append((code, {p.id: p[field_name] for p in scoped if p.type == "product"}))
         result = {}
         for product_map in maps:
             product_id = product_map.odoo_product_id.id

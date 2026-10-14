@@ -579,7 +579,7 @@ class MagentoInstance(models.Model):
             "type": "ir.actions.act_window",
             "name": name,
             "res_model": model,
-            "view_mode": "list,form",
+            "view_mode": "tree,form",
             "domain": [(field_name, "=", self.id)],
             "context": {"default_%s" % field_name: self.id},
         }
@@ -955,8 +955,7 @@ class MagentoInstance(models.Model):
         in_test_mode = getattr(self.env.registry, "in_test_mode", None)
         return bool(
             self._is_magento_cron()
-            and self.env.context.get("ir_cron_progress_id")
-            and self.env.context.get("cron_id")
+            and cron_compat.in_cron_run(self.env)
             and not odoo_module.current_test
             and not (in_test_mode() if callable(in_test_mode) else False)
         )

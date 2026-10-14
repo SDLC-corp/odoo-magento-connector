@@ -75,11 +75,11 @@ _DIFF_NOISE = re.compile(r"(hash|snapshot|payload|_json$|last_sync|synced_at|_se
 _DIFF_CURATED = {
     "product.product": {
         "name", "default_code", "barcode", "list_price", "standard_price", "type", "categ_id",
-        "active", "sale_ok", "description_sale", "weight", "volume", "is_storable",
+        "active", "sale_ok", "description_sale", "weight", "volume", "detailed_type",
     },
     "product.template": {
         "name", "default_code", "barcode", "list_price", "standard_price", "type", "categ_id",
-        "active", "sale_ok", "description_sale", "weight", "volume", "is_storable",
+        "active", "sale_ok", "description_sale", "weight", "volume", "detailed_type",
     },
     "res.partner": {
         "name", "email", "phone", "street", "street2", "city", "zip", "state_id", "country_id",

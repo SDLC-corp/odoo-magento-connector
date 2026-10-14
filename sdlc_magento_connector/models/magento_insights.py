@@ -3,7 +3,7 @@
 * **Daily digest** (``magento.digest``): one e-mail per instance with yesterday's and the
   last 7 days' figures. Every number links back into Odoo through a
   ``magento.digest.link`` row, opened by the server action
-  ``action_magento_digest_link_open`` (``/odoo/<link id>/action-...``), so the list opens
+  ``action_magento_digest_link_open`` (``/web#action=...&active_id=<link id>``), so the list opens
   on exactly the records counted, with the reader's own access rights.
 * **Net profit** (``magento.net.profit``): read-only SQL view, one row per product line
   of a Magento order (order-level amounts allocated by line value), so it can be grouped
@@ -468,8 +468,8 @@ class MagentoDigest(models.Model):
             "currency": currency.name,
             "day": fields.Date.to_string(win["yesterday"]),
             "week_from": fields.Date.to_string(win["week"]),
-            "console_url": "%s/odoo/action-sdlc_magento_connector.action_magento_dashboard" % base_url,
-            "instance_url": "%s/odoo/magento.instance/%s" % (base_url, instance.id),
+            "console_url": "%s/web#action=sdlc_magento_connector.action_magento_dashboard" % base_url,
+            "instance_url": "%s/web#model=magento.instance&id=%s&view_type=form" % (base_url, instance.id),
             "sales": sales_rows,
             "top_products": top_products,
             "health": health_rows,
@@ -513,7 +513,7 @@ class MagentoDigest(models.Model):
             dict(spec, digest_id=digest.id, domain=json.dumps(spec["domain"])) for spec in links
         ])
         base_url = instance.get_base_url()
-        urls = ["%s/odoo/%s/action-%s" % (base_url, rec.id, DIGEST_LINK_ACTION) for rec in link_records]
+        urls = ["%s/web#action=%s&active_id=%s" % (base_url, DIGEST_LINK_ACTION, rec.id) for rec in link_records]
         text = _LINK_RE.sub(lambda m: urls[int(m.group(1))], json.dumps(payload))
         digest.payload = json.loads(text)
 
@@ -574,7 +574,7 @@ class MagentoDigestLink(models.Model):
             "type": "ir.actions.act_window",
             "name": self.name,
             "res_model": self.res_model,
-            "views": [[False, "list"], [False, "form"]],
+            "views": [[False, "tree"], [False, "form"]],
             "domain": domain,
             "target": "current",
             "context": {"create": False},
@@ -660,7 +660,12 @@ class MagentoNetProfit(models.Model):
         elif row:
             std = "COALESCE(pp.standard_price, 0)::numeric"
         else:
-            std = "0::numeric"
+            # Odoo 17 stores company-dependent fields in ir_property.
+            std = """COALESCE((SELECT ip.value_float FROM ir_property ip
+                                WHERE ip.name = 'standard_price'
+                                  AND ip.res_id = 'product.product,' || pp.id
+                                  AND (ip.company_id = o.company_id OR ip.company_id IS NULL)
+                                ORDER BY ip.company_id NULLS LAST LIMIT 1), 0)::numeric"""
         valued_cte = """
             SELECT sm.sale_line_id AS line_id,
                    SUM(CASE WHEN sm.is_in THEN -COALESCE(sm.value, 0) ELSE COALESCE(sm.value, 0) END) AS cost

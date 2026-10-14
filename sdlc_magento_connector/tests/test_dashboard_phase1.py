@@ -233,7 +233,7 @@ class TestDashboardPhase1(MagentoTestCommon):
 
     def test_user_without_issue_rights_sees_no_issue_figures(self):
         self.env.ref(ISSUE_ACCESS_USER).perm_read = False
-        self.assertFalse(self.env["magento.sync.issue"].with_user(self.user).has_access("read"))
+        self.assertFalse(self.env["magento.sync.issue"].with_user(self.user).check_access_rights("read", raise_exception=False))
         data = self._data()
         self.assertTrue(data["issues_hidden"])
         self.assertIsNone(self._kpi(data, "open_issues"))

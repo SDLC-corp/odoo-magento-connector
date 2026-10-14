@@ -509,15 +509,14 @@ class TestP2Catalog(MagentoTestCommon):
         def tmpl(sku):
             return self._map(sku).odoo_template_id
 
-        self.assertTrue(tmpl("24-WG084").is_storable, "simple product -> storable goods")
-        self.assertEqual(tmpl("24-WG084").type, "consu")
-        self.assertTrue(tmpl("MH02").is_storable, "configurable variants -> storable goods")
-        self.assertTrue(self._map("MH02-S-Black").odoo_product_id.is_storable)
+        self.assertTrue(tmpl("24-WG084").type == "product", "simple product -> storable goods")
+        self.assertTrue(tmpl("MH02").type == "product", "configurable variants -> storable goods")
+        self.assertTrue(self._map("MH02-S-Black").odoo_product_id.type == "product")
         self.assertEqual(tmpl("EBOOK-1").type, "service")
         self.assertEqual(tmpl("CLASS-1").type, "service")
-        self.assertEqual((tmpl("24-WG080").type, tmpl("24-WG080").is_storable), ("consu", False),
+        self.assertEqual(tmpl("24-WG080").type, "consu",
                          "a bundle is a kit, not stocked itself")
-        self.assertFalse(tmpl("24-WG085_Group").is_storable)
+        self.assertFalse(tmpl("24-WG085_Group").type == "product")
 
     def test_storable_option_off_and_products_with_moves_untouched(self):
         moved = self.create_product("24-MB01", "Joust Duffle Bag")
@@ -533,12 +532,12 @@ class TestP2Catalog(MagentoTestCommon):
         self._load([bag, pack])
         self.instance.import_products_storable = False
         self._sync([bag, pack])
-        self.assertFalse(self._map("24-MB04").odoo_product_id.is_storable, "option off: left as goods")
+        self.assertFalse(self._map("24-MB04").odoo_product_id.type == "product", "option off: left as goods")
         self.instance.import_products_storable = True
         self._sync([bag, pack])
-        self.assertTrue(self._map("24-MB04").odoo_product_id.is_storable,
+        self.assertTrue(self._map("24-MB04").odoo_product_id.type == "product",
                         "no stock move: switched to storable on the next import")
-        self.assertFalse(moved.is_storable, "a product with stock moves is never flipped")
+        self.assertFalse(moved.type == "product", "a product with stock moves is never flipped")
 
     def test_product_push_sends_stock_only_without_stock_push(self):
         attribute_set = self.env["magento.attribute.set"].with_context(**self.no_push_ctx()).create({

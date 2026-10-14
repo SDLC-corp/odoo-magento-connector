@@ -10,7 +10,7 @@
         <field name="name">magento.return.reason.list</field>
         <field name="model">magento.return.reason</field>
         <field name="arch" type="xml">
-            <list string="Return Reasons" editable="bottom" decoration-muted="not active">
+            <tree string="Return Reasons" editable="bottom" decoration-muted="not active">
                 <field name="sequence" widget="handle"/>
                 <field name="code"/>
                 <field name="name"/>
@@ -19,7 +19,7 @@
                        optional="show"/>
                 <field name="company_id" column_invisible="1"/>
                 <field name="active" column_invisible="1"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -41,7 +41,7 @@
     <record id="action_magento_return_reason" model="ir.actions.act_window">
         <field name="name">Return Reasons</field>
         <field name="res_model">magento.return.reason</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_magento_return_reason_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No return reason yet</p>
@@ -56,7 +56,7 @@
         <field name="name">magento.return.location.rule.list</field>
         <field name="model">magento.return.location.rule</field>
         <field name="arch" type="xml">
-            <list string="Return Locations" editable="bottom" decoration-muted="not active">
+            <tree string="Return Locations" editable="bottom" decoration-muted="not active">
                 <field name="sequence" widget="handle"/>
                 <field name="instance_id" options="{'no_create': True}"/>
                 <field name="company_id" column_invisible="1"/>
@@ -65,14 +65,14 @@
                 <field name="reason_id" options="{'no_create': True}" placeholder="Any reason"/>
                 <field name="location_id" options="{'no_create': True}"/>
                 <field name="active" widget="boolean_toggle" optional="show"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <record id="action_magento_return_location_rule" model="ir.actions.act_window">
         <field name="name">Return Locations</field>
         <field name="res_model">magento.return.location.rule</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">tree</field>
         <field name="context">{'active_test': False}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No return location rule</p>
@@ -140,15 +140,16 @@
                     </group>
                     <separator string="Return Locations"/>
                     <field name="return_location_rule_ids" context="{'default_instance_id': id}">
-                        <list editable="bottom" decoration-muted="not active">
+                        <tree editable="bottom" decoration-muted="not active">
                             <field name="sequence" widget="handle"/>
+                            <field name="company_id" column_invisible="1"/>
                             <field name="warehouse_id" options="{'no_create': True}"
                                    placeholder="Any warehouse"/>
                             <field name="categ_id" options="{'no_create': True}" placeholder="Any category"/>
                             <field name="reason_id" options="{'no_create': True}" placeholder="Any reason"/>
                             <field name="location_id" options="{'no_create': True}"/>
                             <field name="active" widget="boolean_toggle"/>
-                        </list>
+                        </tree>
                     </field>
                     <div class="text-muted small mb-3">
                         The first matching rule wins; without a match, returns go to the stock location
@@ -156,12 +157,12 @@
                     </div>
                     <separator string="Return Reasons"/>
                     <field name="return_reason_ids" context="{'default_instance_id': id}">
-                        <list editable="bottom">
+                        <tree editable="bottom">
                             <field name="sequence" widget="handle"/>
                             <field name="code"/>
                             <field name="name"/>
                             <field name="restock" widget="boolean_toggle"/>
-                        </list>
+                        </tree>
                     </field>
                     <div class="text-muted small">
                         Reasons of this instance only; reasons shared by every instance are in

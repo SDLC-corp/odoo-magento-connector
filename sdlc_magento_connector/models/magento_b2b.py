@@ -1075,7 +1075,7 @@ class MagentoSharedCatalog(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Prices: %s", self.name),
             "res_model": "product.pricelist.item",
-            "view_mode": "list,form",
+            "view_mode": "tree,form",
             "domain": [("magento_shared_catalog_id", "=", self.id)],
         }
 

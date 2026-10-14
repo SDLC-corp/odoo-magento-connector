@@ -295,7 +295,9 @@ class MagentoTestCommon(TransactionCase):
                 self.patch_api(name, return_value=[])
 
     def create_product(self, sku, name=None, **extra):
-        vals = {"name": name or sku, "default_code": sku, "type": "consu", "list_price": 10.0}
+        if "type" in extra:  # Odoo 17: the product type is written through detailed_type
+            extra["detailed_type"] = extra.pop("type")
+        vals = {"name": name or sku, "default_code": sku, "detailed_type": "consu", "list_price": 10.0}
         vals.update(extra)
         product = self.env["product.product"].with_context(
             **self.no_push_ctx(), skip_odoo_sync=True).create(vals)

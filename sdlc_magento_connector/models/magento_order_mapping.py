@@ -378,7 +378,7 @@ class MagentoInstance(models.Model):
             product = Product.create({
                 "name": name,
                 "default_code": code,
-                "type": "service",
+                "detailed_type": "service",
                 "sale_ok": True,
                 "purchase_ok": False,
                 "list_price": 0.0,
@@ -432,7 +432,6 @@ class MagentoInstance(models.Model):
     def _magento_find_or_create_tax(self, label, percent, price_include, company):
         Tax = self.env["account.tax"].sudo().with_context(active_test=False)
         name = "Magento %s" % label
-        override = "tax_included" if price_include else "tax_excluded"
         if price_include:
             name = "%s %s" % (name, _("(incl.)"))
         candidates = Tax.search([
@@ -455,7 +454,7 @@ class MagentoInstance(models.Model):
             "amount": percent,
             "type_tax_use": "sale",
             "company_id": company.id,
-            "price_include_override": override,
+            "price_include": bool(price_include),
             "description": "%s%%" % _format_percent(percent),
         }
         country = self._magento_tax_country(company, label)

@@ -266,8 +266,10 @@ class MagentoOrderConflict(models.Model):
     # Actions
     # ------------------------------------------------------------------
     def _check_conflict_access(self):
-        self.check_access("write")
-        self.order_id.check_access("write")
+        self.check_access_rights("write")
+        self.check_access_rule("write")
+        self.order_id.check_access_rights("write")
+        self.order_id.check_access_rule("write")
 
     def _notify(self, message, kind="success"):
         return {

@@ -8,7 +8,7 @@
         <field name="name">magento.reconciliation.line.list</field>
         <field name="model">magento.reconciliation.line</field>
         <field name="arch" type="xml">
-            <list string="Reconciliation by Day" create="0" edit="0" delete="0"
+            <tree string="Reconciliation by Day" create="0" edit="0" delete="0"
                   decoration-danger="status == 'missing'"
                   decoration-warning="status == 'mismatch'">
                 <field name="reconciliation_id" optional="hide"/>
@@ -34,7 +34,7 @@
                        decoration-warning="status == 'mismatch'"/>
                 <button name="action_view_findings" type="object" icon="fa-search"
                         title="Orders behind this line" invisible="status == 'match'"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -69,7 +69,7 @@
         <field name="name">magento.reconciliation.order.list</field>
         <field name="model">magento.reconciliation.order</field>
         <field name="arch" type="xml">
-            <list string="Reconciliation Findings" create="0" edit="0" delete="0"
+            <tree string="Reconciliation Findings" create="0" edit="0" delete="0"
                   decoration-danger="kind == 'missing'"
                   decoration-warning="kind == 'mismatch'"
                   decoration-muted="canceled">
@@ -96,7 +96,7 @@
                        decoration-success="job_state == 'done'"
                        decoration-danger="job_state == 'failed'"/>
                 <field name="instance_id" optional="hide"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -176,10 +176,11 @@
         <field name="name">magento.reconciliation.list</field>
         <field name="model">magento.reconciliation</field>
         <field name="arch" type="xml">
-            <list string="Reconciliation"
+            <tree string="Reconciliation"
                   decoration-danger="state == 'failed' or missing_count &gt; 0"
                   decoration-warning="state == 'done' and missing_count == 0 and (mismatch_count &gt; 0 or extra_count &gt; 0)">
                 <field name="instance_id"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="date_from"/>
                 <field name="date_to"/>
@@ -194,7 +195,7 @@
                        decoration-info="state == 'running'"
                        decoration-success="state == 'done'"
                        decoration-danger="state == 'failed'"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -284,6 +285,7 @@
                         <group string="Period">
                             <field name="instance_id" readonly="state == 'running'"
                                    options="{'no_create': True}"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="date_from" string="Created (UTC)" widget="daterange"
                                    options="{'end_date_field': 'date_to'}"
@@ -305,7 +307,7 @@
                     <notebook>
                         <page string="Days" name="days">
                             <field name="line_ids" readonly="1">
-                                <list decoration-danger="status == 'missing'"
+                                <tree decoration-danger="status == 'missing'"
                                       decoration-warning="status == 'mismatch'">
                                     <field name="day"/>
                                     <field name="store_id" optional="show"/>
@@ -325,12 +327,12 @@
                                            decoration-success="status == 'match'"
                                            decoration-danger="status == 'missing'"
                                            decoration-warning="status == 'mismatch'"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                         <page string="Findings" name="findings" invisible="issue_count == 0">
                             <field name="finding_ids" readonly="1">
-                                <list decoration-danger="kind == 'missing'"
+                                <tree decoration-danger="kind == 'missing'"
                                       decoration-warning="kind == 'mismatch'"
                                       decoration-muted="canceled">
                                     <field name="kind" widget="badge"
@@ -351,7 +353,7 @@
                                            decoration-info="job_state in ('pending', 'started')"
                                            decoration-success="job_state == 'done'"
                                            decoration-danger="job_state == 'failed'"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                     </notebook>
@@ -363,7 +365,7 @@
     <record id="action_magento_reconciliation" model="ir.actions.act_window">
         <field name="name">Reconciliation</field>
         <field name="res_model">magento.reconciliation</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_reconciliation_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">Reconcile Magento and Odoo orders</p>

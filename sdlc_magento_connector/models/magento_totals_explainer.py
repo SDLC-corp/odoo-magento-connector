@@ -257,8 +257,8 @@ class MagentoTotalsExplanation(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Totals Explanations"),
             "res_model": self._name,
-            "view_mode": "list,form",
-            "views": [(False, "list"), (False, "form")],
+            "view_mode": "tree,form",
+            "views": [(False, "tree"), (False, "form")],
             "domain": [("id", "in", self.ids)],
             "context": {"create": False},
         }
@@ -282,7 +282,7 @@ class MagentoTotalsExplanation(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Difference Components"),
             "res_model": "magento.totals.explanation.line",
-            "view_mode": "list",
+            "view_mode": "tree",
             "domain": [("explanation_id", "in", self.ids)],
             "context": {"create": False, "group_by": ["category"]},
         }
@@ -1343,8 +1343,8 @@ class MagentoTotalsExplanationLine(models.Model):
                 "type": "ir.actions.act_window",
                 "name": _("Tax Mapping"),
                 "res_model": "magento.tax.map",
-                "view_mode": "list",
-                "views": [(False, "list")],
+                "view_mode": "tree",
+                "views": [(False, "tree")],
                 "domain": domain,
                 "context": {"active_test": False},
             }
@@ -1472,8 +1472,8 @@ class MagentoReconciliation(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Totals Explanations"),
             "res_model": "magento.totals.explanation",
-            "view_mode": "list,form",
-            "views": [(False, "list"), (False, "form")],
+            "view_mode": "tree,form",
+            "views": [(False, "tree"), (False, "form")],
             "domain": [("sale_order_id", "in", orders.ids)],
             "context": {"create": False},
         }

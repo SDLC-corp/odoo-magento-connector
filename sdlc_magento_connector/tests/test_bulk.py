@@ -329,7 +329,7 @@ class TestBulkStockPush(_BulkCase):
         })
 
     def _storable(self, sku, qty=0.0, other_qty=0.0):
-        product = self.create_product(sku, is_storable=True)
+        product = self.create_product(sku, detailed_type="product")
         quants = self.env["stock.quant"]
         if qty:
             quants._update_available_quantity(product, self.stock_location, qty)

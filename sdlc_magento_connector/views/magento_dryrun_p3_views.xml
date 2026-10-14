@@ -131,7 +131,7 @@
         <field name="name">magento.dryrun.line.list</field>
         <field name="model">magento.dryrun.line</field>
         <field name="arch" type="xml">
-            <list string="Preview" create="0" edit="0" import="0"
+            <tree string="Preview" create="0" edit="0" import="0"
                   decoration-danger="action == 'error'"
                   decoration-muted="action in ('unchanged', 'skip')">
                 <header>
@@ -157,9 +157,10 @@
                 <button name="action_apply_lines" type="object" string="Apply" icon="fa-play"
                         invisible="action not in ('create', 'update')"
                         groups="sdlc_magento_connector.group_magento_manager"/>
+                <field name="target_id" column_invisible="1"/>
                 <button name="action_open_target" type="object" string="Open" icon="fa-external-link"
                         invisible="not target_id"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -247,7 +248,7 @@
     <record id="action_magento_dryrun_line" model="ir.actions.act_window">
         <field name="name">Preview Rows</field>
         <field name="res_model">magento.dryrun.line</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_dryrun_line_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">No preview rows</p>
@@ -260,9 +261,10 @@
         <field name="name">magento.dryrun.list</field>
         <field name="model">magento.dryrun</field>
         <field name="arch" type="xml">
-            <list string="Dry-run Previews">
+            <tree string="Dry-run Previews">
                 <field name="name"/>
                 <field name="instance_id" optional="show"/>
+                <field name="company_id" column_invisible="1"/>
                 <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="entity"/>
                 <field name="previewed_at"/>
@@ -275,7 +277,7 @@
                 <field name="state" widget="badge"
                        decoration-info="state == 'previewed'"
                        decoration-success="state == 'applied'"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -373,6 +375,7 @@
                             <field name="previewed_at" invisible="not previewed_at"/>
                             <field name="previewed_by" invisible="not previewed_by"/>
                             <field name="applied_at" invisible="not applied_at"/>
+                            <field name="company_id" invisible="1"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                         </group>
                     </group>
@@ -380,7 +383,7 @@
                         <page string="Preview" name="lines">
                             <field name="line_ids" readonly="1"
                                    context="{'list_view_ref': 'sdlc_magento_connector.view_magento_dryrun_line_list'}">
-                                <list decoration-danger="action == 'error'"
+                                <tree decoration-danger="action == 'error'"
                                       decoration-muted="action in ('unchanged', 'skip')">
                                     <field name="magento_ref"/>
                                     <field name="name"/>
@@ -400,7 +403,7 @@
                                             groups="sdlc_magento_connector.group_magento_manager"/>
                                     <button name="action_open_target" type="object" string="Open"
                                             icon="fa-external-link" invisible="not target_id"/>
-                                </list>
+                                </tree>
                             </field>
                         </page>
                     </notebook>
@@ -412,7 +415,7 @@
     <record id="action_magento_dryrun" model="ir.actions.act_window">
         <field name="name">Dry-run Preview</field>
         <field name="res_model">magento.dryrun</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_magento_dryrun_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">Preview a sync before running it</p>

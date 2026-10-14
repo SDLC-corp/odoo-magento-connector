@@ -97,7 +97,7 @@ class TestDashboard(MagentoTestCommon):
         user = self.magento_only_user
         data = self._console(user).get_dashboard_data()
         self.assertIsInstance(data, dict)
-        can_read_orders = self.env["sale.order"].with_user(user).has_access("read")
+        can_read_orders = self.env["sale.order"].with_user(user).check_access_rights("read", raise_exception=False)
         self.assertEqual(data["orders_hidden"], not can_read_orders)
         if not can_read_orders:
             self.assertFalse(data["by_country"])
@@ -155,7 +155,7 @@ class TestDashboard(MagentoTestCommon):
                 if item.get("value") or item.get("count") or "value" not in item:
                     self.assertTrue(drill.get("res_model"), "%s has no drill-down model" % item["key"])
                     self.assertIsInstance(drill.get("domain"), list, "%s has no domain" % item["key"])
-                    self.assertTrue(self.env[drill["res_model"]].with_user(user).has_access("read"),
+                    self.assertTrue(self.env[drill["res_model"]].with_user(user).check_access_rights("read", raise_exception=False),
                                     "%s drills into a model the user cannot read" % item["key"])
 
     def test_d1_nav_links_omit_what_the_user_cannot_open(self):
@@ -170,7 +170,7 @@ class TestDashboard(MagentoTestCommon):
             if action.groups_id and not (action.groups_id & user.groups_id):
                 return False
             model = getattr(action, "res_model", False) or getattr(action, "model_name", False)
-            return not model or self.env[model].with_user(user).has_access("read")
+            return not model or self.env[model].with_user(user).check_access_rights("read", raise_exception=False)
 
         for user in (self.magento_only_user, self.sales_user_a):
             expected = {xml_id for xml_id, *_rest in self.env["magento.dashboard"].NAV_LINKS

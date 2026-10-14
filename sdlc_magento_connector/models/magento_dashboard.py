@@ -115,8 +115,8 @@ class MagentoDashboard(models.AbstractModel):
             action = self.env["ir.actions.actions"]._for_xml_id(xml_id)
         except (AccessError, ValueError):
             return False
-        groups = action.get("groups_id") or []
-        if groups and not any(self.env.user.has_group(xml_id) for xml_id in groups):
+        groups = set(action.get("groups_id") or [])  # Odoo 17: group ids
+        if groups and not groups & set(self.env.user.groups_id.ids):
             return False
         model_name = action.get("res_model") or (
             action.get("model_name") if action.get("type") == "ir.actions.server" else None
@@ -253,7 +253,7 @@ class MagentoDashboard(models.AbstractModel):
         return payload
 
     def _readable(self, model_name):
-        return model_name in self.env and self.env[model_name].has_access("read")
+        return model_name in self.env and self.env[model_name].check_access_rights("read", raise_exception=False)
 
     # ------------------------------------------------------------------
     # Helpers: period, currency, instances
@@ -771,7 +771,7 @@ class MagentoDashboard(models.AbstractModel):
 
         def drill(name, extra=(), group_by=None):
             result = self._drill(NET_PROFIT_MODEL, name, domain + list(extra),
-                                 views=[[False, "list"], [False, "pivot"], [False, "graph"]],
+                                 views=[[False, "tree"], [False, "pivot"], [False, "graph"]],
                                  action=action)
             if group_by:
                 # A list grouped by order, inside the report action (search view, help).

@@ -239,7 +239,7 @@ class MagentoReconciliation(models.Model):
             "type": "ir.actions.act_window",
             "name": name,
             "res_model": "magento.reconciliation.order",
-            "view_mode": "list,form",
+            "view_mode": "tree,form",
             "domain": [("reconciliation_id", "=", self.id), ("kind", "=", kind)],
             "context": {"create": False},
         }
@@ -261,8 +261,8 @@ class MagentoReconciliation(models.Model):
             "type": "ir.actions.act_window",
             "name": name,
             "res_model": "sale.order",
-            "view_mode": "list,form",
-            "views": [(False, "list"), (False, "form")],
+            "view_mode": "tree,form",
+            "views": [(False, "tree"), (False, "form")],
             "domain": [("id", "in", orders.ids)],
             "context": {"create": False},
         }
@@ -279,7 +279,7 @@ class MagentoReconciliation(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Reconciliation by Currency"),
             "res_model": "magento.reconciliation.line",
-            "view_mode": "list",
+            "view_mode": "tree",
             "domain": [("reconciliation_id", "=", self.id)],
             "context": {"create": False, "search_default_group_currency": 1},
         }
@@ -540,8 +540,7 @@ class MagentoReconciliation(models.Model):
     def _cron_can_commit(self):
         in_test_mode = getattr(self.env.registry, "in_test_mode", None)
         return bool(
-            self.env.context.get("ir_cron_progress_id")
-            and self.env.context.get("cron_id")
+            cron_compat.in_cron_run(self.env)
             and not odoo_module.current_test
             and not (in_test_mode() if callable(in_test_mode) else False)
         )
@@ -628,7 +627,7 @@ class MagentoReconciliationLine(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Findings"),
             "res_model": "magento.reconciliation.order",
-            "view_mode": "list,form",
+            "view_mode": "tree,form",
             "domain": [("line_id", "=", self.id)],
             "context": {"create": False},
         }
