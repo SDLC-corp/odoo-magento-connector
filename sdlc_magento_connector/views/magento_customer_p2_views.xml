@@ -31,7 +31,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_partners" type="object"
-                                class="oe_stat_button" icon="fa-users">
+                                class="oe_stat_button" icon="group">
                             <field name="partner_count" widget="statinfo" string="Contacts"/>
                         </button>
                     </div>
@@ -133,7 +133,7 @@
             <xpath expr="//div[hasclass('oe_title')]" position="before">
                 <div class="oe_button_box" name="button_box">
                     <button name="action_open_partner" type="object" class="oe_stat_button"
-                            icon="fa-address-card" invisible="not partner_id">
+                            icon="contact_page" invisible="not partner_id">
                         <div class="o_stat_info">
                             <span class="o_stat_text">Contact</span>
                         </div>
@@ -223,7 +223,7 @@
                             <div class="o_row">
                                 <field name="customer_group_count" class="oe_inline"/>
                                 <button name="action_view_customer_groups" type="object"
-                                        string="Open" class="btn-link" icon="fa-arrow-right"/>
+                                        string="Open" class="btn-link" icon="arrow_forward"/>
                             </div>
                             <div colspan="2">
                                 <button name="action_sync_customer_groups" type="object"

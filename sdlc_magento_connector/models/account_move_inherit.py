@@ -133,7 +133,7 @@ class AccountMove(models.Model):
         string="Restock Waiting for Delivery", readonly=True, copy=False, index="btree_not_null",
     )
     magento_return_reason_id = fields.Many2one(
-        "magento.return.reason", string="Return Reason", copy=False, ondelete="set null",
+        "magento.return.reason", string="Magento Return Reason", copy=False, ondelete="set null",
     )
     magento_return_picking_ids = fields.One2many(
         "stock.picking", "magento_refund_move_id", string="Return Receipts", readonly=True,

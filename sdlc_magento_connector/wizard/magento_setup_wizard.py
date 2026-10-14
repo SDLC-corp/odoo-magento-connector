@@ -1438,7 +1438,7 @@ class MagentoDashboard(models.AbstractModel):
         link for entry in _BaseDashboard.NAV_LINKS
         for link in (
             ((WIZARD_ACTION, "Connect a store", "Setup wizard: URL, credentials, stores, mappings, "
-              "catalog check, go live", "fa-magic", "Configuration & logs"), entry)
+              "catalog check, go live", "widgets", "Configuration & logs"), entry)
             if entry[0] == "sdlc_magento_connector.action_magento_instance" else (entry,)
         )
     ]

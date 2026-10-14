@@ -28,7 +28,7 @@
                 <field name="evidence" optional="show"/>
                 <field name="fix_type" column_invisible="1"/>
                 <field name="fix_label" optional="show"/>
-                <button name="action_apply_fix" type="object" string="Fix" icon="fa-wrench"
+                <button name="action_apply_fix" type="object" string="Fix" icon="build"
                         class="btn-link" title="Apply the suggested fix" invisible="not fix_type"/>
             </list>
         </field>
@@ -119,7 +119,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_order" type="object" class="oe_stat_button"
-                                icon="fa-shopping-cart">
+                                icon="shopping_cart">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Order</span>
                             </div>
@@ -184,7 +184,7 @@
                                     <field name="fix_type" column_invisible="1"/>
                                     <field name="fix_label"/>
                                     <button name="action_apply_fix" type="object" string="Fix"
-                                            icon="fa-wrench" class="btn-link"
+                                            icon="build" class="btn-link"
                                             title="Apply the suggested fix" invisible="not fix_type"/>
                                 </list>
                             </field>
@@ -239,7 +239,7 @@
                 <field name="magento_explanation_id" invisible="1"
                        groups="sdlc_magento_connector.group_magento_user"/>
                 <button name="action_view_magento_explanation" type="object" class="oe_stat_button"
-                        icon="fa-balance-scale" groups="sdlc_magento_connector.group_magento_user"
+                        icon="balance" groups="sdlc_magento_connector.group_magento_user"
                         invisible="not magento_explanation_id">
                     <div class="o_stat_info">
                         <span class="o_stat_value">
@@ -268,7 +268,7 @@
                        decoration-danger="explanation_state == 'unexplained'"/>
                 <field name="explanation_unexplained" optional="show"
                        invisible="not explanation_state"/>
-                <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
+                <button name="action_explain" type="object" string="Explain" icon="zoom_in"
                         class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
             </xpath>
         </field>
@@ -305,7 +305,7 @@
             </xpath>
             <xpath expr="//div[@name='button_box']" position="inside">
                 <button name="action_view_explanations" type="object" class="oe_stat_button"
-                        icon="fa-balance-scale" invisible="explanation_count == 0">
+                        icon="balance" invisible="explanation_count == 0">
                     <field name="explanation_count" widget="statinfo" string="Explanations"/>
                 </button>
             </xpath>
@@ -315,7 +315,7 @@
                        decoration-success="explanation_state == 'explained'"
                        decoration-warning="explanation_state == 'partially'"
                        decoration-danger="explanation_state == 'unexplained'"/>
-                <button name="action_explain" type="object" string="Explain" icon="fa-search-plus"
+                <button name="action_explain" type="object" string="Explain" icon="zoom_in"
                         class="btn-link" invisible="kind != 'mismatch' or not sale_order_id"/>
             </xpath>
         </field>

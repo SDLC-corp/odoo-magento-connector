@@ -79,29 +79,29 @@
                     <sheet>
                         <div class="oe_button_box" name="button_box">
                             <button name="action_view_orders" type="object"
-                                    class="oe_stat_button" icon="fa-shopping-cart">
+                                    class="oe_stat_button" icon="shopping_cart">
                                 <field name="order_count" widget="statinfo" string="Orders"/>
                             </button>
                             <button name="action_view_products" type="object"
-                                    class="oe_stat_button" icon="fa-cubes">
+                                    class="oe_stat_button" icon="inventory_2">
                                 <field name="product_count" widget="statinfo" string="Products"/>
                             </button>
                             <button name="action_view_customers" type="object"
-                                    class="oe_stat_button" icon="fa-users">
+                                    class="oe_stat_button" icon="group">
                                 <field name="customer_count" widget="statinfo" string="Customers"/>
                             </button>
                             <button name="action_view_categories" type="object"
-                                    class="oe_stat_button" icon="fa-sitemap">
+                                    class="oe_stat_button" icon="account_tree">
                                 <field name="category_count" widget="statinfo" string="Categories"/>
                             </button>
                             <!-- Same action twice: neutral at zero, danger-coloured once errors exist. -->
                             <button name="action_view_sync_errors" type="object"
-                                    class="oe_stat_button" icon="fa-check-circle"
+                                    class="oe_stat_button" icon="check_circle"
                                     invisible="sync_error_count &gt; 0">
                                 <field name="sync_error_count" widget="statinfo" string="Sync Errors"/>
                             </button>
                             <button name="action_view_sync_errors" type="object"
-                                    class="oe_stat_button text-danger" icon="fa-exclamation-triangle"
+                                    class="oe_stat_button text-danger" icon="warning"
                                     invisible="sync_error_count == 0">
                                 <field name="sync_error_count" widget="statinfo" string="Sync Errors"/>
                             </button>
@@ -303,7 +303,7 @@
                                 <field name="image_1920" widget="image" alt="Product"
                                        options="{'img_class': 'w-100 object-fit-contain'}"
                                        invisible="not image_1920"/>
-                                <span class="fa fa-cube fa-3x text-muted" role="img"
+                                <span class="oi text-muted oi-2x" data-icon="deployed_code" role="img"
                                       aria-label="No image" title="No image"
                                       invisible="image_1920"/>
                             </aside>

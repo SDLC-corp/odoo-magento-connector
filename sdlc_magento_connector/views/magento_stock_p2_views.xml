@@ -142,7 +142,7 @@
         <field name="arch" type="xml">
             <button name="action_view_bulk_operations" position="before">
                 <button name="action_view_stock_maps" type="object"
-                        class="oe_stat_button" icon="fa-cubes"
+                        class="oe_stat_button" icon="inventory_2"
                         invisible="stock_map_count == 0">
                     <field name="stock_map_count" widget="statinfo" string="Stock"/>
                 </button>

@@ -11,7 +11,7 @@
         <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
         <field name="arch" type="xml">
             <xpath expr="//div[@name='button_box']" position="inside">
-                <button name="action_view_dryruns" type="object" class="oe_stat_button" icon="fa-eye"
+                <button name="action_view_dryruns" type="object" class="oe_stat_button" icon="visibility"
                         groups="sdlc_magento_connector.group_magento_user">
                     <field name="dryrun_count" widget="statinfo" string="Previews"/>
                 </button>
@@ -71,7 +71,7 @@
                         price pushes run. Create only there means "first value only".
                     </p>
                     <button name="action_open_dryrun" type="object" string="Preview a sync (dry run)"
-                            icon="fa-eye" class="btn-secondary"
+                            icon="visibility" class="btn-secondary"
                             groups="sdlc_magento_connector.group_magento_manager"/>
                 </page>
             </xpath>
@@ -98,7 +98,7 @@
                     </div>
                     <div colspan="2" invisible="not transform_expr">
                         <button name="action_live_test_transform" type="object" string="Live Test"
-                                icon="fa-flask" class="btn-secondary"/>
+                                icon="science" class="btn-secondary"/>
                         <span class="text-muted small ms-2">Runs the transform on a live sample record.</span>
                     </div>
                 </group>
@@ -154,10 +154,10 @@
                 <field name="target_name" optional="show"/>
                 <field name="message" optional="show"/>
                 <field name="job_state" optional="hide" widget="badge"/>
-                <button name="action_apply_lines" type="object" string="Apply" icon="fa-play"
+                <button name="action_apply_lines" type="object" string="Apply" icon="play_arrow"
                         invisible="action not in ('create', 'update')"
                         groups="sdlc_magento_connector.group_magento_manager"/>
-                <button name="action_open_target" type="object" string="Open" icon="fa-external-link"
+                <button name="action_open_target" type="object" string="Open" icon="open_in_new"
                         invisible="not target_id"/>
             </list>
         </field>
@@ -318,32 +318,32 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-plus-circle" context="{'dryrun_action': 'create'}"
+                                icon="add_circle" context="{'dryrun_action': 'create'}"
                                 invisible="state == 'draft'">
                             <field name="create_count" widget="statinfo" string="Creates"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-pencil" context="{'dryrun_action': 'update'}"
+                                icon="edit" context="{'dryrun_action': 'update'}"
                                 invisible="state == 'draft'">
                             <field name="update_count" widget="statinfo" string="Updates"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-check" context="{'dryrun_action': 'unchanged'}"
+                                icon="check" context="{'dryrun_action': 'unchanged'}"
                                 invisible="state == 'draft'">
                             <field name="unchanged_count" widget="statinfo" string="No Change"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button"
-                                icon="fa-forward" context="{'dryrun_action': 'skip'}"
+                                icon="fast_forward" context="{'dryrun_action': 'skip'}"
                                 invisible="state == 'draft'">
                             <field name="skip_count" widget="statinfo" string="Skips"/>
                         </button>
                         <button name="action_view_lines" type="object" class="oe_stat_button text-danger"
-                                icon="fa-exclamation-triangle" context="{'dryrun_action': 'error'}"
+                                icon="warning" context="{'dryrun_action': 'error'}"
                                 invisible="state == 'draft' or error_count == 0">
                             <field name="error_count" widget="statinfo" string="Errors"/>
                         </button>
                         <button name="action_view_jobs" type="object" class="oe_stat_button"
-                                icon="fa-tasks" invisible="job_count == 0">
+                                icon="task" invisible="job_count == 0">
                             <field name="job_count" widget="statinfo" string="Apply Jobs"/>
                         </button>
                     </div>
@@ -396,10 +396,10 @@
                                     <field name="job_state" optional="hide" widget="badge"/>
                                     <field name="target_id" column_invisible="1"/>
                                     <button name="action_apply_lines" type="object" string="Apply"
-                                            icon="fa-play" invisible="action not in ('create', 'update')"
+                                            icon="play_arrow" invisible="action not in ('create', 'update')"
                                             groups="sdlc_magento_connector.group_magento_manager"/>
                                     <button name="action_open_target" type="object" string="Open"
-                                            icon="fa-external-link" invisible="not target_id"/>
+                                            icon="open_in_new" invisible="not target_id"/>
                                 </list>
                             </field>
                         </page>

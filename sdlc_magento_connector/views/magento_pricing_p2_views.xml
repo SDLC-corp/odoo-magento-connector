@@ -114,7 +114,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_push_states" type="object"
-                                class="oe_stat_button" icon="fa-tags">
+                                class="oe_stat_button" icon="sell">
                             <field name="push_state_count" widget="statinfo" string="Pushed Prices"/>
                         </button>
                     </div>
@@ -254,7 +254,7 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_price_rules" type="object"
-                        class="oe_stat_button" icon="fa-tags">
+                        class="oe_stat_button" icon="sell">
                     <field name="price_rule_count" widget="statinfo" string="Price Rules"/>
                 </button>
             </div>

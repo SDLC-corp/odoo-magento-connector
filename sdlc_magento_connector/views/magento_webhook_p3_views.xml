@@ -119,7 +119,7 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_webhook_events" type="object"
-                        class="oe_stat_button" icon="fa-bolt"
+                        class="oe_stat_button" icon="flash_on"
                         invisible="not webhook_enabled">
                     <field name="webhook_event_count" widget="statinfo" string="Pushes (24 h)"/>
                 </button>
@@ -165,13 +165,13 @@
                     <div class="d-flex flex-wrap gap-2 mb-3" invisible="not webhook_enabled"
                          groups="sdlc_magento_connector.group_magento_manager">
                         <button name="action_webhook_regenerate_secret" type="object"
-                                string="Regenerate Secret" icon="fa-refresh" class="btn-secondary"
+                                string="Regenerate Secret" icon="refresh" class="btn-secondary"
                                 confirm="Magento pushes are rejected until the new secret is saved in Magento. Continue?"/>
                         <button name="action_webhook_regenerate_uuid" type="object"
-                                string="Regenerate URL" icon="fa-link" class="btn-secondary"
+                                string="Regenerate URL" icon="link" class="btn-secondary"
                                 confirm="Magento pushes are rejected until the new URL is saved in Magento. Continue?"/>
                         <button name="action_view_webhook_events" type="object"
-                                string="All Events" icon="fa-list" class="btn-link"/>
+                                string="All Events" icon="format_list_bulleted" class="btn-link"/>
                     </div>
                     <group invisible="not webhook_enabled">
                         <group string="Polling Fallback">

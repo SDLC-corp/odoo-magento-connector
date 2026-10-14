@@ -32,7 +32,7 @@
                        decoration-success="status == 'match'"
                        decoration-danger="status == 'missing'"
                        decoration-warning="status == 'mismatch'"/>
-                <button name="action_view_findings" type="object" icon="fa-search"
+                <button name="action_view_findings" type="object" icon="search"
                         title="Orders behind this line" invisible="status == 'match'"/>
             </list>
         </field>
@@ -112,7 +112,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_order" type="object" class="oe_stat_button"
-                                icon="fa-external-link" invisible="not sale_order_id">
+                                icon="open_in_new" invisible="not sale_order_id">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Odoo Order</span>
                             </div>
@@ -237,27 +237,27 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_missing" type="object"
-                                class="oe_stat_button text-danger" icon="fa-exclamation-circle"
+                                class="oe_stat_button text-danger" icon="error"
                                 invisible="missing_count == 0">
                             <field name="missing_count" widget="statinfo" string="Missing Orders"/>
                         </button>
                         <button name="action_view_missing" type="object"
-                                class="oe_stat_button" icon="fa-check-circle"
+                                class="oe_stat_button" icon="check_circle"
                                 invisible="missing_count &gt; 0 or state != 'done'">
                             <field name="missing_count" widget="statinfo" string="Missing Orders"/>
                         </button>
                         <button name="action_view_mismatch_orders" type="object"
-                                class="oe_stat_button text-warning" icon="fa-balance-scale"
+                                class="oe_stat_button text-warning" icon="balance"
                                 invisible="mismatch_count == 0">
                             <field name="mismatch_count" widget="statinfo" string="Total Mismatches"/>
                         </button>
                         <button name="action_view_extra_orders" type="object"
-                                class="oe_stat_button text-warning" icon="fa-question-circle"
+                                class="oe_stat_button text-warning" icon="help"
                                 invisible="extra_count == 0">
                             <field name="extra_count" widget="statinfo" string="Not in Magento"/>
                         </button>
                         <button name="action_view_lines" type="object"
-                                class="oe_stat_button" icon="fa-money"
+                                class="oe_stat_button" icon="payments"
                                 invisible="line_count == 0">
                             <field name="line_count" widget="statinfo" string="By Currency"/>
                         </button>

@@ -593,7 +593,7 @@ class StockPicking(models.Model):
              "or created from an imported Magento credit memo).",
     )
     magento_return_reason_id = fields.Many2one(
-        "magento.return.reason", string="Return Reason", copy=False, ondelete="set null",
+        "magento.return.reason", string="Magento Return Reason", copy=False, ondelete="set null",
     )
 
     def _action_done(self):

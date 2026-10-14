@@ -36,9 +36,9 @@
             </xpath>
             <div name="button_box" position="inside">
                 <button name="action_open_net_profit" type="object" class="oe_stat_button"
-                        icon="fa-line-chart" string="Net Profit"/>
+                        icon="show_chart" string="Net Profit"/>
                 <button name="action_view_digests" type="object" class="oe_stat_button"
-                        icon="fa-envelope-o" invisible="not digest_count">
+                        icon="mail" invisible="not digest_count">
                     <field name="digest_count" widget="statinfo" string="Digests"/>
                 </button>
             </div>
@@ -92,7 +92,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_mail" type="object" class="oe_stat_button"
-                                icon="fa-paper-plane-o" string="Outgoing Mail" invisible="not mail_id"
+                                icon="send" string="Outgoing Mail" invisible="not mail_id"
                                 groups="base.group_system"/>
                     </div>
                     <div class="oe_title">

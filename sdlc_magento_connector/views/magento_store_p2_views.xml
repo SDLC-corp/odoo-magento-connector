@@ -21,7 +21,7 @@
                 <field name="locale" optional="show"/>
                 <field name="lang_id" options="{'no_create': True}"/>
                 <field name="lang_installed" column_invisible="1"/>
-                <button name="action_magento_activate_lang" type="object" icon="fa-language"
+                <button name="action_magento_activate_lang" type="object" icon="translate"
                         string="Install Language" title="Install this language in Odoo"
                         invisible="not lang_id or lang_installed"
                         groups="sdlc_magento_connector.group_magento_manager"/>
@@ -105,7 +105,7 @@
                 <page string="Stores" name="magento_stores">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                         <button name="action_magento_discover_stores" type="object"
-                                string="Discover Stores" class="btn-primary" icon="fa-sitemap"
+                                string="Discover Stores" class="btn-primary" icon="account_tree"
                                 groups="sdlc_magento_connector.group_magento_manager"/>
                         <span class="text-muted small" invisible="not magento_stores_discovered_at">
                             Last discovered <field name="magento_stores_discovered_at" readonly="1"
@@ -141,7 +141,7 @@
                             <field name="locale" optional="show"/>
                             <field name="lang_id" options="{'no_create': True}"/>
                             <field name="lang_installed" column_invisible="1"/>
-                            <button name="action_magento_activate_lang" type="object" icon="fa-language"
+                            <button name="action_magento_activate_lang" type="object" icon="translate"
                                     string="Install Language" title="Install this language in Odoo"
                                     invisible="not lang_id or lang_installed"
                                     groups="sdlc_magento_connector.group_magento_manager"/>
@@ -204,10 +204,10 @@
                     <div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Images and translations">
                         <button name="action_magento_pull_store_data" type="object"
                                 string="Pull Images &amp; Translations" class="btn-secondary"
-                                icon="fa-download" invisible="not magento_id"/>
+                                icon="download" invisible="not magento_id"/>
                         <button name="action_magento_push_store_data" type="object"
                                 string="Push Images &amp; Translations" class="btn-secondary"
-                                icon="fa-upload"
+                                icon="upload"
                                 invisible="not magento_id or type_id in ('configurable', 'bundle', 'grouped')"/>
                     </div>
                     <separator string="Gallery"/>

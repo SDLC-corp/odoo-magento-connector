@@ -44,7 +44,7 @@
                 <group name="access_diagnostics_group" string="API Access">
                     <div class="o_row" colspan="2">
                         <button name="action_diagnose_access" type="object" string="Diagnose Access"
-                                icon="fa-stethoscope" class="btn-secondary"
+                                icon="stethoscope" class="btn-secondary"
                                 groups="sdlc_magento_connector.group_magento_manager"/>
                         <span class="text-muted">Checks each Magento API resource the connector reads.</span>
                     </div>

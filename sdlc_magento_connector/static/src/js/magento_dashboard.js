@@ -6,8 +6,9 @@ import { deserializeDateTime, formatDateTime } from "@web/core/l10n/dates";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { formatInteger, formatMonetary } from "@web/views/fields/formatters";
-import { standardActionServiceProps } from "@web/webclient/actions/action_service";
-import { Component, onWillStart, onWillUnmount, useEffect, useRef, useState } from "@odoo/owl";
+import { standardActionServiceProps } from "@web/webclient/actions/action_plugin";
+import { Component, onWillStart, onWillUnmount, proxy, signal, useProps } from "@odoo/owl";
+import { useLayoutEffect } from "@web/owl2/utils";
 
 const { DateTime } = luxon;
 
@@ -16,7 +17,8 @@ const INSTANCE_DOTS = ["#eb5202", "#514943", "#007bdb", "#79a22e", "#b84002", "#
 
 export class MagentoConsole extends Component {
     static template = "sdlc_magento_connector.MagentoConsole";
-    static props = { ...standardActionServiceProps };
+    // Odoo 20 runs OWL 3: props through useProps, state through proxy, refs through signals.
+    props = useProps(standardActionServiceProps);
 
     setup() {
         this.orm = useService("orm");
@@ -24,7 +26,7 @@ export class MagentoConsole extends Component {
 
         const context = this.props.action?.context || {};
         const initialInstance = context.default_instance_id;
-        this.state = useState({
+        this.state = proxy({
             loading: true,
             error: null,
             data: null,
@@ -33,7 +35,7 @@ export class MagentoConsole extends Component {
             days: Number(context.dashboard_days) || 30,
         });
 
-        this.trendCanvas = useRef("trendCanvas");
+        this.trendCanvas = signal.ref();
         this.trendChart = null;
 
         onWillStart(async () => {
@@ -45,7 +47,7 @@ export class MagentoConsole extends Component {
             await this.load();
         });
 
-        useEffect(
+        useLayoutEffect(
             () => {
                 this.renderTrendChart();
             },
@@ -297,7 +299,7 @@ export class MagentoConsole extends Component {
 
     renderTrendChart() {
         this.destroyChart();
-        const canvas = this.trendCanvas.el;
+        const canvas = this.trendCanvas();
         const trend = this.data?.trend;
         if (!canvas || !trend?.length || !this.hasOrders) {
             return;

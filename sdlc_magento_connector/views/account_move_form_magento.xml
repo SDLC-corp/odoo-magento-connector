@@ -12,7 +12,7 @@
                 <button name="action_open_magento_credit_memo"
                         type="object"
                         class="oe_stat_button"
-                        icon="fa-external-link"
+                        icon="open_in_new"
                         invisible="not magento_credit_memo_id">
                     <field name="magento_credit_memo_display" widget="statinfo" string="Credit Memo"/>
                 </button>

@@ -107,7 +107,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_order" type="object" class="oe_stat_button"
-                                icon="fa-shopping-cart">
+                                icon="shopping_cart">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Sales Order</span>
                             </div>
@@ -213,7 +213,7 @@
         <field name="arch" type="xml">
             <xpath expr="//div[@name='button_box']" position="inside">
                 <button name="action_view_magento_conflicts" type="object" class="oe_stat_button"
-                        icon="fa-exchange" invisible="not is_magento_order"
+                        icon="swap_horiz" invisible="not is_magento_order"
                         groups="sdlc_magento_connector.group_magento_user">
                     <field name="magento_conflict_count" widget="statinfo" string="Conflicts"/>
                 </button>

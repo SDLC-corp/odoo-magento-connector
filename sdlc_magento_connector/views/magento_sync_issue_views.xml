@@ -93,7 +93,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_open_record" type="object" class="oe_stat_button"
-                                icon="fa-external-link" invisible="not record_ref">
+                                icon="open_in_new" invisible="not record_ref">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Odoo Record</span>
                             </div>
@@ -174,22 +174,22 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_open_issues" type="object"
-                        class="oe_stat_button" icon="fa-check-circle"
+                        class="oe_stat_button" icon="check_circle"
                         invisible="open_issue_count &gt; 0">
                     <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
                 </button>
                 <button name="action_view_open_issues" type="object"
-                        class="oe_stat_button text-danger" icon="fa-exclamation-circle"
+                        class="oe_stat_button text-danger" icon="error"
                         invisible="open_issue_count == 0">
                     <field name="open_issue_count" widget="statinfo" string="Open Issues"/>
                 </button>
                 <button name="action_view_failed_jobs" type="object"
-                        class="oe_stat_button text-danger" icon="fa-tasks"
+                        class="oe_stat_button text-danger" icon="task"
                         invisible="failed_job_count == 0">
                     <field name="failed_job_count" widget="statinfo" string="Failed Jobs"/>
                 </button>
                 <button name="action_view_queued_jobs" type="object"
-                        class="oe_stat_button" icon="fa-hourglass-half"
+                        class="oe_stat_button" icon="hourglass_bottom"
                         invisible="pending_job_count == 0">
                     <field name="pending_job_count" widget="statinfo" string="Queued Jobs"/>
                 </button>

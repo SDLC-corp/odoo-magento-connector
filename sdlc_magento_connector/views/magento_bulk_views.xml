@@ -80,7 +80,7 @@
                 <sheet>
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_issues" type="object" class="oe_stat_button"
-                                icon="fa-exclamation-circle"
+                                icon="error"
                                 invisible="not failed_count and not retriable_count and not rejected_count and state != 'failed'">
                             <div class="o_stat_info">
                                 <span class="o_stat_text">Error Center</span>
@@ -166,7 +166,7 @@
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
                 <button name="action_view_bulk_operations" type="object"
-                        class="oe_stat_button" icon="fa-cloud-upload"
+                        class="oe_stat_button" icon="cloud_upload"
                         invisible="bulk_operation_count == 0">
                     <field name="bulk_operation_count" widget="statinfo" string="Bulk Ops"/>
                 </button>
@@ -185,7 +185,7 @@
                     </group>
                 </group>
                 <button name="action_push_stock_bulk" type="object" string="Push Stock Now"
-                        class="btn-secondary" icon="fa-cubes"
+                        class="btn-secondary" icon="inventory_2"
                         groups="sdlc_magento_connector.group_magento_manager"
                         confirm="Queue a push of the free quantity of every mapped simple product to Magento?"/>
             </page>
